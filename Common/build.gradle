@@ -1,0 +1,96 @@
+plugins {
+    id 'org.spongepowered.gradle.vanilla'
+}
+
+java.withJavadocJar()
+
+archivesBaseName = "${mod_name}-common-${minecraft_version}"
+
+minecraft {
+    version(minecraft_version)
+    runs {   
+        if (project.hasProperty('common_runs_enabled') ? project.findProperty('common_runs_enabled').toBoolean() : true) {
+        
+            server(project.hasProperty('common_server_run_name') ? project.findProperty('common_server_run_name') : 'vanilla_server') {
+                workingDirectory(this.file("run"))
+            }
+            client(project.hasProperty('common_client_run_name') ? project.findProperty('common_client_run_name') : 'vanilla_client') {
+                workingDirectory(this.file("run"))
+            }
+        }
+    }
+}
+
+repositories {
+    maven {
+        url = "https://cursemaven.com"
+        content {
+            includeGroup "curse.maven"
+        }
+    }
+    maven {
+        name = "Modrinth"
+        url = "https://api.modrinth.com/maven"
+    }
+    maven {
+        name = "Fuzs Mod Resources"
+        url = "https://raw.githubusercontent.com/Fuzss/modresources/main/maven/"
+    }
+}
+
+dependencies {
+     compileOnly group:'org.spongepowered', name:'mixin', version:'0.8.5'
+     implementation group: 'com.google.code.findbugs', name: 'jsr305', version: '3.0.1'
+
+     compileOnly "fuzs.forgeconfigapiport:forgeconfigapiport-common-neoforgeapi:21.0.5"//source: https://github.com/Fuzss/forgeconfigapiport-fabric
+
+     //same as forge for the deobfuscated class names in the api
+     compileOnly "curse.maven:ftbranks-314905:3890135"//home: https://www.curseforge.com/minecraft/mc-mods/ftb-ranks-forge
+     compileOnly "curse.maven:architectury-419699:3893635"//home: https://www.curseforge.com/minecraft/mc-mods/architectury-api
+     compileOnly "curse.maven:ftblibrary-404465:3890137"//home: https://www.curseforge.com/minecraft/mc-mods/ftb-library-forge
+
+     compileOnly "net.luckperms:api:5.4"//source: https://github.com/LuckPerms/LuckPerms
+
+     compileOnly "maven.modrinth:resourceful-lib:2.1.1"//source: https://github.com/Team-Resourceful/ResourcefulLib
+     compileOnly "maven.modrinth:odyssey-roles:0.0.0"//source: https://github.com/terrarium-earth/Prometheus
+
+     compileOnly "curse.maven:ftbteams-404468:4616152"//home: https://www.curseforge.com/minecraft/mc-mods/ftb-teams-forge
+     compileOnly "maven.modrinth:odyssey-allies:IH2HFcvL"//source: https://modrinth.com/mod/argonauts
+
+     compileOnly "org.ow2.asm:asm:9.7"
+     compileOnly "org.ow2.asm:asm-tree:9.7"
+}
+
+processResources {
+
+    def buildProps = project.properties.clone()
+
+    filesMatching(['pack.mcmeta']) {
+
+        expand buildProps
+    }
+}
+
+javadoc {
+    include "**/api/**"
+
+    title "${mod_display_name} API"
+    destinationDir file("${rootProject.rootDir}/docs/javadoc")
+}
+
+publishing {
+    publications {
+        mavenJava(MavenPublication) {
+            groupId project.group
+            artifactId project.archivesBaseName
+            version project.version
+            from components.java
+        }
+    }
+
+    repositories {
+        maven {
+            url "file://" + System.getenv("local_maven")
+        }
+    }
+}

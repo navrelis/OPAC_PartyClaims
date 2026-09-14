@@ -1,0 +1,51 @@
+{
+    "required": true,
+    "plugin" : "xaero.pac.common.mixin.plugin.MixinPlugin",
+    "minVersion": "0.8",
+    "package": "xaero.pac.common.mixin",
+    "refmap": "${mod_id}.refmap.json",
+    "compatibilityLevel": "JAVA_17",
+    "mixins": [
+        "MixinBasePressurePlateBlock",
+        "MixinBehaviorUtils",
+        "MixinBlockAttachedEntity",
+        "MixinBoat",
+        "MixinDispenserBlock",
+        "MixinEntity",
+        "MixinExperienceOrb",
+        "MixinFireBlock",
+        "MixinFishingHook",
+        "MixinFlowingFluid",
+        "MixinItemEntity",
+        "MixinLevel",
+        "MixinLightningBolt",
+        "MixinLivingEntity",
+        "MixinMinecraftServer",
+        "MixinPistonBaseBlock",
+        "MixinPlayer",
+        "MixinPlayerList",
+        "MixinProjectile",
+        "MixinRaid",
+        "MixinReplaceBlock",
+        "MixinReplaceDisk",
+        "MixinServerCommonPacketListenerImpl",
+        "MixinServerGamePacketListenerImpl",
+        "MixinServerLevel",
+        "MixinServerPlayer",
+        "MixinSetBlockProperties",
+        "MixinTargetBlock",
+        "MixinTripWireBlock"
+    ],
+    "client": [
+        "MixinClientLevel",
+        "MixinClientPacketListener",
+        "MixinIntegratedServer"
+    ],
+    "server": [
+
+    ],
+    "injectors": {
+      "defaultRequire": 1
+    }
+  }
+  
