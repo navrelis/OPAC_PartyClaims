@@ -31,6 +31,7 @@ import xaero.pac.common.event.CommonEventsNeoForge;
 import xaero.pac.common.mods.ModSupportNeoForge;
 import xaero.pac.common.packet.PacketHandlerNeoForge;
 import xaero.pac.server.LoadDedicatedServerNeoForge;
+import xaero.pac.teamclaims.neoforge.TeamClaimsNeoForge; // [Team Claims]
 
 @Mod(OpenPartiesAndClaims.MOD_ID)
 public class OpenPartiesAndClaimsNeoForge extends OpenPartiesAndClaims {
@@ -42,6 +43,7 @@ public class OpenPartiesAndClaimsNeoForge extends OpenPartiesAndClaims {
 		super(new CapabilityHelper(), new PacketHandlerNeoForge(), new ForgeConfigHelperNeoForge(), new ModSupportNeoForge());
 		LoadCommonNeoForge<?> loader = FMLLoader.getDist() == Dist.CLIENT ? new LoadClientNeoForge(this) : new LoadDedicatedServerNeoForge(this);
 		fmlEventBus.register(loader);
+		TeamClaimsNeoForge.init(); // [Team Claims]
 	}
 
 	public void setClientEventsNeoForge(ClientEventsNeoForge clientEventsNeoForge) {

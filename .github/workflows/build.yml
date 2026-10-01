@@ -39,3 +39,12 @@ jobs:
       # that ended without actually running the tests cannot pass.
       - name: Check boot test result
         run: grep -E "All [0-9]+ required tests passed" run-boottest/logs/latest.log
+
+      # Same shared Team Claims gametests on NeoForge's gametest server. The task fails on failed
+      # tests (non-zero exit) and itself requires the success line in the log (a server that never
+      # starts exits 0 on NeoForge).
+      - name: NeoForge gametests
+        run: ./gradlew :NeoForge:runTeamClaimsGameTest --console=plain
+
+      - name: Check NeoForge gametest result
+        run: grep -E "All [0-9]+ required tests passed" NeoForge/runs/teamClaimsGameTest/logs/latest.log

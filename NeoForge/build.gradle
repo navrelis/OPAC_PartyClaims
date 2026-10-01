@@ -15,6 +15,23 @@ base {
 if (file('src/main/resources/META-INF/accesstransformer.cfg').exists()) {
     minecraft.accessTransformers.file file('src/main/resources/META-INF/accesstransformer.cfg')
 }
+
+// [Team Claims] Dev/test-only "gametest" source set (NeoForge/src/gametest): the test mod
+// "opac_teamclaims_gametest" (own META-INF/neoforge.mods.toml, mixin config and empty structure
+// template) plus thin @GameTestHolder wrappers around the loader-neutral test bodies in
+// Common/src/gametest/java (added as an extra source dir; it is not a source set of :Common, so it
+// is only ever compiled here and in Fabric's own gametest source set). Nothing reads this source set
+// into the production jar/sourcesJar; only the runTeamClaimsGameTest run loads it.
+sourceSets {
+    gametest {
+        java.srcDir(project(":Common").file("src/gametest/java"))
+        // NeoGradle: gametestCompileClasspath/RuntimeClasspath extend main's (NeoForge + Minecraft).
+        inherits.from(sourceSets.main)
+        compileClasspath += sourceSets.main.output
+        runtimeClasspath += sourceSets.main.output
+    }
+}
+
 runs {
     configureEach {
         modSource project.sourceSets.main
@@ -34,6 +51,20 @@ runs {
 
     data {
         arguments.addAll '--mod', project.mod_id, '--all', '--output', file('src/generated/resources/').getAbsolutePath(), '--existing', file('src/main/resources/').getAbsolutePath()
+    }
+
+    // [Team Claims] Headless Team Claims gametests: ":NeoForge:runTeamClaimsGameTest" (see the
+    // "gametest" source set and the task configuration below). Same launch setup as the stock
+    // "gameTestServer" run type (-Dneoforge.gameTestServer=true, which also auto-agrees to the EULA
+    // for gametest servers, so no eula.txt is ever needed), plus the test-only
+    // "opac_teamclaims_gametest" mod, and only that mod's test namespace enabled.
+    // Working dir: NeoForge/runs/teamClaimsGameTest (log: runs/teamClaimsGameTest/logs/latest.log).
+    teamClaimsGameTest {
+        runType 'gameTestServer'
+        workingDirectory project.file('runs/teamClaimsGameTest')
+        modSources.add('opac_teamclaims_gametest', project.sourceSets.gametest)
+        systemProperty 'neoforge.enabledGameTestNamespaces', 'opac_teamclaims_gametest'
+        shouldExportToIDE false
     }
 }
 
@@ -68,7 +99,9 @@ dependencies {
 }
 
 // NeoGradle compiles the game, but we don't want to add our common code to the game's code
-Spec<Task> notNeoTask = { Task it -> !it.name.startsWith("neo") } as Spec<Task>
+// [Team Claims] ...nor into the test-only "gametest" source set (compileGametestJava /
+// processGametestResources): it already gets those classes via sourceSets.main.output.
+Spec<Task> notNeoTask = { Task it -> !it.name.startsWith("neo") && !it.name.contains("Gametest") } as Spec<Task>
 
 tasks.withType(JavaCompile).matching(notNeoTask).configureEach {
     source(project(":Common").sourceSets.main.allSource)
@@ -83,6 +116,36 @@ tasks.withType(ProcessResources).matching(notNeoTask).configureEach {
 tasks.named("sourcesJar", Jar) {
     from(project(":Common").sourceSets.main.allSource)
     from(project(":CreateSupportCommon").sourceSets.main.allSource)
+}
+
+// [Team Claims] The root build.gradle copies OPAC's lang files into every ProcessResources task
+// (data/openpartiesandclaims/lang); keep them out of the test mod, they belong to the main mod only.
+tasks.named("processGametestResources", ProcessResources) {
+    eachFile { if (it.path.startsWith("data/${project.mod_id}/")) it.exclude() }
+}
+
+// [Team Claims] ":NeoForge:runTeamClaimsGameTest" (created by NeoGradle from runs.teamClaimsGameTest):
+// - fresh world every run: the Team Claims tests reuse fixed chunk coordinates, so a stale claim from
+//   an interrupted earlier run must not leak into the next one (same as ":Fabric:runBootTest");
+// - fails the build when tests fail: vanilla's GameTestServer ends the JVM with
+//   System.exit(<failed required tests>), which fails this exec task;
+// - fails the build when no test ran: if the server cannot start (e.g. "No test functions were
+//   given!"), vanilla only logs the error and the JVM still exits 0, so the run additionally
+//   requires vanilla's success line in the log, which is deleted before each run.
+def teamClaimsGameTestDir = file("runs/teamClaimsGameTest")
+tasks.configureEach { Task task ->
+    if (task.name != "runTeamClaimsGameTest") return
+    task.doFirst {
+        project.delete(new File(teamClaimsGameTestDir, "world"), new File(teamClaimsGameTestDir, "logs/latest.log"))
+    }
+    task.doLast {
+        File log = new File(teamClaimsGameTestDir, "logs/latest.log")
+        def passed = log.exists() ? (log.getText("UTF-8") =~ /All (\d+) required tests passed/) : null
+        if (passed == null || !passed.find()) {
+            throw new GradleException("Team Claims gametests did not pass: no \"All N required tests passed\" line in ${log}")
+        }
+        logger.lifecycle("Team Claims gametests: ${passed.group(0)} (log: ${log})")
+    }
 }
 
 publishing {
