@@ -27,6 +27,7 @@ import xaero.pac.common.server.player.localization.AdaptiveLocalizer;
 import xaero.pac.teamclaims.config.TeamConfigManager;
 
 import javax.annotation.Nullable;
+import java.util.function.Predicate;
 import java.util.function.Supplier;
 
 public class TeamClaimsCommands {
@@ -34,37 +35,77 @@ public class TeamClaimsCommands {
     private static final Logger LOGGER = LogUtils.getLogger();
 
     public static void onRegisterCommands(CommandDispatcher<CommandSourceStack> dispatcher, CommandBuildContext registryAccess, Commands.CommandSelection environment) {
-        // Same requirements as OPAC's "/<parties> create": parties enabled, the caller (or the player they
-        // impersonate) not in a party yet. Registered even when Team Claims is disabled (the server config isn't loaded
-        // yet at this point), but then not usable: the requirement is checked when the command is used or listed.
+        // Registered even when Team Claims is disabled (the server config isn't loaded yet at this point), but then not
+        // usable: the requirement is checked when the command is used or listed. Every subcommand needs Team Claims to be
+        // active; "create" has the same further requirements as OPAC's "/<parties> create" (parties enabled, the caller,
+        // or the player they impersonate, not in a party yet), "territorymessages" is for everybody.
+        Predicate<CommandSourceStack> nonMemberRequirement = new CommandRequirementProvider().getNonMemberRequirement(p -> true, false);
         dispatcher.register(
                 Commands.literal("teamclaims")
-                        .requires(c -> TeamClaimsCommon.isActive() && ServerConfig.CONFIG.partiesEnabled.get())
+                        .requires(c -> TeamClaimsCommon.isActive())
                         .then(Commands.literal("create")
-                                .requires(new CommandRequirementProvider().getNonMemberRequirement(p -> true, false))
+                                .requires(c -> ServerConfig.CONFIG.partiesEnabled.get() && nonMemberRequirement.test(c))
                                 .then(Commands.argument("name", StringArgumentType.greedyString())
                                         .executes(TeamClaimsCommands::executeCreate)))
+                        .then(Commands.literal("territorymessages")
+                                .executes(context -> executeTerritoryMessages(context, null))
+                                .then(Commands.literal("on")
+                                        .executes(context -> executeTerritoryMessages(context, true)))
+                                .then(Commands.literal("off")
+                                        .executes(context -> executeTerritoryMessages(context, false))))
         );
         LOGGER.info("Registered /teamclaims commands");
     }
 
+    /**
+     * The player running the command, or null after telling the source why that is not possible: Team Claims is no
+     * longer active (e.g. a stale command tree after the server stopped) or the source is not a player.
+     */
+    @Nullable
+    private static ServerPlayer requirePlayer(CommandSourceStack source) {
+        IServerData<?, ?> serverData = ServerData.from(source.getServer());
+        ServerPlayer player = source.getPlayer();
+        if (!TeamClaimsCommon.isActive()) {
+            // Without the server data there is no localizer, the client then translates the key itself
+            source.sendFailure((serverData == null ? Component.translatable("gui.xaero_pac_team_claims_disabled")
+                    : serverData.getAdaptiveLocalizer().getFor(player, "gui.xaero_pac_team_claims_disabled"))
+                    .withStyle(ChatFormatting.RED));
+            return null;
+        }
+        if (player == null) {
+            source.sendFailure((serverData == null ? Component.translatable("gui.xaero_pac_team_claims_player_only")
+                    : serverData.getAdaptiveLocalizer().getFor(null, "gui.xaero_pac_team_claims_player_only"))
+                    .withStyle(ChatFormatting.RED));
+            return null;
+        }
+        return player;
+    }
+
     private static int executeCreate(CommandContext<CommandSourceStack> context) {
         CommandSourceStack source = context.getSource();
-        if (!TeamClaimsCommon.isActive()) {//e.g. a stale command tree after the server stopped
-            IServerData<?, ?> serverData = ServerData.from(source.getServer());
-            source.sendFailure(serverData == null ? Component.literal("Team Claims is disabled on this server.")
-                    : serverData.getAdaptiveLocalizer().getFor(source.getPlayer(), "gui.xaero_pac_team_claims_disabled")
-                            .withStyle(ChatFormatting.RED));
-            return 0;
-        }
-        ServerPlayer player = source.getPlayer();
-        if (player == null) {
-            source.sendFailure(Component.literal("This command can only be used by a player."));
-            return 0;
-        }
+        ServerPlayer player = requirePlayer(source);
+        if (player == null) return 0;
         GameProfile ownerProfile = ((ServerPlayerData) ServerPlayerData.from(player)).getPartiesImpersonatedPlayerProfile();
         if (ownerProfile == null) ownerProfile = player.getGameProfile();
         return createPartyWithTeamName(source, player, ownerProfile, StringArgumentType.getString(context, "name"), true);
+    }
+
+    /**
+     * {@code /teamclaims territorymessages [on|off]}: sets whether the player sees the claim welcome messages (all of
+     * them, not only the team ones), or just reports the current state when {@code enable} is null.
+     */
+    private static int executeTerritoryMessages(CommandContext<CommandSourceStack> context, @Nullable Boolean enable) {
+        CommandSourceStack source = context.getSource();
+        ServerPlayer player = requirePlayer(source);
+        if (player == null) return 0;
+        TeamClaimManager claimManager = TeamClaimsCommon.getClaimManager();
+        IServerData<?, ?> serverData = ServerData.from(source.getServer());
+        if (claimManager == null || serverData == null) return 0;//not both null while Team Claims is active
+        if (enable != null) claimManager.setTerritoryMessagesEnabled(player.getUUID(), enable);
+        boolean enabled = claimManager.areTerritoryMessagesEnabled(player.getUUID());
+        String key = "gui.xaero_pac_team_claims_territory_messages_" + (enable == null ? "status_" : "") + (enabled ? "on" : "off");
+        succeed(source, serverData.getAdaptiveLocalizer(), player, key, enabled ? ChatFormatting.GREEN : ChatFormatting.YELLOW);
+        return 1;
     }
 
     /**

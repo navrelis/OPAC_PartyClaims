@@ -28,6 +28,7 @@ public class TeamClaimsServerConfig {
     public final ModConfigSpec.BooleanValue enabled;
     public final ModConfigSpec.IntValue maxTeamNameLength;
     public final ModConfigSpec.IntValue forceloadGraceMinutes;
+    public final ModConfigSpec.BooleanValue territoryMessagesDefault;
 
     private TeamClaimsServerConfig(ModConfigSpec.Builder builder) {
         builder.push("teamClaims");
@@ -54,6 +55,14 @@ public class TeamClaimsServerConfig {
                         went offline. If a member comes back before the time is up, the forceloads simply stay active.
                         0 = the forceloads are released right away when the last member goes offline.""")
                 .defineInRange("forceloadGraceMinutes", 0, 0, MAX_FORCELOAD_GRACE_MINUTES);
+
+        territoryMessagesDefault = builder
+                .comment("""
+                        Whether players see the claim "welcome" messages (the action bar line shown when entering a claim or
+                        the wilderness) unless they chose otherwise with /teamclaims territorymessages <on|off>.
+                        With Team Claims, walking from one claim of a team to another claim of the same team shows nothing,
+                        as it is one territory. This only applies while OPAC's own claimWelcomeMessages option is enabled.""")
+                .define("territoryMessagesDefault", true);
 
         builder.pop();
     }

@@ -2,9 +2,12 @@ package xaero.pac.teamclaims;
 
 import com.mojang.authlib.GameProfile;
 import net.minecraft.commands.CommandSourceStack;
+import net.minecraft.resources.ResourceKey;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.level.Level;
+import xaero.pac.common.claims.player.IPlayerChunkClaim;
 import xaero.pac.common.claims.player.PlayerChunkClaim;
 import xaero.pac.common.claims.result.api.ClaimResult;
 import xaero.pac.common.server.claims.ServerClaimsManager;
@@ -170,5 +173,22 @@ class TeamClaimsBridgeHandler implements TeamClaimsIntegration.TeamClaimsHandler
     public void onOpacForceloadTicketRemoved(ResourceLocation dimension, int x, int z) {
         TeamForceLoadHandler handler = TeamClaimsCommon.getForceLoadHandler();
         if (handler != null) handler.onOpacTicketRemoved(dimension, x, z);
+    }
+
+    // ==================== Claim welcome messages ====================
+
+    @Override
+    public boolean isSameTeamTerritory(@Nullable IPlayerChunkClaim lastClaim, @Nullable ResourceKey<Level> lastDimension,
+            @Nullable IPlayerChunkClaim currentClaim, @Nullable ResourceKey<Level> currentDimension) {
+        if (lastClaim == null || currentClaim == null || lastDimension == null || !lastDimension.equals(currentDimension))
+            return false;
+        TeamClaimManager tcm = TeamClaimsCommon.getClaimManager();
+        return tcm != null && tcm.isSameTeamTerritory(lastClaim, currentClaim);
+    }
+
+    @Override
+    public boolean areTerritoryMessagesSuppressed(UUID playerId) {
+        TeamClaimManager tcm = TeamClaimsCommon.getClaimManager();
+        return tcm != null && !tcm.areTerritoryMessagesEnabled(playerId);
     }
 }

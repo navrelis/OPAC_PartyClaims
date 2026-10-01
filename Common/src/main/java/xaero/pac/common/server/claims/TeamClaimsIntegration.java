@@ -20,9 +20,12 @@ package xaero.pac.common.server.claims;
 
 import com.mojang.authlib.GameProfile;
 import net.minecraft.commands.CommandSourceStack;
+import net.minecraft.resources.ResourceKey;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.level.Level;
+import xaero.pac.common.claims.player.IPlayerChunkClaim;
 import xaero.pac.common.claims.player.PlayerChunkClaim;
 import xaero.pac.common.claims.result.api.ClaimResult;
 import xaero.pac.common.server.player.config.api.v2.IPlayerConfigOptionSpecAPI;
@@ -39,8 +42,8 @@ import java.util.UUID;
  * <p>
  * The direct code modifications in ServerClaimsManager, PlayerConfig, PlayerClaimInfo,
  * PlayerSubConfig, ServerboundSubConfigExistencePacket, CreatePartyCommand,
- * ClaimsManagerSynchronizer, ServerParty, PartyManager, PlayerConfigCommonChangeHandlers and
- * ForceLoadTicketManager all call through this bridge. Every one of those hooks is a
+ * ClaimsManagerSynchronizer, ServerParty, PartyManager, PlayerConfigCommonChangeHandlers,
+ * ForceLoadTicketManager and ServerPlayerClaimWelcomer all call through this bridge. Every one of those hooks is a
  * no-op while {@link #getHandler()} returns null, which is the case on a vanilla client,
  * before the server addon is registered and after the server has stopped.
  * <p>
@@ -228,6 +231,26 @@ public final class TeamClaimsIntegration {
 		 * team forceload ticket of the same chunk, which the handler then restores.
 		 */
 		void onOpacForceloadTicketRemoved(ResourceLocation dimension, int x, int z);
+
+		// ==================== Claim Welcome Messages ====================
+
+		/**
+		 * Called by {@code ServerPlayerClaimWelcomer.onPlayerTick} when the claim at the player's chunk changed.
+		 *
+		 * @return true if both claims are team claims of the same team in the same dimension, in which case the
+		 *         welcomer shows nothing: walking across the land of one team is not entering a new territory
+		 */
+		boolean isSameTeamTerritory(
+				@Nullable IPlayerChunkClaim lastClaim, @Nullable ResourceKey<Level> lastDimension,
+				@Nullable IPlayerChunkClaim currentClaim, @Nullable ResourceKey<Level> currentDimension);
+
+		/**
+		 * Called by {@code ServerPlayerClaimWelcomer.onPlayerTick} when the claim at the player's chunk changed.
+		 *
+		 * @return true if this player turned the claim welcome messages off (or has not chosen and the server's
+		 *         default is off), which silences all of them, not only the team ones
+		 */
+		boolean areTerritoryMessagesSuppressed(UUID playerId);
 	}
 
 	@Nullable

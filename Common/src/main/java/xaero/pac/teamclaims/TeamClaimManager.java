@@ -135,6 +135,25 @@ public class TeamClaimManager implements IClaimsManagerListenerAPI {
         return teamIndex != -1 && subIndex == teamIndex;
     }
 
+    /**
+     * Whether both claims are team claims of the same team (party). Two hash lookups per claim, as it runs for every
+     * player whenever they cross into a different claim. A claim of a former member that was not handed over is no
+     * longer a team claim, so it never counts.
+     */
+    public boolean isSameTeamTerritory(@Nullable IPlayerChunkClaimAPI first, @Nullable IPlayerChunkClaimAPI second) {
+        UUID firstParty = getTeamPartyOfClaim(first);
+        return firstParty != null && firstParty.equals(getTeamPartyOfClaim(second));
+    }
+
+    /** The party whose team claim this is, null for no claim and for a claim that isn't a team claim. */
+    @Nullable
+    private UUID getTeamPartyOfClaim(@Nullable IPlayerChunkClaimAPI claim) {
+        if (!isTeamClaim(claim)) return null;
+        TeamConfigManager tcm = TeamClaimsCommon.getTeamConfigManager();
+        TeamConfig teamConfig = tcm == null ? null : tcm.getTeamConfigForPlayer(claim.getPlayerId());
+        return teamConfig == null ? null : teamConfig.getPartyId();
+    }
+
     public boolean isTeamSubConfigIndex(UUID playerUUID, int subConfigIndex) {
         if (subConfigIndex == -1) return false;
         return getTeamSubIndex(playerUUID) == subConfigIndex;
@@ -149,6 +168,38 @@ public class TeamClaimManager implements IClaimsManagerListenerAPI {
     public void ensureAllMembersHaveSubConfig(IServerPartyAPI party) {
         party.getMemberInfoStream().forEach(member -> ensureTeamSubConfig(member.getUUID()));
     }
+
+    // ==================== Territory messages ====================
+
+    /**
+     * Whether the claim welcome messages are shown to the player: their own choice if they made one, else the
+     * {@code territoryMessagesDefault} of the Team Claims server config (read each time).
+     */
+    public boolean areTerritoryMessagesEnabled(UUID playerId) {
+        Boolean choice = getTerritoryMessagesChoice(playerId);
+        return choice != null ? choice : TeamClaimsServerConfig.CONFIG.territoryMessagesDefault.get();
+    }
+
+    /** The explicit choice of the player, null if they never made one. */
+    @Nullable
+    public Boolean getTerritoryMessagesChoice(UUID playerId) {
+        return savedData == null ? null : savedData.getTerritoryMessagesChoice(playerId);
+    }
+
+    /** Stores the explicit choice of the player. */
+    public void setTerritoryMessagesEnabled(UUID playerId, boolean enabled) {
+        if (savedData == null) return;//only before the server started
+        savedData.setTerritoryMessagesChoice(playerId, enabled);
+    }
+
+    @VisibleForTesting
+    public void clearTerritoryMessagesChoice(UUID playerId) {
+        if (savedData != null) savedData.clearTerritoryMessagesChoice(playerId);
+    }
+
+    @VisibleForTesting
+    @Nullable
+    public TeamClaimSavedData getSavedData() { return savedData; }
 
     // ==================== Lifecycle ====================
 
@@ -1095,13 +1146,35 @@ public class TeamClaimManager implements IClaimsManagerListenerAPI {
 
     public static class TeamClaimSavedData extends SavedData {
         final Map<UUID, TeamData> teams = new HashMap<>();
+        /** Explicit "territory messages" choices only: a player without an entry follows the config default. */
+        private final Map<UUID, Boolean> territoryMessages = new HashMap<>();
         public TeamClaimSavedData() {}
+
+        @Nullable
+        public Boolean getTerritoryMessagesChoice(UUID playerId) { return territoryMessages.get(playerId); }
+
+        public void setTerritoryMessagesChoice(UUID playerId, boolean enabled) {
+            Boolean previous = territoryMessages.put(playerId, enabled);
+            if (previous == null || previous != enabled) setDirty();
+        }
+
+        public void clearTerritoryMessagesChoice(UUID playerId) {
+            if (territoryMessages.remove(playerId) != null) setDirty();
+        }
+
         public static TeamClaimSavedData load(CompoundTag tag, HolderLookup.Provider provider) {
             TeamClaimSavedData data = new TeamClaimSavedData();
             ListTag teamsList = tag.getList("teams", Tag.TAG_COMPOUND);
             for (int i = 0; i < teamsList.size(); i++) {
                 TeamData teamData = TeamData.load(teamsList.getCompound(i));
                 data.teams.put(teamData.partyId, teamData);
+            }
+            //not there in saves from before the territory messages toggle
+            ListTag messagesList = tag.getList("territoryMessages", Tag.TAG_COMPOUND);
+            for (int i = 0; i < messagesList.size(); i++) {
+                CompoundTag entry = messagesList.getCompound(i);
+                if (entry.hasUUID("player") && entry.contains("enabled", Tag.TAG_BYTE))
+                    data.territoryMessages.put(entry.getUUID("player"), entry.getBoolean("enabled"));
             }
             return data;
         }
@@ -1110,6 +1183,16 @@ public class TeamClaimManager implements IClaimsManagerListenerAPI {
             ListTag teamsList = new ListTag();
             for (TeamData teamData : teams.values()) teamsList.add(teamData.save());
             tag.put("teams", teamsList);
+            if (!territoryMessages.isEmpty()) {//only written once somebody made a choice
+                ListTag messagesList = new ListTag();
+                for (Map.Entry<UUID, Boolean> choice : territoryMessages.entrySet()) {
+                    CompoundTag entry = new CompoundTag();
+                    entry.putUUID("player", choice.getKey());
+                    entry.putBoolean("enabled", choice.getValue());
+                    messagesList.add(entry);
+                }
+                tag.put("territoryMessages", messagesList);
+            }
             return tag;
         }
     }

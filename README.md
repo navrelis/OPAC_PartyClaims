@@ -43,6 +43,21 @@ Fabric and NeoForge; a copy in `<world>/serverconfig/` overrides it for that wor
 | `enabled` | `true` | When `false`, Team Claims does not start: OPAC behaves exactly like the original mod and `/teamclaims` is unavailable. Existing Team Claims data stays untouched on disk. Read once at server start, so a change needs a restart. |
 | `maxTeamNameLength` | `24` (1..100) | Maximum length of a team name given to `/teamclaims create` or to the team name argument of the party create command. Changes apply right away. |
 | `forceloadGraceMinutes` | `0` (0..1440) | How many minutes the forceloaded chunks of a team stay loaded after its last online member left. A member coming back within that time cancels the release. `0` releases them right away. Changes apply from the next logout. |
+| `territoryMessagesDefault` | `true` | Whether players who never used `/teamclaims territorymessages` see the claim welcome messages. See "Territory messages" below. Changes apply right away. |
+
+## Territory messages
+
+OPAC shows an action bar line with the claim's name and colour whenever you walk into a different claim (server
+option `claimWelcomeMessages`). Team Claims makes that team-aware: every member's team claims share one name and
+colour, so moving from one team claim to another claim of the **same team** in the same dimension shows nothing, it
+is one territory. Entering or leaving a team's land, entering another team's land, a personal claim or the wilderness
+behaves exactly like stock OPAC.
+
+`/teamclaims territorymessages <on|off>` lets each player turn the claim welcome messages off (or back on) for
+themselves, and `/teamclaims territorymessages` on its own shows the current state. The setting silences **all** claim
+welcome messages for that player, not only the team ones. Any player may use it, in a party or not. Only explicit
+choices are stored (in the Team Claims data of the world); everybody else follows the server config option
+`territoryMessagesDefault`.
 
 ## Building
 

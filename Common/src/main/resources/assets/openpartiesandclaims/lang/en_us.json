@@ -656,5 +656,10 @@
 	"gui.xaero_pac_team_claims_create_error" : "An error occurred creating the party.",
 	"gui.xaero_pac_team_claims_disabled" : "Team Claims is disabled on this server.",
 	"gui.xaero_pac_team_claims_transfer_leaver" : "[Team Claims] Your %1$s team claim(s) were transferred to the party owner.",
-	"gui.xaero_pac_team_claims_transfer_owner" : "[Team Claims] %1$s left the party: %2$s team claim(s) were transferred to you."
+	"gui.xaero_pac_team_claims_transfer_owner" : "[Team Claims] %1$s left the party: %2$s team claim(s) were transferred to you.",
+	"gui.xaero_pac_team_claims_player_only" : "This command can only be used by a player.",
+	"gui.xaero_pac_team_claims_territory_messages_on" : "Territory messages are now on: you will see a message when you enter a claim or the wilderness.",
+	"gui.xaero_pac_team_claims_territory_messages_off" : "Territory messages are now off: you will no longer see a message when you enter a claim or the wilderness.",
+	"gui.xaero_pac_team_claims_territory_messages_status_on" : "Territory messages are on. Use /teamclaims territorymessages off to turn them off.",
+	"gui.xaero_pac_team_claims_territory_messages_status_off" : "Territory messages are off. Use /teamclaims territorymessages on to turn them on."
 }

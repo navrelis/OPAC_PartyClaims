@@ -60,6 +60,15 @@ public class ServerPlayerClaimWelcomer {
 			playerData.setLastClaimCheckDim(playerDimKey);
 			return;
 		}
+		// [Team Claims] no message within the land of one team, and none at all for a player who turned them off
+		xaero.pac.common.server.claims.TeamClaimsIntegration.TeamClaimsHandler tcHandler =
+				xaero.pac.common.server.claims.TeamClaimsIntegration.getHandler();
+		if(tcHandler != null && (tcHandler.areTerritoryMessagesSuppressed(player.getUUID()) ||
+				tcHandler.isSameTeamTerritory(lastClaimCheck, lastClaimCheckDim, currentClaim, playerDimKey))){
+			playerData.setLastClaimCheck(currentClaim);
+			playerData.setLastClaimCheckDim(playerDimKey);
+			return;
+		}
 		AdaptiveLocalizer adaptiveLocalizer = serverData.getAdaptiveLocalizer();
 		UUID currentClaimId = currentClaim == null ? null : currentClaim.getPlayerId();
 		boolean isOwner = !playerData.isClaimsNonallyMode() && currentClaim != null && Objects.equals(currentClaimId, player.getUUID());

@@ -8,7 +8,8 @@
         "fabric-gametest": [
             "xaero.pac.teamclaims.gametest.TeamClaimsSmokeTest",
             "xaero.pac.teamclaims.gametest.TeamClaimsLogicTest",
-            "xaero.pac.teamclaims.gametest.TeamClaimsConfigTest"
+            "xaero.pac.teamclaims.gametest.TeamClaimsConfigTest",
+            "xaero.pac.teamclaims.gametest.TeamClaimsTerritoryTest"
         ]
     },
     "mixins": [
