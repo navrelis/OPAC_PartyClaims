@@ -33,8 +33,7 @@ import xaero.pac.common.mods.ModSupportFabric;
 import xaero.pac.common.packet.PacketHandlerFabric;
 import xaero.pac.common.server.data.ServerDataReloadListenerFabric;
 import xaero.pac.server.LoadDedicatedServerFabric;
-import xaero.pac.teamclaims.TeamClaimsClientInit; // [Team Claims]
-import xaero.pac.teamclaims.TeamClaimsInit; // [Team Claims]
+import xaero.pac.teamclaims.fabric.TeamClaimsFabric; // [Team Claims]
 
 public class OpenPartiesAndClaimsFabric extends OpenPartiesAndClaims implements ClientModInitializer, DedicatedServerModInitializer {
 
@@ -60,15 +59,14 @@ public class OpenPartiesAndClaimsFabric extends OpenPartiesAndClaims implements 
 	public void onInitializeClient() {
 		loader.loadCommon();
 		((LoadClientFabric)loader).loadClient();
-		TeamClaimsInit.init(); // [Team Claims]
-		TeamClaimsClientInit.init(); // [Team Claims]
+		TeamClaimsFabric.init(); // [Team Claims]
 	}
 
 	@Override
 	public void onInitializeServer() {
 		loader.loadCommon();
 		((LoadDedicatedServerFabric)loader).loadServer();
-		TeamClaimsInit.init(); // [Team Claims]
+		TeamClaimsFabric.init(); // [Team Claims]
 	}
 
 	@Override

@@ -73,7 +73,7 @@ public class TeamClaimManager implements IClaimsManagerListenerAPI {
 
     @Nullable
     private String resolveSubConfigId(UUID playerUUID) {
-        TeamConfigManager tcm = TeamClaimsInit.getTeamConfigManager();
+        TeamConfigManager tcm = TeamClaimsCommon.getTeamConfigManager();
         if (tcm != null) {
             TeamConfig tc = tcm.getTeamConfigForPlayer(playerUUID);
             if (tc != null) return tc.getSubConfigId();
@@ -87,7 +87,7 @@ public class TeamClaimManager implements IClaimsManagerListenerAPI {
     }
 
     private String resolveSubConfigIdForParty(UUID partyId) {
-        TeamConfigManager tcm = TeamClaimsInit.getTeamConfigManager();
+        TeamConfigManager tcm = TeamClaimsCommon.getTeamConfigManager();
         if (tcm != null) {
             TeamConfig tc = tcm.getTeamConfig(partyId);
             if (tc != null) return tc.getSubConfigId();
@@ -127,7 +127,7 @@ public class TeamClaimManager implements IClaimsManagerListenerAPI {
             LOGGER.error("Error creating team sub-config for player {}: {}", playerUUID, e.getMessage());
             return;
         }
-        TeamConfigManager tcm = TeamClaimsInit.getTeamConfigManager();
+        TeamConfigManager tcm = TeamClaimsCommon.getTeamConfigManager();
         if (tcm != null) {
             tcm.configureTeamSubConfigForPlayer(playerUUID);
         }
@@ -172,7 +172,7 @@ public class TeamClaimManager implements IClaimsManagerListenerAPI {
         // party owner) while those members still have their team sub-config. Only then is the
         // stored membership caught up with the real parties, which removes those sub-configs.
         validateSavedData();
-        TeamConfigManager tcm = TeamClaimsInit.getTeamConfigManager();
+        TeamConfigManager tcm = TeamClaimsCommon.getTeamConfigManager();
         if (tcm != null) tcm.reconcileMembershipWithParties();
         warnAboutNativePartyClaims();
         LOGGER.info("Team Claims system ready — tracking {} parties", getSavedData().teams.size());
@@ -198,7 +198,7 @@ public class TeamClaimManager implements IClaimsManagerListenerAPI {
         IServerPartyAPI party = getPlayerParty(playerUUID);
         if (party == null) return;
 
-        TeamConfigManager tcm = TeamClaimsInit.getTeamConfigManager();
+        TeamConfigManager tcm = TeamClaimsCommon.getTeamConfigManager();
         if (tcm != null && tcm.getTeamConfig(party.getId()) == null) {
             LOGGER.info("Player {} logged in with party but no TeamConfig — creating retroactively", playerUUID);
             tcm.createTeamConfig(party);
