@@ -14,3 +14,4 @@
 - Roles: claiming over an own-team team claim with a personal sub-config requires the unclaim level (otherwise unclaim role is bypassable).
 - A forceloaded new team claim (only convert creates one) needs claim AND forceload role — keeps the forceload role non-bypassable.
 - Fork metadata: sources/issues URLs point to github.com/navrelis/OPAC_PartyClaims (fork bugs must not go to upstream); homepage stays upstream OPAC.
+- Graphify output (graphify-out/, ~52 MB incl. 25 MB graph.json + cache) stays local and uncommitted: too large and churny for git history; the next session on this machine reads it from disk.
