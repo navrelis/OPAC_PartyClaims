@@ -67,8 +67,8 @@ public class TeamClaimsCommands {
             IPlayerConfigManagerAPI configManager = OpenPACServerAPI.get(player.server).getPlayerConfigManager();
             IPlayerConfigAPI ownerConfig = configManager.getLoadedConfig(player.getUUID());
             ownerConfig.tryToSet(PlayerConfigOptions.PARTY_NAME, teamName);
-            if (TeamClaimsInit.getTeamConfigManager() != null) {
-                TeamClaimsInit.getTeamConfigManager().createTeamConfig(newParty);
+            if (TeamClaimsCommon.getTeamConfigManager() != null) {
+                TeamClaimsCommon.getTeamConfigManager().createTeamConfig(newParty);
             }
             source.sendSuccess(() -> localizer.getFor(player, "gui.xaero_pac_team_claims_create_success", teamName)
                     .withStyle(ChatFormatting.GREEN), false);

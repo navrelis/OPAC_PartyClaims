@@ -56,7 +56,7 @@ public class TeamForceLoadHandler {
     public void onServerStarted() { activeTeams.clear(); }
 
     public void onServerStopping() {
-        TeamClaimManager manager = TeamClaimsInit.getClaimManager();
+        TeamClaimManager manager = TeamClaimsCommon.getClaimManager();
         if (manager == null) return;
         for (UUID partyId : new ArrayList<>(activeTeams)) {
             TeamClaimManager.TeamData teamData = manager.getTeamData(partyId);

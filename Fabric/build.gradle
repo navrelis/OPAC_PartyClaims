@@ -70,6 +70,10 @@ dependencies {
 // is not added to processResources/jar/packageSources below).
 sourceSets {
     gametest {
+        // Loader-neutral test bodies (+ the profile-cache mixin) shared with other loaders.
+        // Common/src/gametest is not a source set of :Common itself, so it is only ever compiled
+        // here, into this test-only source set, and never into any production jar.
+        java.srcDir(project(":Common").file("src/gametest/java"))
         compileClasspath += sourceSets.main.compileClasspath + sourceSets.main.output
         runtimeClasspath += sourceSets.main.runtimeClasspath + sourceSets.main.output
     }

@@ -2,7 +2,6 @@ package xaero.pac.teamclaims.config;
 
 import com.google.gson.*;
 import com.mojang.logging.LogUtils;
-import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import org.slf4j.Logger;
@@ -17,9 +16,7 @@ import xaero.pac.common.player.config.PlayerConfigConstants;
 import xaero.pac.common.parties.party.member.PartyMemberRank;
 import xaero.pac.common.parties.party.member.api.IPartyMemberAPI;
 import xaero.pac.teamclaims.TeamClaimManager;
-import xaero.pac.teamclaims.TeamClaimsInit;
-import xaero.pac.teamclaims.network.TeamConfigSyncPayload;
-import xaero.pac.teamclaims.network.TeamConfigRemovedPayload;
+import xaero.pac.teamclaims.TeamClaimsCommon;
 
 import javax.annotation.Nullable;
 import java.io.*;
@@ -160,7 +157,6 @@ public class TeamConfigManager {
         teamConfigs.put(partyId, config);
         save(config);
         ensureSubConfigsForTeam(config);
-        syncToOnlineMembers(config);
         LOGGER.info("Created team config '{}' for party {} with {} members", teamName, partyId, config.getMembers().size());
         return config;
     }
@@ -172,10 +168,6 @@ public class TeamConfigManager {
         for (UUID memberUUID : config.getMembers()) {
             playerToParty.remove(memberUUID);
             removeSubConfigForPlayer(memberUUID, subConfigId);
-            ServerPlayer player = server.getPlayerList().getPlayer(memberUUID);
-            if (player != null) {
-                try { sendConfigRemovedPayload(player, new TeamConfigRemovedPayload(partyId)); } catch (Exception e) { LOGGER.debug("Failed to send config removal to {}", memberUUID, e); }
-            }
         }
         deleteConfigFile(partyId);
         lastKnownMembers.remove(partyId);
@@ -189,7 +181,6 @@ public class TeamConfigManager {
             playerToParty.put(playerUUID, partyId);
             save(config);
             ensureSubConfigForPlayer(playerUUID, config.getSubConfigId(), config);
-            syncToOnlineMembers(config);
         }
     }
 
@@ -199,14 +190,9 @@ public class TeamConfigManager {
         if (config.removeMember(playerUUID)) {
             playerToParty.remove(playerUUID);
             save(config);
-            TeamClaimManager claimManager = TeamClaimsInit.getClaimManager();
+            TeamClaimManager claimManager = TeamClaimsCommon.getClaimManager();
             if (claimManager != null) claimManager.onPlayerLeftParty(partyId, playerUUID);
             removeSubConfigForPlayer(playerUUID, config.getSubConfigId());
-            ServerPlayer player = server.getPlayerList().getPlayer(playerUUID);
-            if (player != null) {
-                try { sendConfigRemovedPayload(player, new TeamConfigRemovedPayload(partyId)); } catch (Exception ignored) {}
-            }
-            syncToOnlineMembers(config);
         }
     }
 
@@ -254,7 +240,6 @@ public class TeamConfigManager {
             config.setSetting("opac.CLAIMS_NAME", new JsonPrimitive(newName));
             save(config);
             for (UUID memberUUID : config.getMembers()) configureTeamSubConfig(memberUUID, config);
-            syncToOnlineMembers(config);
         }
     }
 
@@ -291,7 +276,7 @@ public class TeamConfigManager {
                     internalConfig.removeSubConfig(subConfigId);
                 }
             }
-            TeamClaimManager claimManager = TeamClaimsInit.getClaimManager();
+            TeamClaimManager claimManager = TeamClaimsCommon.getClaimManager();
             if (claimManager != null) claimManager.invalidateCacheForPlayer(playerUUID);
         } catch (Exception e) {
             LOGGER.error("Error removing sub-config '{}' from player {}", subConfigId, playerUUID, e);
@@ -459,30 +444,12 @@ public class TeamConfigManager {
         }
     }
 
-    private void sendConfigSyncPayload(ServerPlayer player, TeamConfigSyncPayload payload) {
-        if (ServerPlayNetworking.canSend(player, TeamConfigSyncPayload.TYPE)) {
-            ServerPlayNetworking.send(player, payload);
-        }
-    }
-
-    private void sendConfigRemovedPayload(ServerPlayer player, TeamConfigRemovedPayload payload) {
-        if (ServerPlayNetworking.canSend(player, TeamConfigRemovedPayload.TYPE)) {
-            ServerPlayNetworking.send(player, payload);
-        }
-    }
-
-    public void syncToOnlineMembers(TeamConfig config) {
-        TeamConfigSyncPayload payload;
-        try { payload = new TeamConfigSyncPayload(config); } catch (Exception e) { return; }
-        for (UUID memberUUID : config.getMembers()) {
-            ServerPlayer player = server.getPlayerList().getPlayer(memberUUID);
-            if (player != null) {
-                try { sendConfigSyncPayload(player, payload); } catch (Exception ignored) {}
-            }
-        }
-    }
-
-    public void syncToPlayer(ServerPlayer player) {
+    /**
+     * Login handling (formerly {@code syncToPlayer}, minus the dead S2C config payload): repairs
+     * the player-to-party lookup for this player and creates their party's team config if it is
+     * still missing. Runs one tick after login, see {@code TeamClaimsCommon.onPlayerLoggedIn}.
+     */
+    public void onPlayerLogin(ServerPlayer player) {
         UUID playerUUID = player.getUUID();
         UUID partyId = playerToParty.get(playerUUID);
         TeamConfig config = partyId != null ? teamConfigs.get(partyId) : null;
@@ -495,11 +462,8 @@ public class TeamConfigManager {
             try {
                 IPartyManagerAPI partyManager = OpenPACServerAPI.get(server).getPartyManager();
                 IServerPartyAPI party = partyManager.getPartyByMember(playerUUID);
-                if (party != null) config = createTeamConfig(party);
+                if (party != null) createTeamConfig(party);
             } catch (Exception ignored) {}
-        }
-        if (config != null) {
-            try { sendConfigSyncPayload(player, new TeamConfigSyncPayload(config)); } catch (Exception ignored) {}
         }
     }
 
@@ -564,13 +528,9 @@ public class TeamConfigManager {
                     if (!currMembers.contains(memberUUID)) {
                         if (config.removeMember(memberUUID)) {
                             playerToParty.remove(memberUUID);
-                            TeamClaimManager claimMgr = TeamClaimsInit.getClaimManager();
+                            TeamClaimManager claimMgr = TeamClaimsCommon.getClaimManager();
                             if (claimMgr != null) claimMgr.onPlayerLeftParty(partyId2, memberUUID);
                             removeSubConfigForPlayer(memberUUID, config.getSubConfigId());
-                            ServerPlayer player = server.getPlayerList().getPlayer(memberUUID);
-                            if (player != null) {
-                                try { sendConfigRemovedPayload(player, new TeamConfigRemovedPayload(partyId2)); } catch (Exception ignored) {}
-                            }
                             membershipChanged = true;
                         }
                     }
@@ -578,7 +538,7 @@ public class TeamConfigManager {
                 String prevName = lastKnownNames.get(partyId2);
                 String currName = currentNames.get(partyId2);
                 if (currName != null && !currName.equals(prevName)) onTeamNameChanged(partyId2, currName);
-                if (membershipChanged) { dirtyConfigs.add(config); syncToOnlineMembers(config); }
+                if (membershipChanged) dirtyConfigs.add(config);
             }
             for (TeamConfig dirtyConfig : dirtyConfigs) save(dirtyConfig);
         } catch (Exception e) {

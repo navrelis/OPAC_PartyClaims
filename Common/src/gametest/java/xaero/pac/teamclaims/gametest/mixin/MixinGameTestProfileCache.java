@@ -14,8 +14,10 @@ import java.io.File;
 import java.net.Proxy;
 
 /**
- * Test-only workaround, scoped to the "gametest" source set (opac_teamclaims_gametest mod) and
- * never shipped in the production jar.
+ * Test-only workaround, never shipped in any production jar. Loader-neutral (vanilla + Mixin
+ * only), so it lives in the shared Common/src/gametest dir that each loader compiles into its own
+ * test-only gametest source set; the mixin config that applies it stays per loader (on Fabric:
+ * opac_teamclaims_gametest.mixins.json of the opac_teamclaims_gametest mod).
  * <p>
  * Vanilla's {@code GameTestServer} builds its {@code Services} record with a null
  * {@code GameProfileCache} (it never calls {@code Services.create(...)}, since a headless test
