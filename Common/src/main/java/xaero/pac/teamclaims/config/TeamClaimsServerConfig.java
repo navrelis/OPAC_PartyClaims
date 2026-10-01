@@ -24,11 +24,14 @@ public class TeamClaimsServerConfig {
 
     public static final int DEFAULT_MAX_TEAM_NAME_LENGTH = 24;
     public static final int MAX_FORCELOAD_GRACE_MINUTES = 24 * 60;
+    public static final int DEFAULT_CONVERT_MAX_RADIUS = 4;
+    public static final int MAX_CONVERT_RADIUS = 16;
 
     public final ModConfigSpec.BooleanValue enabled;
     public final ModConfigSpec.IntValue maxTeamNameLength;
     public final ModConfigSpec.IntValue forceloadGraceMinutes;
     public final ModConfigSpec.BooleanValue territoryMessagesDefault;
+    public final ModConfigSpec.IntValue convertMaxRadius;
 
     private TeamClaimsServerConfig(ModConfigSpec.Builder builder) {
         builder.push("teamClaims");
@@ -63,6 +66,12 @@ public class TeamClaimsServerConfig {
                         With Team Claims, walking from one claim of a team to another claim of the same team shows nothing,
                         as it is one territory. This only applies while OPAC's own claimWelcomeMessages option is enabled.""")
                 .define("territoryMessagesDefault", true);
+
+        convertMaxRadius = builder
+                .comment("""
+                        The largest radius (in chunks around the player's current chunk) of /teamclaims convert <toteam|topersonal> [radius].
+                        0 = only the chunk the player stands in. The largest allowed value, 16, is a square of 33x33 chunks.""")
+                .defineInRange("convertMaxRadius", DEFAULT_CONVERT_MAX_RADIUS, 0, MAX_CONVERT_RADIUS);
 
         builder.pop();
     }

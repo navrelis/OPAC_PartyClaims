@@ -73,8 +73,9 @@ class TeamClaimsBridgeHandler implements TeamClaimsIntegration.TeamClaimsHandler
         // so it needs the team's unclaim role.
         if (!tcm.isTeamSubConfigIndex(playerId, subConfigIndex))
             return TeamRoles.checkClaimOverTeamClaim(tcm, server, playerId, existing);
-        // The role comes first: a member who may not make team claims gets that reason, not a budget one
-        ClaimResult<PlayerChunkClaim> roleResult = TeamRoles.checkClaim(server, playerId);
+        // The role comes first: a member who may not make team claims gets that reason, not a budget one. A forceloaded
+        // team claim also needs the forceload role (OPAC's claim commands never claim forceloaded, convert does).
+        ClaimResult<PlayerChunkClaim> roleResult = TeamRoles.checkClaim(server, playerId, forceLoaded);
         if (roleResult != null) return roleResult;
         return tcm.checkTeamClaimBudget(playerId, forceLoaded, existing);
     }

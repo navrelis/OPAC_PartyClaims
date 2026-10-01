@@ -44,6 +44,8 @@ The server logs one WARN line stating this at start-up while the option is enabl
 | `/teamclaims territorymessages [on\|off]` | Everybody | Turns the claim welcome messages off or on for yourself, or shows the current state. See "Territory messages" below. |
 | `/teamclaims roles` | Everybody in a team | Shows which rank your team requires to make, unclaim and forceload team claims. See "Team roles" below. |
 | `/teamclaims roles <claim\|unclaim\|forceload> <member\|claimer\|moderator\|admin\|owner>` | The party owner and admins | Sets the rank one of those actions requires. The other online members are told about the change. |
+| `/teamclaims convert toteam [radius]` | Everybody in a team | Turns your own claims in the square of chunks around the chunk you stand in (`radius` 0, the default, is only that chunk; at most `convertMaxRadius`) into team claims, keeping their forceload. See "Converting claims" below. |
+| `/teamclaims convert topersonal [radius]` | Everybody in a team | Turns your own team claims in that area back into personal claims of your selected sub-claim (the main config if that is the team sub-config), keeping their forceload. |
 
 `info` and `list` only read, they change nothing. The `info` overview also has a line with the team roles. All of `/teamclaims` is unavailable while `enabled` is `false` in the
 Team Claims server config.
@@ -58,7 +60,7 @@ actions to a minimum rank with `/teamclaims roles <action> <rank>`:
 | --- | --- |
 | `claim` | Making a team claim, i.e. claiming with the team sub-config, also over an existing claim. |
 | `unclaim` | Unclaiming a team claim of the team, your own or a teammate's. Claiming over a team claim of your own team with a personal sub-config takes it away from the team too, so it needs this rank as well. |
-| `forceload` | Turning the forceload of a team claim of the team on or off, your own or a teammate's. |
+| `forceload` | Turning the forceload of a team claim of the team on or off, your own or a teammate's. Turning a forceloaded claim into a team claim (`/teamclaims convert toteam`) adds a team forceload, so it needs this rank as well as the `claim` rank. |
 
 The ranks, from the lowest: `member`, `claimer`, `moderator`, `admin` (OPAC's party ranks) and `owner` (only the party
 owner). The default for all three actions is `member`, which is the behaviour without roles. A player below the rank
@@ -68,6 +70,25 @@ actions) and Team Claims' own claim transfers ignore the roles.
 
 The roles are stored in the team config, `<world>/data/opacteamclaims/teams/<party>.json`, as a `roles` object; a team
 config without it (or with an unknown value) uses the default.
+
+## Converting claims
+
+`/teamclaims convert toteam [radius]` is for land claimed before the team existed or with the wrong sub-config:
+every claim in the area that you own and that is not a team claim becomes a team claim (your team sub-config), and
+`/teamclaims convert topersonal [radius]` does the opposite for your team claims there. Nothing is unclaimed in
+between, and a forceloaded claim stays forceloaded (it becomes a team forceload, or a personal one again). The area is
+the square of chunks around the chunk you stand in, `radius` chunks in each direction (0 = only that chunk), at most
+`convertMaxRadius` from the server config.
+
+Only your own claims are touched, never a teammate's, another player's or a server claim. While impersonating another
+player with OPAC's claims commands, their claims are converted. Every chunk goes through OPAC's normal (not forced) claim
+path, so the same rules apply as for claiming it by hand: `toteam` needs the team's `claim` rank (and the `forceload`
+rank for a forceloaded claim) and has to fit into the shared team budget, including the forceload budget for forceloaded
+claims, and `topersonal` needs the `unclaim` rank.
+OPAC's admin mode does not bypass any of that here. The claims nearest to you are converted first, and the conversion
+stops at the first claim that doesn't fit into the budget (the budget message names the member at the limit). At the
+end you get one summary: how many claims were converted (and how many of them are forceloaded), how many were skipped
+and why (not yours, already in that state, not allowed for your team rank, over the team budget, another reason).
 
 ## Server config
 
@@ -81,6 +102,7 @@ Fabric and NeoForge; a copy in `<world>/serverconfig/` overrides it for that wor
 | `maxTeamNameLength` | `24` (1..100) | Maximum length of a team name given to `/teamclaims create` or to the team name argument of the party create command. Changes apply right away. |
 | `forceloadGraceMinutes` | `0` (0..1440) | How many minutes the forceloaded chunks of a team stay loaded after its last online member left. A member coming back within that time cancels the release. `0` releases them right away. Changes apply from the next logout. |
 | `territoryMessagesDefault` | `true` | Whether players who never used `/teamclaims territorymessages` see the claim welcome messages. See "Territory messages" below. Changes apply right away. |
+| `convertMaxRadius` | `4` (0..16) | The largest `radius` of `/teamclaims convert`. 16 is a square of 33x33 chunks. Changes apply right away. |
 
 ## Territory messages
 

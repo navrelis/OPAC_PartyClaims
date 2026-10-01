@@ -697,5 +697,18 @@
 	"gui.xaero_pac_team_claims_roles_set" : "%1$s now needs %2$s or higher.",
 	"gui.xaero_pac_team_claims_roles_unchanged" : "%1$s already needs %2$s or higher.",
 	"gui.xaero_pac_team_claims_roles_notice" : "[Team Claims] %1$s changed the team roles: %2$s now needs %3$s or higher.",
-	"gui.xaero_pac_team_claims_role_denied" : "%1$s needs the team rank %2$s or higher."
+	"gui.xaero_pac_team_claims_role_denied" : "%1$s needs the team rank %2$s or higher.",
+	"gui.xaero_pac_team_claims_convert_radius_too_large" : "The radius can be at most %1$s (convertMaxRadius in the Team Claims server config).",
+	"gui.xaero_pac_team_claims_convert_no_team_sub_config" : "You have no team sub-config, so your claims can't become team claims.",
+	"gui.xaero_pac_team_claims_convert_done_team" : "Turned %1$s of your claims into team claims, %2$s of them forceloaded.",
+	"gui.xaero_pac_team_claims_convert_done_personal" : "Turned %1$s of your team claims into personal claims (sub-config %3$s), %2$s of them forceloaded.",
+	"gui.xaero_pac_team_claims_convert_skipped" : "Skipped: %1$s.",
+	"gui.xaero_pac_team_claims_convert_skipped_not_yours" : "%1$s not yours",
+	"gui.xaero_pac_team_claims_convert_skipped_already_team" : "%1$s already team claims",
+	"gui.xaero_pac_team_claims_convert_skipped_already_personal" : "%1$s already personal claims",
+	"gui.xaero_pac_team_claims_convert_skipped_role" : "%1$s not allowed for your team rank",
+	"gui.xaero_pac_team_claims_convert_skipped_budget" : "%1$s over the team budget",
+	"gui.xaero_pac_team_claims_convert_skipped_other" : "%1$s for another reason",
+	"gui.xaero_pac_team_claims_convert_stopped_budget" : "Stopped at the team budget, the claims after that would not fit either.",
+	"gui.xaero_pac_team_claims_convert_reason" : "Reason: %1$s"
 }

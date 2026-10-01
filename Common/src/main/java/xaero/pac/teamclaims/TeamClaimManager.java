@@ -102,7 +102,8 @@ public class TeamClaimManager implements IClaimsManagerListenerAPI {
 
     // ==================== Team sub-config lookup ====================
 
-    private int getTeamSubIndex(UUID playerUUID) {
+    /** The index of the player's team sub-config, -1 if they are in no team or have no team sub-config. */
+    int getTeamSubIndex(UUID playerUUID) {
         Integer cached = teamSubIndexCache.get(playerUUID);
         if (cached != null) return cached;
         int index = lookUpTeamSubIndex(playerUUID);

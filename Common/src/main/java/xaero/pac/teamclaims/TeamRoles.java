@@ -44,8 +44,10 @@ import java.util.UUID;
  * own transfers skip both):
  * <ul>
  *     <li>claim: {@link #checkClaim}, from the bridge handler's {@code interceptClaim}, which is the only place that
- *     knows the sub-config of the claim. It also covers replacing a team claim of the own team with a personal claim
- *     ({@link #checkClaimOverTeamClaim}), which takes the claim away from the team just like an unclaim does.</li>
+ *     knows the sub-config of the claim. A forceloaded team claim (which {@code /teamclaims convert toteam} makes of a
+ *     forceloaded personal claim) adds a team forceload, so it needs the forceload level as well. It also covers
+ *     replacing a team claim of the own team with a personal claim ({@link #checkClaimOverTeamClaim}), which takes the
+ *     claim away from the team just like an unclaim does.</li>
  *     <li>unclaim and forceload: the {@link Listener}, registered with OPAC's claim action listener API, which OPAC
  *     consults for every non-forced UNCLAIM, FORCELOAD and UNFORCELOAD.</li>
  * </ul>
@@ -87,10 +89,16 @@ public final class TeamRoles {
         return Component.translatable(KEY + "role_denied", action.displayName(), required.displayName());
     }
 
-    /** A new team claim (claim with the team sub-config) by {@code playerId}: null if allowed, else the rejection. */
+    /**
+     * A new team claim (claim with the team sub-config) by {@code playerId}: null if allowed, else the rejection. A
+     * forceloaded one (e.g. a forceloaded personal claim made a team claim by {@code /teamclaims convert toteam}) adds a
+     * team forceload, so it needs the forceload level too, checked after the claim level.
+     */
     @Nullable
-    static ClaimResult<PlayerChunkClaim> checkClaim(MinecraftServer server, UUID playerId) {
-        return forbidden(denyReason(server, playerId, null, TeamAction.CLAIM));
+    static ClaimResult<PlayerChunkClaim> checkClaim(MinecraftServer server, UUID playerId, boolean forceLoaded) {
+        Component reason = denyReason(server, playerId, null, TeamAction.CLAIM);
+        if (reason == null && forceLoaded) reason = denyReason(server, playerId, null, TeamAction.FORCELOAD);
+        return forbidden(reason);
     }
 
     /**

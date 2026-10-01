@@ -40,7 +40,8 @@ public class TeamClaimsCommands {
         // active; "create" has the same further requirements as OPAC's "/<parties> create" (parties enabled, the caller,
         // or the player they impersonate, not in a party yet), "territorymessages" is for everybody, "info" and "list" are
         // read-only overviews of the caller's team ("info <player>" of any player's, for permission level 2), "roles"
-        // shows the team roles to any member and lets the party owner and admins change them.
+        // shows the team roles to any member and lets the party owner and admins change them, "convert" turns the
+        // caller's own claims around them into team claims or back.
         Predicate<CommandSourceStack> nonMemberRequirement = new CommandRequirementProvider().getNonMemberRequirement(p -> true, false);
         dispatcher.register(
                 Commands.literal("teamclaims")
@@ -58,6 +59,7 @@ public class TeamClaimsCommands {
                         .then(TeamClaimsOverview.infoNode())
                         .then(TeamClaimsOverview.listNode())
                         .then(TeamRoles.rolesNode())
+                        .then(TeamClaimsConvert.convertNode())
         );
         LOGGER.info("Registered /teamclaims commands");
     }

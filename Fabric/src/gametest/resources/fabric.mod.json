@@ -11,7 +11,8 @@
             "xaero.pac.teamclaims.gametest.TeamClaimsConfigTest",
             "xaero.pac.teamclaims.gametest.TeamClaimsTerritoryTest",
             "xaero.pac.teamclaims.gametest.TeamClaimsOverviewTest",
-            "xaero.pac.teamclaims.gametest.TeamClaimsRolesTest"
+            "xaero.pac.teamclaims.gametest.TeamClaimsRolesTest",
+            "xaero.pac.teamclaims.gametest.TeamClaimsConvertTest"
         ]
     },
     "mixins": [
