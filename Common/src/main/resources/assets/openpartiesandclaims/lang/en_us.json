@@ -685,5 +685,17 @@
 	"gui.xaero_pac_team_claims_list_header" : "===== Team claims of %1$s (%2$s) =====",
 	"gui.xaero_pac_team_claims_list_entry" : "%1$s [%2$s, %3$s] at block %4$s, %5$s - %6$s",
 	"gui.xaero_pac_team_claims_list_entry_forceloaded" : "%1$s [%2$s, %3$s] at block %4$s, %5$s - %6$s (forceloaded)",
-	"gui.xaero_pac_team_claims_list_footer" : "Page %1$s / %2$s"
+	"gui.xaero_pac_team_claims_list_footer" : "Page %1$s / %2$s",
+	"gui.xaero_pac_team_claims_info_roles" : "Roles: claim ≥ %1$s, unclaim ≥ %2$s, forceload ≥ %3$s",
+	"gui.xaero_pac_team_claims_roles_action_claim" : "Making team claims",
+	"gui.xaero_pac_team_claims_roles_action_unclaim" : "Unclaiming team claims",
+	"gui.xaero_pac_team_claims_roles_action_forceload" : "Turning the forceload of team claims on or off",
+	"gui.xaero_pac_team_claims_roles_header" : "===== Team roles of %1$s =====",
+	"gui.xaero_pac_team_claims_roles_entry" : "%1$s: %2$s or higher",
+	"gui.xaero_pac_team_claims_roles_hint" : "Change one with /teamclaims roles <claim|unclaim|forceload> <member|claimer|moderator|admin|owner>.",
+	"gui.xaero_pac_team_claims_roles_admin_only" : "Only the party owner and admins can change the team roles.",
+	"gui.xaero_pac_team_claims_roles_set" : "%1$s now needs %2$s or higher.",
+	"gui.xaero_pac_team_claims_roles_unchanged" : "%1$s already needs %2$s or higher.",
+	"gui.xaero_pac_team_claims_roles_notice" : "[Team Claims] %1$s changed the team roles: %2$s now needs %3$s or higher.",
+	"gui.xaero_pac_team_claims_role_denied" : "%1$s needs the team rank %2$s or higher."
 }

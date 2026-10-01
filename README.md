@@ -42,9 +42,32 @@ The server logs one WARN line stating this at start-up while the option is enabl
 | `/teamclaims info <player>` | Permission level 2 | The same overview for the team of another player (also offline). |
 | `/teamclaims list [page]` | Everybody in a team | The team claims, 10 per page, sorted by dimension, then x, then z: dimension, chunk, block coordinates of the chunk's centre, the member who made it and whether it is forceloaded. The `[<]` and `[>]` in the footer are clickable. A team without team claims gets a hint on how to make one. |
 | `/teamclaims territorymessages [on\|off]` | Everybody | Turns the claim welcome messages off or on for yourself, or shows the current state. See "Territory messages" below. |
+| `/teamclaims roles` | Everybody in a team | Shows which rank your team requires to make, unclaim and forceload team claims. See "Team roles" below. |
+| `/teamclaims roles <claim\|unclaim\|forceload> <member\|claimer\|moderator\|admin\|owner>` | The party owner and admins | Sets the rank one of those actions requires. The other online members are told about the change. |
 
-`info` and `list` only read, they change nothing. All of `/teamclaims` is unavailable while `enabled` is `false` in the
+`info` and `list` only read, they change nothing. The `info` overview also has a line with the team roles. All of `/teamclaims` is unavailable while `enabled` is `false` in the
 Team Claims server config.
+
+## Team roles
+
+By default every member of a team may make team claims, unclaim any team claim of the team (their own or a
+teammate's) and turn the forceload of any of them on or off. The party owner and admins can restrict each of those three
+actions to a minimum rank with `/teamclaims roles <action> <rank>`:
+
+| Action | What it covers |
+| --- | --- |
+| `claim` | Making a team claim, i.e. claiming with the team sub-config, also over an existing claim. |
+| `unclaim` | Unclaiming a team claim of the team, your own or a teammate's. Claiming over a team claim of your own team with a personal sub-config takes it away from the team too, so it needs this rank as well. |
+| `forceload` | Turning the forceload of a team claim of the team on or off, your own or a teammate's. |
+
+The ranks, from the lowest: `member`, `claimer`, `moderator`, `admin` (OPAC's party ranks) and `owner` (only the party
+owner). The default for all three actions is `member`, which is the behaviour without roles. A player below the rank
+gets "... needs the team rank X or higher" as the reason, in chat for the claim commands and in the claim result for the
+map's claim UI; nothing is changed. Personal claims are never restricted. OPAC's admin mode and server claims (forced
+actions) and Team Claims' own claim transfers ignore the roles.
+
+The roles are stored in the team config, `<world>/data/opacteamclaims/teams/<party>.json`, as a `roles` object; a team
+config without it (or with an unknown value) uses the default.
 
 ## Server config
 

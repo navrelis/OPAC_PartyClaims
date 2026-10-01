@@ -18,7 +18,9 @@ import java.util.function.Predicate;
  * (the canonical claims color/name under {@link #KEY_CLAIMS_COLOR}/{@link #KEY_CLAIMS_NAME}, plus any unknown
  * keys, which are kept as they are) and, since the option persistence was added, {@code options}: every other
  * option a party owner/admin set on the team sub-config, by option ID. Files without {@code options} load
- * unchanged.
+ * unchanged. {@code roles}: the {@link TeamRole} each {@link TeamAction} requires, e.g.
+ * {@code "roles": {"claim": "MODERATOR", "unclaim": "MEMBER", "forceload": "MEMBER"}}; a missing or unknown value is
+ * the {@linkplain TeamRole#DEFAULT default}, so files without {@code roles} load with the behaviour without roles.
  * <p>
  * Server-thread confined: an instance is only ever read or modified on the server thread. Saving serialises it to
  * a String there ({@link #toJsonString()}); only that String is handed to the IO thread.
@@ -50,11 +52,14 @@ public class TeamConfig {
     /** Admin-set team sub-config options other than the claims color/name, by option ID. Values are never null. */
     private final Map<String, Object> options = new LinkedHashMap<>();
     private final Set<UUID> memberUUIDs = new LinkedHashSet<>();
+    /** The level every team action requires, never null. */
+    private final EnumMap<TeamAction, TeamRole> roles = new EnumMap<>(TeamAction.class);
 
     public TeamConfig(UUID partyId, @Nullable String teamName, String subConfigId) {
         this.partyId = Objects.requireNonNull(partyId);
         this.teamName = teamName != null ? teamName : "";
         this.subConfigId = Objects.requireNonNull(subConfigId);
+        for (TeamAction action : TeamAction.values()) roles.put(action, TeamRole.DEFAULT);
     }
 
     // ==================== Sub-config IDs ====================
@@ -198,6 +203,16 @@ public class TeamConfig {
         return !stored.equals(options.put(option.getId(), stored));
     }
 
+    // ==================== Roles ====================
+
+    /** The lowest level a member needs for {@code action} on the team claims of this team. */
+    public TeamRole getRequiredRole(TeamAction action) { return roles.get(action); }
+
+    /** @return true if the stored value changed */
+    public boolean setRequiredRole(TeamAction action, TeamRole role) {
+        return roles.put(action, Objects.requireNonNull(role)) != role;
+    }
+
     // ==================== JSON ====================
 
     public JsonObject toJson() {
@@ -216,6 +231,9 @@ public class TeamConfig {
             for (Map.Entry<String, Object> entry : options.entrySet()) optionsObj.add(entry.getKey(), toJson(entry.getValue()));
             json.add("options", optionsObj);
         }
+        JsonObject rolesObj = new JsonObject();
+        for (Map.Entry<TeamAction, TeamRole> entry : roles.entrySet()) rolesObj.addProperty(entry.getKey().id(), entry.getValue().name());
+        json.add("roles", rolesObj);
         return json;
     }
 
@@ -248,6 +266,25 @@ public class TeamConfig {
                     continue;
                 }
                 config.options.put(entry.getKey(), value);
+            }
+        }
+        if (json.has("roles")) {
+            JsonElement rolesJson = json.get("roles");
+            if (!rolesJson.isJsonObject()) {
+                LOGGER.warn("[TeamClaims] Ignoring invalid team roles {} of party {}", rolesJson, partyId);
+            } else {
+                for (Map.Entry<String, JsonElement> entry : rolesJson.getAsJsonObject().entrySet()) {
+                    TeamAction action = TeamAction.byId(entry.getKey());
+                    JsonElement value = entry.getValue();
+                    TeamRole role = value.isJsonPrimitive() && value.getAsJsonPrimitive().isString()
+                            ? TeamRole.byName(value.getAsString()) : null;
+                    if (action == null || role == null) {
+                        LOGGER.warn("[TeamClaims] Ignoring unknown or invalid team role '{}' = {} of party {}",
+                                entry.getKey(), value, partyId);
+                        continue;
+                    }
+                    config.roles.put(action, role);
+                }
             }
         }
         if (json.has("members")) {

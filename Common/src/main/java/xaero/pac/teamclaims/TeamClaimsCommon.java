@@ -74,6 +74,9 @@ public final class TeamClaimsCommon {
         teamConfigManager = new TeamConfigManager(server);
 
         context.getClaimsManagerTrackerAPI().register(claimManager);
+        // Team roles for unclaiming and forceloading team claims. The listener manager belongs to this server's claims
+        // manager, so this registers exactly one listener per server start.
+        context.getClaimActionListenerManagerAPI().register(new TeamRoles.Listener());
 
         // Set the bridge handler so Common code can call into us
         TeamClaimsIntegration.setHandler(new TeamClaimsBridgeHandler());

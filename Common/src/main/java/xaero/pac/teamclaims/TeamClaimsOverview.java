@@ -26,6 +26,7 @@ import xaero.pac.common.server.player.localization.AdaptiveLocalizer;
 import xaero.pac.teamclaims.TeamClaimManager.ClaimPos;
 import xaero.pac.teamclaims.TeamClaimManager.MemberNumbers;
 import xaero.pac.teamclaims.TeamClaimManager.TeamData;
+import xaero.pac.teamclaims.config.TeamAction;
 import xaero.pac.teamclaims.config.TeamConfig;
 import xaero.pac.teamclaims.config.TeamConfigManager;
 
@@ -96,7 +97,7 @@ public final class TeamClaimsOverview {
 
     /**
      * Sends the team overview of the party of {@code subjectId} to {@code source}: name and owner, the team totals and
-     * forceload state, one line per member and what the team can still claim and forceload.
+     * forceload state, the team roles, one line per member and what the team can still claim and forceload.
      *
      * @param viewer      the player running the command, null when there is none (the texts then use the server's
      *                    default translation)
@@ -141,6 +142,10 @@ public final class TeamClaimsOverview {
                 case INACTIVE -> send(source, localizer, viewer, KEY + "info_forceload_inactive", ChatFormatting.GRAY);
             }
         }
+        send(source, localizer, viewer, KEY + "info_roles", ChatFormatting.GRAY,
+                teamConfig.getRequiredRole(TeamAction.CLAIM).displayName(),
+                teamConfig.getRequiredRole(TeamAction.UNCLAIM).displayName(),
+                teamConfig.getRequiredRole(TeamAction.FORCELOAD).displayName());
 
         // The budget is what the most limited member still has room for, see TeamClaimManager#checkTeamClaimBudget
         int claimRoom = Integer.MAX_VALUE;

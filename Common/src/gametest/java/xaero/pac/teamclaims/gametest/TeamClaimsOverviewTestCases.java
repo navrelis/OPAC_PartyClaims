@@ -366,12 +366,12 @@ public final class TeamClaimsOverviewTestCases {
         return localized(server, "gui.xaero_pac_team_claims_info_member", name, rank, "○", claims, forceloads);
     }
 
-    private static List<String> lines(CapturingCommandSource capture) {
+    static List<String> lines(CapturingCommandSource capture) {
         return capture.messages().stream().map(Component::getString).toList();
     }
 
     /** The index of the line, which has to be there as a whole. */
-    private static int assertLine(GameTestHelper helper, List<String> lines, String expected) {
+    static int assertLine(GameTestHelper helper, List<String> lines, String expected) {
         int at = lines.indexOf(expected);
         helper.assertTrue(at >= 0, "expected the line '" + expected + "', got " + lines);
         return at;
@@ -402,23 +402,23 @@ public final class TeamClaimsOverviewTestCases {
     }
 
     /** The source of the mock player, with the given permission level and its output going to {@code capture}. */
-    private static CommandSourceStack playerSource(ServerPlayer player, CapturingCommandSource capture, int permissionLevel) {
+    static CommandSourceStack playerSource(ServerPlayer player, CapturingCommandSource capture, int permissionLevel) {
         return player.createCommandSourceStack().withSource(capture).withPermission(permissionLevel);
     }
 
-    private static CapturingCommandSource run(MinecraftServer server, ServerPlayer player, int permissionLevel, String command) {
+    static CapturingCommandSource run(MinecraftServer server, ServerPlayer player, int permissionLevel, String command) {
         CapturingCommandSource capture = new CapturingCommandSource();
         server.getCommands().performPrefixedCommand(playerSource(player, capture, permissionLevel), command);
         return capture;
     }
 
-    private static boolean canRun(MinecraftServer server, ServerPlayer player, int permissionLevel, String command) {
+    static boolean canRun(MinecraftServer server, ServerPlayer player, int permissionLevel, String command) {
         ParseResults<CommandSourceStack> parsed = server.getCommands().getDispatcher()
                 .parse(command, playerSource(player, new CapturingCommandSource(), permissionLevel));
         return !parsed.getReader().canRead() && parsed.getContext().getCommand() != null;
     }
 
-    private static void removePlayerQuiet(MinecraftServer server, ServerPlayer player) {
+    static void removePlayerQuiet(MinecraftServer server, ServerPlayer player) {
         try {
             server.getPlayerList().remove(player);
         } catch (Exception ignored) {

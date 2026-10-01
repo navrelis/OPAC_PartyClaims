@@ -63,12 +63,19 @@ class TeamClaimsBridgeHandler implements TeamClaimsIntegration.TeamClaimsHandler
             ServerClaimsManager claimsManager, ResourceLocation dimension,
             UUID playerId, int subConfigIndex, int x, int z, boolean forceLoaded) {
         TeamClaimManager tcm = TeamClaimsCommon.getClaimManager();
-        if (tcm == null) return null;
-        // Only check the team budget for claims made with the team sub-config, not personal ones
-        if (!tcm.isTeamSubConfigIndex(playerId, subConfigIndex)) return null;
+        MinecraftServer server = TeamClaimsCommon.getServer();
+        if (tcm == null || server == null) return null;
         // The claim being replaced (if any) decides what this claim really adds to the team's
         // totals and to the previous owner's own count — the budget check needs both.
         PlayerChunkClaim existing = claimsManager.get(dimension, x, z);
+        // Only check the team role and budget for claims made with the team sub-config, not personal ones.
+        // A personal claim replacing a team claim of the own team still takes it away from the team,
+        // so it needs the team's unclaim role.
+        if (!tcm.isTeamSubConfigIndex(playerId, subConfigIndex))
+            return TeamRoles.checkClaimOverTeamClaim(tcm, server, playerId, existing);
+        // The role comes first: a member who may not make team claims gets that reason, not a budget one
+        ClaimResult<PlayerChunkClaim> roleResult = TeamRoles.checkClaim(server, playerId);
+        if (roleResult != null) return roleResult;
         return tcm.checkTeamClaimBudget(playerId, forceLoaded, existing);
     }
 
