@@ -3,6 +3,8 @@ package xaero.pac.teamclaims.neoforge;
 import net.minecraft.server.level.ServerPlayer;
 import net.neoforged.bus.api.EventPriority;
 import net.neoforged.bus.api.IEventBus;
+import net.neoforged.fml.ModLoadingContext;
+import net.neoforged.fml.config.ModConfig;
 import net.neoforged.neoforge.common.NeoForge;
 import net.neoforged.neoforge.event.RegisterCommandsEvent;
 import net.neoforged.neoforge.event.entity.player.PlayerEvent;
@@ -11,6 +13,7 @@ import net.neoforged.neoforge.event.server.ServerStoppingEvent;
 import net.neoforged.neoforge.event.tick.ServerTickEvent;
 import xaero.pac.common.event.api.v2.OPACServerAddonRegisterEvent;
 import xaero.pac.teamclaims.TeamClaimsCommon;
+import xaero.pac.teamclaims.config.TeamClaimsServerConfig;
 
 /**
  * NeoForge adapter for Team Claims: registers listeners on {@link NeoForge#EVENT_BUS} and
@@ -47,6 +50,12 @@ public final class TeamClaimsNeoForge {
     public static synchronized void init() {
         if (initialized) return;
         initialized = true;
+
+        // Its own SERVER config file next to OPAC's openpartiesandclaims-server.toml. NeoForge loads SERVER configs at
+        // the start of ServerLifecycleHooks.handleServerAboutToStart, before it posts ServerAboutToStartEvent (from
+        // which OPAC fires its addon register event). The active container is OPAC's own, as this runs in its constructor.
+        ModLoadingContext.get().getActiveContainer().registerConfig(ModConfig.Type.SERVER,
+                TeamClaimsServerConfig.SPEC, TeamClaimsServerConfig.FILE_NAME);
 
         IEventBus bus = NeoForge.EVENT_BUS;
         bus.addListener(EventPriority.NORMAL, OPACServerAddonRegisterEvent.class,

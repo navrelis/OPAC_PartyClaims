@@ -1,11 +1,15 @@
 package xaero.pac.teamclaims.fabric;
 
+import fuzs.forgeconfigapiport.fabric.api.neoforge.v4.NeoForgeConfigRegistry;
 import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents;
+import net.neoforged.fml.config.ModConfig;
+import xaero.pac.OpenPartiesAndClaims;
 import xaero.pac.common.event.api.v3.OPACServerAddonRegister;
 import xaero.pac.teamclaims.TeamClaimsCommon;
+import xaero.pac.teamclaims.config.TeamClaimsServerConfig;
 
 /**
  * Fabric adapter for Team Claims: registers the Fabric API events and forwards them to the
@@ -24,6 +28,11 @@ public class TeamClaimsFabric {
     public static synchronized void init() {
         if (initialized) return;
         initialized = true;
+
+        // Its own SERVER config file next to OPAC's openpartiesandclaims-server.toml. Fabric loads SERVER configs at
+        // SERVER_STARTING (Forge Config API Port, before the default phase), i.e. before OPAC's addon register event.
+        NeoForgeConfigRegistry.INSTANCE.register(OpenPartiesAndClaims.MOD_ID, ModConfig.Type.SERVER,
+                TeamClaimsServerConfig.SPEC, TeamClaimsServerConfig.FILE_NAME);
 
         OPACServerAddonRegister.EVENT.register(TeamClaimsCommon::onAddonRegister);
         ServerLifecycleEvents.SERVER_STARTED.register(TeamClaimsCommon::onServerStarted);

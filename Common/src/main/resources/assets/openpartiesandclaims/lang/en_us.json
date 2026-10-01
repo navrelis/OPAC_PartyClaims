@@ -646,7 +646,7 @@
 	"gui.xaero_pac_team_claims_forceload_budget_claim" : "[Team Claims] Cannot claim: %1$s would exceed their forceload limit.",
 	"gui.xaero_pac_team_claims_forceload_budget" : "[Team Claims] Cannot enable forceload: %1$s would exceed their forceload limit.",
 	"gui.xaero_pac_team_claims_create_name_empty" : "Team name cannot be empty.",
-	"gui.xaero_pac_team_claims_create_name_too_long" : "Team name is too long (max 24 characters).",
+	"gui.xaero_pac_team_claims_create_name_too_long" : "Team name is too long (max %1$s characters).",
 	"gui.xaero_pac_team_claims_create_name_invalid" : "Team name contains characters that are not allowed in a party name (letters, digits, spaces and _ ' \" ! ? , - * ( ) : are allowed).",
 	"gui.xaero_pac_team_claims_create_name_not_configurable" : "Party names can't be set on this server, so a team name can't be used. Create the party without a name instead.",
 	"gui.xaero_pac_team_claims_create_already_in_party" : "You are already in a party! Leave your current party first.",
@@ -654,6 +654,7 @@
 	"gui.xaero_pac_team_claims_create_success" : "Party '%1$s' created successfully!",
 	"gui.xaero_pac_team_claims_create_sub_config_hint" : "A team sub-config has been created. Switch to it in the OPAC config to make team claims.",
 	"gui.xaero_pac_team_claims_create_error" : "An error occurred creating the party.",
+	"gui.xaero_pac_team_claims_disabled" : "Team Claims is disabled on this server.",
 	"gui.xaero_pac_team_claims_transfer_leaver" : "[Team Claims] Your %1$s team claim(s) were transferred to the party owner.",
 	"gui.xaero_pac_team_claims_transfer_owner" : "[Team Claims] %1$s left the party: %2$s team claim(s) were transferred to you."
 }

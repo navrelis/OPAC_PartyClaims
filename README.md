@@ -32,6 +32,18 @@ player**, which is worth knowing before you turn it on:
 
 The server logs one WARN line stating this at start-up while the option is enabled.
 
+## Server config
+
+Team Claims has its own server config, `openpartiesandclaims-teamclaims-server.toml`, next to OPAC's
+`openpartiesandclaims-server.toml`. It is generated in the `config/` folder when the server starts, on both
+Fabric and NeoForge; a copy in `<world>/serverconfig/` overrides it for that world.
+
+| Option | Default | Meaning |
+| --- | --- | --- |
+| `enabled` | `true` | When `false`, Team Claims does not start: OPAC behaves exactly like the original mod and `/teamclaims` is unavailable. Existing Team Claims data stays untouched on disk. Read once at server start, so a change needs a restart. |
+| `maxTeamNameLength` | `24` (1..100) | Maximum length of a team name given to `/teamclaims create` or to the team name argument of the party create command. Changes apply right away. |
+| `forceloadGraceMinutes` | `0` (0..1440) | How many minutes the forceloaded chunks of a team stay loaded after its last online member left. A member coming back within that time cancels the release. `0` releases them right away. Changes apply from the next logout. |
+
 ## Building
 
 ```
@@ -71,8 +83,9 @@ profile cache. Check `run-boottest/logs/latest.log` for the result.
 
 The same run also executes `TeamClaimsLogicTest`, a set of `@GameTest` methods that exercise the
 actual Team Claims game logic (team sub-config creation/admin-only editing, claim/forceload
-budget sharing, teammate unclaim/forceload, membership-poll-driven claim transfer on leave, long
-team names) against offline UUID players, independently of each other and cleaning up after
+budget sharing, teammate unclaim/forceload, event-driven claim transfer on leave (party hooks
+queue membership events that are processed at the end of the tick), long team names, the server config
+and the forceload grace period) against offline UUID players, independently of each other and cleaning up after
 themselves so reruns stay green.
 
 The same tests run on NeoForge with `gradlew.bat :NeoForge:runTeamClaimsGameTest --console=plain`

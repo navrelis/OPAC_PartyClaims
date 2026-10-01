@@ -8,3 +8,5 @@
 - Status board renamed `.fable/` -> `.knowledge/` (session convention).
 - T4 runs before T3 in parallel: T3 (NeoForge adapter) only depends on the stable TeamClaimsCommon lifecycle API, which T4 must not change; avoids idle time.
 - Worktree branch from T2 is reused for T3 and merged into fabric-port after T4 is committed — keeps main checkout stable for the running T4 agent.
+- Team Claims config is its own SERVER toml (openpartiesandclaims-teamclaims-server.toml) registered from the Team Claims adapters — no new upstream hook, no collision with OPAC's server toml.
+- T6 re-scoped: upstream OPAC already shows action-bar claim welcome messages; Team Claims extends them (team territory = one territory, per-player toggle) instead of adding a second, competing message system.

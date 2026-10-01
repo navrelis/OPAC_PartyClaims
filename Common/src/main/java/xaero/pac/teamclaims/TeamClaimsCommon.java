@@ -11,6 +11,7 @@ import net.minecraft.server.level.ServerPlayer;
 import org.slf4j.Logger;
 import xaero.pac.common.event.api.OPACServerAddonRegisterEventContext;
 import xaero.pac.common.server.claims.TeamClaimsIntegration;
+import xaero.pac.teamclaims.config.TeamClaimsServerConfig;
 import xaero.pac.teamclaims.config.TeamConfigManager;
 
 import javax.annotation.Nullable;
@@ -53,8 +54,19 @@ public final class TeamClaimsCommon {
      * Creates the managers for this server and installs the bridge handler that the Common OPAC
      * hooks call into. Must be called from OPAC's server addon register event, which fires while
      * the server is starting, before {@link #onServerStarted}.
+     * <p>
+     * Does nothing but log when {@code enabled} is false in the {@linkplain TeamClaimsServerConfig Team Claims
+     * server config}: no bridge handler and no managers, so OPAC behaves like stock and every other method here
+     * finds nothing to do ({@link #isActive()} is false). The loaders load the SERVER configs of a server before
+     * OPAC's server-about-to-start handling, which is what fires the addon register event, so the value is
+     * readable here.
      */
     public static void onAddonRegister(OPACServerAddonRegisterEventContext context) {
+        if (!TeamClaimsServerConfig.CONFIG.enabled.get()) {
+            LOGGER.info("Team Claims is disabled ('enabled' = false in {}), Open Parties and Claims runs without it",
+                    TeamClaimsServerConfig.FILE_NAME);
+            return;
+        }
         MinecraftServer server = context.getServer();
         currentServer = server;
         forceLoadHandler = new TeamForceLoadHandler(server);
@@ -112,7 +124,7 @@ public final class TeamClaimsCommon {
      * If the player disconnects before that tick, nothing happens.
      */
     public static void onPlayerLoggedIn(ServerPlayer player) {
-        if (player == null) return;
+        if (player == null || !isActive()) return;
         UUID playerId = player.getUUID();
         MinecraftServer server = player.server;
         server.tell(new TickTask(server.getTickCount() + 1, () -> {
@@ -136,12 +148,22 @@ public final class TeamClaimsCommon {
         }
     }
 
+    /**
+     * Always registers {@code /teamclaims}: the server's commands are built before the loaders load the server config,
+     * so {@code enabled} is not readable yet. The command checks {@link #isActive()} when it is used instead.
+     */
     public static void registerCommands(CommandDispatcher<CommandSourceStack> dispatcher,
             CommandBuildContext registryAccess, Commands.CommandSelection environment) {
         TeamClaimsCommands.onRegisterCommands(dispatcher, registryAccess, environment);
     }
 
     // ==================== Accessors ====================
+
+    /**
+     * Whether Team Claims is running on the current server: false before the server started, after it stopped and
+     * on a server where it is disabled by the {@code enabled} option.
+     */
+    public static boolean isActive() { return claimManager != null; }
 
     public static TeamClaimManager getClaimManager() { return claimManager; }
     public static TeamForceLoadHandler getForceLoadHandler() { return forceLoadHandler; }

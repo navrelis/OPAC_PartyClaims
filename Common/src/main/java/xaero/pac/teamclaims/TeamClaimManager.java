@@ -1,5 +1,6 @@
 package xaero.pac.teamclaims;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.mojang.logging.LogUtils;
 import net.minecraft.ChatFormatting;
 import net.minecraft.core.HolderLookup;
@@ -30,6 +31,7 @@ import xaero.pac.common.server.parties.party.api.IServerPartyAPI;
 import xaero.pac.common.server.player.config.IPlayerConfig;
 import xaero.pac.common.server.player.config.api.v2.IPlayerConfigAPI;
 import xaero.pac.common.server.player.localization.api.IAdaptiveLocalizerAPI;
+import xaero.pac.teamclaims.config.TeamClaimsServerConfig;
 import xaero.pac.teamclaims.config.TeamConfig;
 import xaero.pac.teamclaims.config.TeamConfigManager;
 
@@ -77,6 +79,13 @@ public class TeamClaimManager implements IClaimsManagerListenerAPI {
     private final Map<UUID, Integer> offThreadClaimOverhead = new ConcurrentHashMap<>();
     private final Map<UUID, Integer> offThreadForceloadOverhead = new ConcurrentHashMap<>();
     private int validationTickCounter = 0;
+    /**
+     * Forceload grace period: parties whose last online member left while {@code forceloadGraceMinutes} is above 0,
+     * to the server tick at which their forceloads are released. Due entries are looked for once a second.
+     */
+    private final Map<UUID, Integer> pendingDeactivations = new HashMap<>();
+    private int nextGraceCheckTick = 0;
+    private final Map<UUID, Integer> forceloadGraceTicksOverrides = new HashMap<>();
 
     public TeamClaimManager(MinecraftServer server, TeamForceLoadHandler forceLoadHandler) {
         this.server = server;
@@ -195,7 +204,14 @@ public class TeamClaimManager implements IClaimsManagerListenerAPI {
     }
 
     public void onPlayerLogout(ServerPlayer player) {
-        UUID playerUUID = player.getUUID();
+        onMemberLoggedOut(player.getUUID());
+    }
+
+    /**
+     * What a logout does: if the player was the last online member of their party, the team forceloads are released,
+     * after the grace period if there is one (see {@link #setTeamOnline}).
+     */
+    public void onMemberLoggedOut(UUID playerUUID) {
         IServerPartyAPI party = getPlayerParty(playerUUID);
         if (party == null) return;
         UUID partyId = party.getId();
@@ -203,13 +219,13 @@ public class TeamClaimManager implements IClaimsManagerListenerAPI {
         boolean anyOtherOnline = party.getOnlineMemberStream()
                 .anyMatch(sp -> !sp.getUUID().equals(playerUUID));
         if (!anyOtherOnline) {
-            deactivateTeamForceLoads(partyId);
+            setTeamOnline(partyId, false);
         }
     }
 
     /**
-     * Called once at the end of every server tick: the periodic safety net, the batched claim limits sync and the
-     * "keep forceloaded dimensions ticking" of team forceloads.
+     * Called once at the end of every server tick: the periodic safety net, the batched claim limits sync, the due
+     * forceload grace periods and the "keep forceloaded dimensions ticking" of team forceloads.
      */
     public void tick() {
         if (!serverReady) return;
@@ -218,6 +234,13 @@ public class TeamClaimManager implements IClaimsManagerListenerAPI {
             periodicValidation();
         }
         flushLimitSyncs();
+        if (!pendingDeactivations.isEmpty()) {
+            int tickCount = server.getTickCount();
+            if (tickCount - nextGraceCheckTick >= 0) {
+                nextGraceCheckTick = tickCount + 20;
+                releaseDueTeamForceLoads(tickCount);
+            }
+        }
         forceLoadHandler.keepLevelsTicking();
     }
 
@@ -351,7 +374,13 @@ public class TeamClaimManager implements IClaimsManagerListenerAPI {
         if (added > 0) LOGGER.info("Activated {} team force-loads for party {}", added, partyId);
     }
 
+    /** Releases the team forceloads right now, cancelling a pending grace period. */
     public void deactivateTeamForceLoads(UUID partyId) {
+        pendingDeactivations.remove(partyId);
+        releaseTeamForceLoads(partyId);
+    }
+
+    private void releaseTeamForceLoads(UUID partyId) {
         TeamData teamData = teams().get(partyId);
         forceLoadHandler.markTeamInactive(partyId);
         if (teamData == null || teamData.forceLoadedChunks.isEmpty()) return;
@@ -362,15 +391,82 @@ public class TeamClaimManager implements IClaimsManagerListenerAPI {
         if (removed > 0) LOGGER.info("Deactivated {} team force-loads for party {}", removed, partyId);
     }
 
-    /** Team forceloads are active while at least one member of the party is online. */
+    /** Team forceloads are active while at least one member of the party is online (plus the grace period). */
     private void updateForceloadActivation(IServerPartyAPI party) {
-        UUID partyId = party.getId();
+        setTeamOnline(party.getId(), party.getOnlineMemberStream().findAny().isPresent());
+    }
+
+    /**
+     * The one place that turns "is any member of this party online" into forceload activation, used by logins,
+     * logouts, membership changes and the safety net.
+     * <p>
+     * Online: cancels a pending deactivation and activates the forceloads if they are not active. Offline: an active
+     * team is deactivated right away, or, if a forceload grace period is configured, scheduled to be deactivated when
+     * it is over (an already scheduled deactivation keeps its time). The forceloads stay active until then.
+     */
+    public void setTeamOnline(UUID partyId, boolean anyOnline) {
         TeamData teamData = teams().get(partyId);
-        if (teamData == null || teamData.forceLoadedChunks.isEmpty()) return;
-        boolean anyOnline = party.getOnlineMemberStream().findAny().isPresent();
+        if (teamData == null || teamData.forceLoadedChunks.isEmpty()) {
+            pendingDeactivations.remove(partyId);
+            return;
+        }
         boolean isActive = forceLoadHandler.isTeamActive(partyId);
-        if (anyOnline && !isActive) activateTeamForceLoads(partyId);
-        else if (!anyOnline && isActive) deactivateTeamForceLoads(partyId);
+        if (anyOnline) {
+            pendingDeactivations.remove(partyId);
+            if (!isActive) activateTeamForceLoads(partyId);
+        } else if (isActive) {
+            int graceTicks = getForceloadGraceTicks(partyId);
+            if (graceTicks <= 0) {
+                deactivateTeamForceLoads(partyId);
+            } else if (pendingDeactivations.putIfAbsent(partyId, server.getTickCount() + graceTicks) == null) {
+                LOGGER.info("[TeamClaims] No member of party {} is online, its team forceloads stay active for {} more tick(s)",
+                        partyId, graceTicks);
+            }
+        } else {
+            pendingDeactivations.remove(partyId);
+        }
+    }
+
+    /** Releases the forceloads of every team whose grace period is over, unless a member is online after all. */
+    private void releaseDueTeamForceLoads(int tickCount) {
+        IPartyManagerAPI partyManager = null;
+        for (Iterator<Map.Entry<UUID, Integer>> it = pendingDeactivations.entrySet().iterator(); it.hasNext(); ) {
+            Map.Entry<UUID, Integer> entry = it.next();
+            if (tickCount - entry.getValue() < 0) continue;
+            it.remove();
+            UUID partyId = entry.getKey();
+            if (partyManager == null) partyManager = OpenPACServerAPI.get(server).getPartyManager();
+            IServerPartyAPI party = partyManager.getPartyById(partyId);
+            if (party != null && party.getOnlineMemberStream().findAny().isPresent()) continue;
+            LOGGER.info("[TeamClaims] The forceload grace period of party {} is over", partyId);
+            releaseTeamForceLoads(partyId);
+        }
+    }
+
+    /**
+     * The forceload grace period of a party in server ticks: the test override of that party if set, else
+     * {@code forceloadGraceMinutes} of the Team Claims server config (read each time, so a config reload applies to
+     * the next logout).
+     */
+    public int getForceloadGraceTicks(UUID partyId) {
+        Integer override = forceloadGraceTicksOverrides.get(partyId);
+        if (override != null) return override;
+        return TeamClaimsServerConfig.CONFIG.forceloadGraceMinutes.get() * 1200;
+    }
+
+    /**
+     * Test hook: sets the forceload grace period of one party in ticks, ignoring the config (per party, as gametests
+     * run side by side). A negative value goes back to the config.
+     */
+    @VisibleForTesting
+    public void setForceloadGraceTicksOverride(UUID partyId, int ticks) {
+        if (ticks < 0) forceloadGraceTicksOverrides.remove(partyId);
+        else forceloadGraceTicksOverrides.put(partyId, ticks);
+    }
+
+    @VisibleForTesting
+    public boolean hasPendingDeactivation(UUID partyId) {
+        return pendingDeactivations.containsKey(partyId);
     }
 
     /**
@@ -379,6 +475,7 @@ public class TeamClaimManager implements IClaimsManagerListenerAPI {
      */
     public void onPartyRemoved(UUID partyId) {
         TeamData teamData = savedData == null ? null : savedData.teams.remove(partyId);
+        pendingDeactivations.remove(partyId);
         forceLoadHandler.markTeamInactive(partyId);
         limitSyncParties.remove(partyId);
         if (teamData == null) return;

@@ -2,6 +2,7 @@ package xaero.pac.teamclaims;
 
 import xaero.pac.common.server.player.config.api.v2.IPlayerConfigAPI;
 import xaero.pac.common.server.player.config.api.v2.PlayerConfigOptions;
+import xaero.pac.teamclaims.config.TeamClaimsServerConfig;
 
 import javax.annotation.Nullable;
 import java.util.regex.Pattern;
@@ -12,9 +13,6 @@ import java.util.regex.Pattern;
  */
 public final class TeamNames {
 
-    /** Maximum length of a team name given to a create command (the key {@code ..._create_name_too_long} says 24). */
-    public static final int MAX_TEAM_NAME_LENGTH = 24;
-
     /** Minecraft formatting codes written with '§' or '&', e.g. "&a" or "§l". */
     private static final Pattern FORMATTING_CODE = Pattern.compile("[§&][0-9a-fk-orA-FK-OR]");
     private static final Pattern WHITESPACE_RUN = Pattern.compile("\\s+");
@@ -23,10 +21,15 @@ public final class TeamNames {
 
     /**
      * The outcome of {@link #validate}: either a usable {@link #name()} or the lang key of the reason it was
-     * rejected ({@link #errorKey()}), never both.
+     * rejected ({@link #errorKey()}) with the arguments of that message ({@link #errorArgs()}), never both.
      */
-    public record Result(@Nullable String name, @Nullable String errorKey) {
+    public record Result(@Nullable String name, @Nullable String errorKey, Object... errorArgs) {
         public boolean isValid() { return name != null; }
+    }
+
+    /** The configured maximum length of a team name ({@code maxTeamNameLength} of the Team Claims server config). */
+    public static int getMaxLength() {
+        return TeamClaimsServerConfig.CONFIG.maxTeamNameLength.get();
     }
 
     /**
@@ -39,7 +42,7 @@ public final class TeamNames {
     }
 
     /**
-     * Sanitises {@code rawName} and checks that the result is not blank, at most {@link #MAX_TEAM_NAME_LENGTH}
+     * Sanitises {@code rawName} and checks that the result is not blank, at most {@link #getMaxLength()}
      * characters long, and accepted by OPAC's own {@code PARTY_NAME} option validator.
      *
      * @param ownerConfig  the config the name will be set on, null to skip the {@code PARTY_NAME} validator
@@ -48,8 +51,9 @@ public final class TeamNames {
         String name = sanitize(rawName);
         if (name.isEmpty())
             return new Result(null, "gui.xaero_pac_team_claims_create_name_empty");
-        if (name.length() > MAX_TEAM_NAME_LENGTH)
-            return new Result(null, "gui.xaero_pac_team_claims_create_name_too_long");
+        int maxLength = getMaxLength();
+        if (name.length() > maxLength)
+            return new Result(null, "gui.xaero_pac_team_claims_create_name_too_long", maxLength);
         if (ownerConfig != null && !PlayerConfigOptions.PARTY_NAME.getServerSideValidator().test(ownerConfig, name))
             return new Result(null, "gui.xaero_pac_team_claims_create_name_invalid");
         return new Result(name, null);

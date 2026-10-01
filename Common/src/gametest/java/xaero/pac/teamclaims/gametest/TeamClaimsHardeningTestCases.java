@@ -25,6 +25,7 @@ import xaero.pac.teamclaims.TeamClaimManager;
 import xaero.pac.teamclaims.TeamClaimsCommands;
 import xaero.pac.teamclaims.TeamClaimsCommon;
 import xaero.pac.teamclaims.TeamForceLoadHandler;
+import xaero.pac.teamclaims.TeamNames;
 import xaero.pac.teamclaims.config.TeamConfig;
 import xaero.pac.teamclaims.config.TeamConfigManager;
 
@@ -54,7 +55,7 @@ public final class TeamClaimsHardeningTestCases {
     // ==================== Helpers ====================
 
     /** Collects every message sent to a command source. */
-    private static final class CapturingCommandSource implements CommandSource {
+    static final class CapturingCommandSource implements CommandSource {
         private final List<Component> messages = new ArrayList<>();
 
         @Override public void sendSystemMessage(Component component) { messages.add(component); }
@@ -71,14 +72,14 @@ public final class TeamClaimsHardeningTestCases {
         }
     }
 
-    private static CommandSourceStack commandSource(GameTestHelper helper, CapturingCommandSource capture) {
+    static CommandSourceStack commandSource(GameTestHelper helper, CapturingCommandSource capture) {
         return new CommandSourceStack(capture, Vec3.ZERO, Vec2.ZERO, helper.getLevel(), 4, "TeamClaimsTest",
                 Component.literal("TeamClaimsTest"), helper.getLevel().getServer(), null);
     }
 
     /** The text of a message key for a source without a player (OPAC's server-side default translation). */
-    private static String localized(MinecraftServer server, String key) {
-        return OpenPACServerAPI.get(server).getAdaptiveTextLocalizer().getFor(null, key).getString();
+    static String localized(MinecraftServer server, String key, Object... args) {
+        return OpenPACServerAPI.get(server).getAdaptiveTextLocalizer().getFor(null, key, args).getString();
     }
 
     private static void resetPartyNameQuiet(MinecraftServer server, UUID playerId) {
@@ -302,7 +303,7 @@ public final class TeamClaimsHardeningTestCases {
                     {"Bad<Name>", "gui.xaero_pac_team_claims_create_name_invalid"}
             };
             for (String[] testCase : invalid) {
-                String expected = localized(server, testCase[1]);
+                String expected = localized(server, testCase[1], TeamNames.getMaxLength());
                 CapturingCommandSource teamclaimsCapture = new CapturingCommandSource();
                 int teamclaimsResult = TeamClaimsCommands.createPartyWithTeamName(
                         commandSource(helper, teamclaimsCapture), null, ownerProfile, testCase[0], true);

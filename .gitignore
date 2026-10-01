@@ -26,3 +26,6 @@ run-data
 .gradle/
 # release jars (text files such as the CurseForge listing may be committed)
 ExportedJars/**/*.jar
+
+# local tool worktrees
+.claude/

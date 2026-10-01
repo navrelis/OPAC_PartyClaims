@@ -35,10 +35,11 @@ public class TeamClaimsCommands {
 
     public static void onRegisterCommands(CommandDispatcher<CommandSourceStack> dispatcher, CommandBuildContext registryAccess, Commands.CommandSelection environment) {
         // Same requirements as OPAC's "/<parties> create": parties enabled, the caller (or the player they
-        // impersonate) not in a party yet
+        // impersonate) not in a party yet. Registered even when Team Claims is disabled (the server config isn't loaded
+        // yet at this point), but then not usable: the requirement is checked when the command is used or listed.
         dispatcher.register(
                 Commands.literal("teamclaims")
-                        .requires(c -> ServerConfig.CONFIG.partiesEnabled.get())
+                        .requires(c -> TeamClaimsCommon.isActive() && ServerConfig.CONFIG.partiesEnabled.get())
                         .then(Commands.literal("create")
                                 .requires(new CommandRequirementProvider().getNonMemberRequirement(p -> true, false))
                                 .then(Commands.argument("name", StringArgumentType.greedyString())
@@ -49,6 +50,13 @@ public class TeamClaimsCommands {
 
     private static int executeCreate(CommandContext<CommandSourceStack> context) {
         CommandSourceStack source = context.getSource();
+        if (!TeamClaimsCommon.isActive()) {//e.g. a stale command tree after the server stopped
+            IServerData<?, ?> serverData = ServerData.from(source.getServer());
+            source.sendFailure(serverData == null ? Component.literal("Team Claims is disabled on this server.")
+                    : serverData.getAdaptiveLocalizer().getFor(source.getPlayer(), "gui.xaero_pac_team_claims_disabled")
+                            .withStyle(ChatFormatting.RED));
+            return 0;
+        }
         ServerPlayer player = source.getPlayer();
         if (player == null) {
             source.sendFailure(Component.literal("This command can only be used by a player."));
@@ -92,7 +100,7 @@ public class TeamClaimsCommands {
             IPlayerConfigAPI ownerConfig = configManager.getLoadedConfig(ownerProfile.getId());
             TeamNames.Result validation = TeamNames.validate(rawTeamName, ownerConfig);
             if (!validation.isValid()) {
-                fail(source, localizer, player, validation.errorKey());
+                fail(source, localizer, player, validation.errorKey(), validation.errorArgs());
                 return 0;
             }
             String teamName = validation.name();
@@ -140,8 +148,9 @@ public class TeamClaimsCommands {
         }
     }
 
-    private static void fail(CommandSourceStack source, AdaptiveLocalizer localizer, @Nullable ServerPlayer player, String key) {
-        source.sendFailure(localizer.getFor(player, key).withStyle(ChatFormatting.RED));
+    private static void fail(CommandSourceStack source, AdaptiveLocalizer localizer, @Nullable ServerPlayer player, String key,
+            Object... args) {
+        source.sendFailure(localizer.getFor(player, key, args).withStyle(ChatFormatting.RED));
     }
 
     private static void succeed(CommandSourceStack source, AdaptiveLocalizer localizer, @Nullable ServerPlayer player,
