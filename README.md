@@ -4,9 +4,6 @@ A fork of [Open Parties and Claims](https://github.com/thexaero/open-parties-and
 v0.31.6 by Xaero96, licensed under LGPL-3.0-only, adding a "Team Claims" layer on top
 of the original party/claims system.
 
-This fork targets **Fabric** for Minecraft 1.21.1 only (the upstream Forge/NeoForge
-modules are not part of this repository).
-
 ## Team Claims behaviour notes
 
 **Leaving a party.** When a member leaves or is kicked from a party that still exists, every
@@ -38,10 +35,12 @@ The server logs one WARN line stating this at start-up while the option is enabl
 ## Building
 
 ```
-gradlew.bat :Fabric:build
+gradlew.bat :Fabric:build :NeoForge:build
 ```
 
-The built jar is written to `Fabric/build/libs/`.
+The Fabric jar is written to `Fabric/build/libs/` and the NeoForge jar to `NeoForge/build/libs/`
+(ignore the `-sources` jars next to them). The NeoForge module is stock upstream for now: it
+has the Team Claims hooks in `Common` but not yet the Team Claims handler (Fabric only).
 
 Released builds live in `ExportedJars/<version>/`, together with the CurseForge
 listing text for that release.

@@ -26,5 +26,16 @@ jobs:
       - name: Make Gradle wrapper executable
         run: chmod +x ./gradlew
 
-      - name: Build with Gradle
-        run: ./gradlew :Fabric:build
+      - name: Build both loaders
+        run: ./gradlew :Fabric:build :NeoForge:build
+
+      # Headless boot test (Fabric API gametest server, -Dfabric-api.gametest). Vanilla's
+      # GameTestServer ends the JVM with System.exit(<failed required tests>) and Fabric API
+      # exits non-zero when the server cannot start, so Gradle fails this step on a failure.
+      - name: Fabric boot test
+        run: ./gradlew :Fabric:runBootTest --console=plain
+
+      # Do not rely on the exit code alone: require vanilla's success line in the log, so a run
+      # that ended without actually running the tests cannot pass.
+      - name: Check boot test result
+        run: grep -E "All [0-9]+ required tests passed" run-boottest/logs/latest.log
