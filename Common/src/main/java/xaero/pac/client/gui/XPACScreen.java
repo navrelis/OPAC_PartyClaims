@@ -1,6 +1,6 @@
 /*
  * Open Parties and Claims - adds chunk claims and player parties to Minecraft
- * Copyright (C) 2022-2025, Xaero <xaero1996@gmail.com> and contributors
+ * Copyright (C) 2022-2026, Xaero <xaero1996@gmail.com> and contributors
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of version 3 of the GNU Lesser General Public License
@@ -20,10 +20,15 @@ package xaero.pac.client.gui;
 
 import com.mojang.blaze3d.vertex.PoseStack;
 import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.components.Renderable;
+import net.minecraft.client.gui.components.events.GuiEventListener;
+import net.minecraft.client.gui.narration.NarratableEntry;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 import xaero.pac.client.gui.widget.dropdown.DropDownWidget;
 import xaero.pac.client.gui.widget.dropdown.IDropDownContainer;
+
+import java.util.List;
 
 public class XPACScreen extends Screen implements IDropDownContainer {
 
@@ -113,6 +118,40 @@ public class XPACScreen extends Screen implements IDropDownContainer {
 		if(menu != this.openDropdown && this.openDropdown != null)
 			this.openDropdown.setClosed(true);
 		this.openDropdown = null;
+	}
+
+	private <T extends GuiEventListener & NarratableEntry, T2 extends GuiEventListener & Renderable & NarratableEntry>
+	void replaceWidget(T current, T replacement, T2 replaceRenderable) {
+		int childIndex = children().indexOf(current);
+		if(childIndex == -1)
+			return;
+		if(current == openDropdown)
+			openDropdown = null;
+		super.removeWidget(current);
+		if(replaceRenderable != null)
+			super.addRenderableWidget(replaceRenderable);
+		else
+			super.addWidget(replacement);
+		children().remove(replacement);
+		((List<GuiEventListener>)children()).add(childIndex, replacement);
+		if(getFocused() == current)
+			setFocused(replacement);
+	}
+
+	protected <T extends GuiEventListener & NarratableEntry> void replaceWidget(T current, T replacement) {
+		replaceWidget(current, replacement, null);
+	}
+
+	protected <T extends GuiEventListener & Renderable & NarratableEntry> void replaceRenderableWidget(T current, T replacement) {
+		replaceWidget(current, replacement, replacement);
+	}
+
+	public Screen getEscape() {
+		return escape;
+	}
+
+	public Screen getParent() {
+		return parent;
 	}
 
 }

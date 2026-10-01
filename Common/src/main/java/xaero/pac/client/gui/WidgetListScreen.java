@@ -1,6 +1,6 @@
 /*
  * Open Parties and Claims - adds chunk claims and player parties to Minecraft
- * Copyright (C) 2022-2025, Xaero <xaero1996@gmail.com> and contributors
+ * Copyright (C) 2022-2026, Xaero <xaero1996@gmail.com> and contributors
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of version 3 of the GNU Lesser General Public License
@@ -32,7 +32,7 @@ import java.util.List;
 
 public abstract class WidgetListScreen extends XPACScreen {
 	
-	private final static int ROW_HEIGHT = 24;
+	public final static int ROW_HEIGHT = 24;
 	private final static int PER_PAGE = 12;
 	
 	private int page;
@@ -120,7 +120,7 @@ public abstract class WidgetListScreen extends XPACScreen {
 			if (e.isOver(mouseX, mouseY))
 				tooltipElement = e;
 		}
-		if (openDropdown == null && tooltipElement != null) {
+		if ((openDropdown == null || !openDropdown.isHovered()) && tooltipElement != null) {
 			List<FormattedCharSequence> tooltip = tooltipElement.getTooltip();
 			if (tooltip != null)
 				guiGraphics.renderTooltip(font, tooltip, mouseX, mouseY + ROW_HEIGHT + 10);

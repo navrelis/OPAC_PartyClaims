@@ -1,6 +1,6 @@
 /*
  * Open Parties and Claims - adds chunk claims and player parties to Minecraft
- * Copyright (C) 2022-2025, Xaero <xaero1996@gmail.com> and contributors
+ * Copyright (C) 2022-2026, Xaero <xaero1996@gmail.com> and contributors
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of version 3 of the GNU Lesser General Public License
@@ -54,6 +54,7 @@ public class ClaimsNonAllyModeCommand {
 					ServerPlayerData mainCapability = (ServerPlayerData) ServerPlayerDataAPI.from(player);
 					mainCapability.setClaimsNonallyMode(!mainCapability.isClaimsNonallyMode());
 					mainCapability.setClaimsAdminMode(false);
+					mainCapability.setClaimsModeratorMode(false);
 					AdaptiveLocalizer adaptiveLocalizer = serverData.getAdaptiveLocalizer();
 					player.sendSystemMessage(adaptiveLocalizer.getFor(player, mainCapability.isClaimsNonallyMode() ? "gui.xaero_claims_nonally_mode_enabled" : "gui.xaero_claims_nonally_mode_disabled"));
 					return 1;

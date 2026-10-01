@@ -1,6 +1,6 @@
 /*
  * Open Parties and Claims - adds chunk claims and player parties to Minecraft
- * Copyright (C) 2022-2025, Xaero <xaero1996@gmail.com> and contributors
+ * Copyright (C) 2022-2026, Xaero <xaero1996@gmail.com> and contributors
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of version 3 of the GNU Lesser General Public License
@@ -27,8 +27,9 @@ import java.util.function.BiPredicate;
 import java.util.function.Function;
 
 /**
- * API for a stringable player config option value storage on the client side
+ * @deprecated use {@link xaero.pac.client.player.config.api.v2.IPlayerConfigStringableOptionClientStorageAPI} instead
  */
+@Deprecated
 public interface IPlayerConfigStringableOptionClientStorageAPI<T extends Comparable<T>> extends IPlayerConfigOptionClientStorageAPI<T> {
 
 	@Override
@@ -70,16 +71,18 @@ public interface IPlayerConfigStringableOptionClientStorageAPI<T extends Compara
 	public boolean isMutable();
 
 	/**
+	 * @deprecated use {@link xaero.pac.client.player.config.api.v2.IPlayerConfigStringableOptionClientStorageAPI} instead<p>
 	 * Gets the string input parser for this option.
 	 * <p>
 	 * It is the same one that is used for parsing command inputs.
 	 *
 	 * @return the string input parser function, not null
 	 */
-	@Nonnull
+	@Deprecated
 	public Function<String, T> getCommandInputParser();
 
 	/**
+	 * @deprecated use {@link xaero.pac.client.player.config.api.v2.IPlayerConfigStringableOptionClientStorageAPI} instead<p>
 	 * Gets the string output writer for this option.
 	 * <p>
 	 * It is the same one that is used for displaying option values in command outputs.
@@ -88,15 +91,16 @@ public interface IPlayerConfigStringableOptionClientStorageAPI<T extends Compara
 	 *
 	 * @return the string output writer function, not null
 	 */
-	@Nonnull
+	@Deprecated
 	public Function<Object, Component> getCommandOutputWriterCast();
 
 	/**
+	 * @deprecated use {@link xaero.pac.client.player.config.api.v2.IPlayerConfigStringableOptionClientStorageAPI} instead<p>
 	 * Gets the string value input validator for this option.
 	 *
 	 * @return the string value input validator function, not null
 	 */
-	@Nonnull
+	@Deprecated
 	public BiPredicate<IPlayerConfigClientStorageAPI, String> getStringValidator();
 	
 }

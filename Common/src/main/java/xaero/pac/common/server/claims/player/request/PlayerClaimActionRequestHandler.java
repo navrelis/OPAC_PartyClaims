@@ -1,6 +1,6 @@
 /*
  * Open Parties and Claims - adds chunk claims and player parties to Minecraft
- * Copyright (C) 2022-2025, Xaero <xaero1996@gmail.com> and contributors
+ * Copyright (C) 2022-2026, Xaero <xaero1996@gmail.com> and contributors
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of version 3 of the GNU Lesser General Public License
@@ -18,11 +18,13 @@
 
 package xaero.pac.common.server.claims.player.request;
 
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerPlayer;
+import xaero.pac.common.claims.action.request.ClaimActionRequest;
 import xaero.pac.common.claims.player.IPlayerChunkClaim;
 import xaero.pac.common.claims.player.IPlayerClaimPosList;
 import xaero.pac.common.claims.player.IPlayerDimensionClaims;
-import xaero.pac.common.claims.player.request.ClaimActionRequest;
+import xaero.pac.common.claims.player.mode.ClaimingMode;
 import xaero.pac.common.claims.result.api.AreaClaimResult;
 import xaero.pac.common.claims.result.api.ClaimResult;
 import xaero.pac.common.parties.party.IPartyPlayerInfo;
@@ -38,10 +40,10 @@ import xaero.pac.common.server.claims.ServerClaimsManager;
 import xaero.pac.common.server.claims.player.IServerPlayerClaimInfo;
 import xaero.pac.common.server.parties.party.IServerParty;
 import xaero.pac.common.server.player.config.IPlayerConfig;
-import xaero.pac.common.server.player.config.PlayerConfig;
 import xaero.pac.common.server.player.data.ServerPlayerData;
 import xaero.pac.common.server.player.data.api.ServerPlayerDataAPI;
 
+import java.util.HashSet;
 import java.util.Set;
 import java.util.UUID;
 
@@ -62,28 +64,44 @@ public class PlayerClaimActionRequestHandler {
 		if(serverTickHandler.getTickCounter() == lastRequestTickCounter)
 			return;
 		ServerPlayerData playerData = (ServerPlayerData) ServerPlayerDataAPI.from(player);
-		boolean shouldServerClaim = request.isByServer();
-		if(playerData.isClaimsServerMode())
-			shouldServerClaim = true;
-		if(shouldServerClaim && manager.getPermissionHandler().shouldPreventServerClaim(player, playerData, player.getServer())){
-			manager.getClaimsManagerSynchronizer().syncToPlayerClaimActionResult(
-					new AreaClaimResult(Set.of(ClaimResult.Type.NO_SERVER_PERMISSION), request.getLeft(), request.getTop(), request.getRight(), request.getBottom()),
-					player);
-			return;
-		}
-		manager.getPermissionHandler().ensureAdminModeStatusPermission(player, playerData);
-		UUID playerId = shouldServerClaim ? PlayerConfig.SERVER_CLAIM_UUID : player.getUUID();
+		ClaimingMode claimType = request.getMode();
+		if(claimType == null)
+			claimType = playerData.getClaimingMode();
 		IServerData<IServerClaimsManager<IPlayerChunkClaim, IServerPlayerClaimInfo<IPlayerDimensionClaims<IPlayerClaimPosList>>, IServerDimensionClaimsManager<IServerRegionClaims>>, IServerParty<IPartyMember, IPartyPlayerInfo, IPartyAlly>>
 				serverData = ServerData.from(player.getServer());
-		IPlayerConfig playerConfig = serverData.getPlayerConfigs().getLoadedConfig(player.getUUID());
-		IPlayerConfig usedSubConfig = shouldServerClaim ? playerConfig.getUsedServerSubConfig() : playerConfig.getUsedSubConfig();
+		UUID contextPlayerId = player.getUUID();
+		serverData.getServerClaimsManager().getPermissionHandler().ensureImpersonationPermission(player, playerData);
+		boolean impersonating = claimType.canBeImpersonated() && playerData.getClaimsImpersonationInfo().getPlayerId() != null;
+		if(impersonating)
+			contextPlayerId = playerData.getClaimsImpersonationInfo().getPlayerId();
+		if(claimType.getPermissionChecker() != null){
+			ClaimResult.Type failureType = claimType.getPermissionChecker().apply(contextPlayerId, manager);
+			if(failureType != null) {
+				if(claimType == playerData.getRawClaimingMode())
+					manager.getPermissionHandler().resetClaimingMode(player);
+				manager.getClaimsManagerSynchronizer().syncToPlayerClaimActionResult(
+						new AreaClaimResult(Set.of(failureType), new HashSet<>(), request.getDimension(), request.getLeft(), request.getTop(), request.getRight(), request.getBottom()),
+						player);
+				return;
+			}
+		}
+		UUID claimPlayerId = contextPlayerId;
+		manager.getPermissionHandler().ensureAdminModeStatusPermission(player, playerData);
+		if(claimType.getForcedUUIDGetter() != null)
+			claimPlayerId = claimType.getForcedUUIDGetter().apply(claimPlayerId, manager);
+		IPlayerConfig playerConfig = serverData.getPlayerConfigManager().getLoadedConfig(contextPlayerId);
+		IPlayerConfig claimConfig = claimType.getClaimConfigGetter().apply(playerConfig);
+		IPlayerConfig usedSubConfig = impersonating ?
+				claimConfig.getEffectiveSubConfig(playerData.getClaimsImpersonationInfo().getSubIndex(claimType)) :
+				claimConfig.getEffectiveSubConfig(playerConfig.getEffective(claimType.getSubClaimOption()));
 		int subConfigIndex = usedSubConfig.getSubIndex();
+		ResourceLocation fromDimension = player.level().dimension().location();
 		int fromX = player.chunkPosition().x;
 		int fromZ = player.chunkPosition().z;
-		AreaClaimResult result = manager.tryClaimActionOverArea(player.level().dimension().location(), playerId, subConfigIndex,
-				fromX, fromZ, request.getLeft(), request.getTop(), request.getRight(), request.getBottom(),
-				request.getAction(), playerData.isClaimsAdminMode());
-		manager.getClaimsManagerSynchronizer().syncToPlayerClaimActionResult(result, player);
+		manager.tryClaimActionOverArea(request.getDimension(), claimPlayerId, subConfigIndex,
+				fromDimension, fromX, fromZ, request.getLeft(), request.getTop(), request.getRight(), request.getBottom(),
+				request.getAction(), playerData.isClaimsAdminMode(),
+				result -> manager.getClaimsManagerSynchronizer().syncToPlayerClaimActionResult(result, player));
 		lastRequestTickCounter = serverTickHandler.getTickCounter();
 	}
 

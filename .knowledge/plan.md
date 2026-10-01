@@ -1,0 +1,19 @@
+# Plan — OPAC Team Claims: multi-loader (Fabric + NeoForge 1.21.1), optimisation, features
+
+Status: open / in progress / in review / done. Size S/L, difficulty E/H.
+Gradle builds share one project dir -> tasks that build run sequentially unless isolated in a git worktree.
+
+| # | Task | Size/Diff | Model | Depends | Status | Definition of done |
+|---|------|-----------|-------|---------|--------|--------------------|
+| 0 | Analysis, questions, baseline commit | – | lead | – | done | requirements.md; baseline commit on `fabric-port` |
+| 1 | Move Team Claims to Common: logic in `Common/src/main/java/xaero/pac/teamclaims/**` (no loader imports); thin Fabric adapter (events, commands); remove dead S2C payloads + unused client cache; gametests updated | L/H | Opus | 0 | open | `:Fabric:build` + `:Fabric:runBootTest` 9/9 green; Common teamclaims has 0 `net.fabricmc`/`net.neoforged` imports; behaviour unchanged |
+| 2 | Restore upstream NeoForge module (stock, `c0d97b37`) + build plumbing (settings include, idea-ext plugin, NeoGradle 7.0.181 with Gradle 8.14.5/loom 1.11.8); housekeeping: drop `org.gradle.java.home`, `.gitignore` ExportedJars + .fable, delete `.fable/`, CI builds both loaders + runs Fabric boot test | L/E | Sonnet (worktree, parallel to 1) | 0 | open | `:NeoForge:build` and `:Fabric:build` green from clean; NeoForge jar = upstream file set; no machine paths in repo |
+| 3 | NeoForge Team Claims adapter (events, commands, addon register) + NeoForge gametest/boot run of the shared tests | M/H | Opus | 1, 2 | open | NeoForge jar boots headless with Team Claims active; shared logic tests pass on both loaders |
+| 4 | Optimisation + hardening of Common Team Claims (event-driven membership, claim->team index, batched overhead/limit sync, async/dirty-flag saves, ClaimPos hash, negative cache, `/teamclaims create` validation + `partiesEnabled` + impersonation, forceTicks for team forceloads, persist all admin settings for late joiners, ThreadLocal restore, swallowed exceptions logged) | L/H | Opus | 3 | open | each hotspot fixed or consciously kept (reason); tests green both loaders; new tests for fixed bugs |
+| 5 | Team Claims server config (FCAP spec, both loaders): enabled, max team name length, forceload grace minutes, territory-message default, convert limits; + forceload grace period | M/E | Sonnet | 4 | open | config file generated on both loaders; values used; grace period test |
+| 6 | Territory enter/leave action-bar messages (server-side, any claim owner; per-player toggle `/teamclaims territorymessages on|off`; server default from config) | M/E | Sonnet | 5 | open | messages on chunk-owner change only; toggle persisted; cheap per-tick cost; test |
+| 7 | `/teamclaims info` + `/teamclaims list` | M/E | Sonnet | 6 | open | info: team, members, per-member budget, forceloads; list: claim positions paged; localized; test |
+| 8 | Team roles: team admins set who may claim / unclaim / forceload team land (owner / admins / members) | M/H | Opus | 7 | open | enforced server-side in bridge predicates; persisted per team; command to set; tests |
+| 9 | `/teamclaims convert` personal <-> team claims in an area (radius cap from config, budget-checked) | M/H | Opus | 8 | open | uses OPAC claim path, budget respected, tests |
+| 10 | Release prep: version `1.1.0+opac.0.31.6`, README, CURSEFORGE text, export jars for both loaders to `ExportedJars/v1.1.0/` | S/E | Sonnet | 9 | open | both jars built, metadata correct, docs updated |
+| 11 | Final acceptance: full clean build both loaders, all tests, leftover scan, Graphify graph, report.md, push | – | lead | 10 | open | report.md; pushed |

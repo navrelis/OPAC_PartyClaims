@@ -1,6 +1,6 @@
 /*
  * Open Parties and Claims - adds chunk claims and player parties to Minecraft
- * Copyright (C) 2022-2025, Xaero <xaero1996@gmail.com> and contributors
+ * Copyright (C) 2022-2026, Xaero <xaero1996@gmail.com> and contributors
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of version 3 of the GNU Lesser General Public License
@@ -33,25 +33,25 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.util.FormattedCharSequence;
 import xaero.pac.OpenPartiesAndClaims;
+import xaero.pac.client.gui.group.PlayerGroupsScreen;
 import xaero.pac.client.gui.widget.value.BooleanValueHolder;
 import xaero.pac.client.player.config.IPlayerConfigClientStorageManager;
 import xaero.pac.client.player.config.PlayerConfigClientStorage;
 import xaero.pac.client.player.config.PlayerConfigStringableOptionClientStorage;
 import xaero.pac.client.player.config.sub.PlayerSubConfigClientStorage;
 import xaero.pac.common.misc.ListFactory;
-import xaero.pac.common.server.player.config.*;
-import xaero.pac.common.server.player.config.api.IPlayerConfigOptionSpecAPI;
-import xaero.pac.common.server.player.config.api.PlayerConfigOptions;
+import xaero.pac.common.server.player.config.PlayerConfig;
+import xaero.pac.common.server.player.config.PlayerConfigHexOptionSpec;
+import xaero.pac.common.server.player.config.PlayerConfigListIterationOptionSpec;
+import xaero.pac.common.server.player.config.PlayerConfigStringOptionSpec;
 import xaero.pac.common.server.player.config.api.PlayerConfigType;
-import xaero.pac.common.server.player.config.dynamic.PlayerConfigExceptionDynamicOptionsLoader;
+import xaero.pac.common.server.player.config.api.v2.IPlayerConfigOptionSpecAPI;
+import xaero.pac.common.server.player.config.api.v2.PlayerConfigOptions;
 
 import javax.annotation.Nonnull;
 import java.util.List;
 import java.util.Objects;
-import java.util.function.BiConsumer;
-import java.util.function.BiFunction;
-import java.util.function.Function;
-import java.util.function.Predicate;
+import java.util.function.*;
 import java.util.stream.Stream;
 
 public final class PlayerConfigScreen extends WidgetListScreen {
@@ -66,24 +66,67 @@ public final class PlayerConfigScreen extends WidgetListScreen {
 	public static final Component BEING_DELETED = Component.translatable("gui.xaero_pac_ui_player_config_being_deleted");
 	private final BiConsumer<PlayerConfigScreen, Button> refreshHandler;
 	private Button refreshButton;
+	private Button playerGroupsButton;
 	private final PlayerConfigClientStorage data;
 	private final PlayerConfigClientStorage optionValueSourceData;
 	private final boolean shouldWaitForData;
 	private final boolean beingDeletedStateOnOpen;
+	private final Component mainTitle;
+	private final String otherPlayerName;
 
-	private PlayerConfigScreen(List<WidgetListElement<?>> elements, List<EditBox> tickableBoxes, BiConsumer<PlayerConfigScreen, Button> refreshHandler, Screen escape, Screen parent, Component title, PlayerConfigClientStorage data, PlayerConfigClientStorage optionValueSourceData, boolean shouldWaitForData, boolean beingDeletedStateOnOpen) {
+	private PlayerConfigScreen(
+			List<WidgetListElement<?>> elements,
+			List<EditBox> tickableBoxes,
+			BiConsumer<PlayerConfigScreen, Button> refreshHandler,
+			Screen escape,
+			Screen parent,
+			Component title,
+			PlayerConfigClientStorage data,
+			PlayerConfigClientStorage optionValueSourceData,
+			boolean shouldWaitForData,
+			boolean beingDeletedStateOnOpen,
+			Component mainTitle,
+			String otherPlayerName
+	) {
 		super(elements, tickableBoxes, escape, parent, title);
 		this.refreshHandler = refreshHandler;
 		this.data = data;
 		this.optionValueSourceData = optionValueSourceData;
 		this.shouldWaitForData = shouldWaitForData;
 		this.beingDeletedStateOnOpen = beingDeletedStateOnOpen;
+		this.mainTitle = mainTitle;
+		this.otherPlayerName = otherPlayerName;
 	}
 	
 	@Override
 	protected void init() {
 		super.init();
-		addRenderableWidget(refreshButton = Button.builder(Component.translatable("gui.xaero_pac_ui_player_config_refresh"), b -> refreshHandler.accept(this, b)).bounds(5, 5, 60, 20).build());
+		int xAnchor = width / 2;
+		int topButtonsWidth = 84;
+		addRenderableWidget(refreshButton = Button.builder(
+						Component.translatable("gui.xaero_pac_ui_player_config_refresh"),
+						b -> refreshHandler.accept(this, b)
+				).bounds(xAnchor - 205, 5, topButtonsWidth, 20).build()
+		);
+		if(data.isSyncInProgress())
+			return;
+		addRenderableWidget(playerGroupsButton = Button.builder(
+						Component.translatable("gui.xaero_pac_ui_player_config_player_groups"),
+						b -> openGroupsScreen()
+				).bounds(xAnchor + 205 - topButtonsWidth, 5, topButtonsWidth, 20).build()
+		);
+	}
+
+	public void openGroupsScreen(){
+		minecraft.setScreen(
+				PlayerGroupsScreen.Builder
+						.begin()
+						.setConfigData(data)
+						.setEscape(escape)
+						.setParent(this)
+						.setConfigTitle(mainTitle)
+						.build()
+		);
 	}
 
 	@Override
@@ -96,14 +139,14 @@ public final class PlayerConfigScreen extends WidgetListScreen {
 		super.renderPreDropdown(guiGraphics, mouseX, mouseY, partial);
 		if(shouldWaitForData){
 			if(!data.isSyncInProgress())
-				refreshButton.onPress();
+				refresh();
 			else
-				guiGraphics.drawCenteredString(font, SYNCING_IN_PROGRESS, width / 2, height / 6 + 64, -1);
+				guiGraphics.drawCenteredString(font, SYNCING_IN_PROGRESS, width / 2, height / 7 + 64, -1);
 		}
 		if(beingDeletedStateOnOpen != optionValueSourceData.isBeingDeleted())
-			refreshButton.onPress();
+			refresh();
 		else if(optionValueSourceData.isBeingDeleted())
-			guiGraphics.drawCenteredString(font, BEING_DELETED, width / 2, height / 6 + 64, -1);
+			guiGraphics.drawCenteredString(font, BEING_DELETED, width / 2, height / 7 + 124, -1);
 	}
 
 	public static MutableComponent getUICommentForOption(IPlayerConfigOptionSpecAPI<?> option){
@@ -113,6 +156,14 @@ public final class PlayerConfigScreen extends WidgetListScreen {
 		if(option.getTooltipPrefix() != null)
 			commentTranslated = option.getTooltipPrefix() + "\n" + commentTranslated;
 		return Component.literal(commentTranslated);
+	}
+
+	public String getOtherPlayerName() {
+		return otherPlayerName;
+	}
+
+	public void refresh(){
+		refreshButton.onPress();
 	}
 
 	public final static class Builder {
@@ -182,18 +233,25 @@ public final class PlayerConfigScreen extends WidgetListScreen {
 			return this;
 		}
 
-		private <T extends Comparable<T>> T getOptionValue(PlayerConfigStringableOptionClientStorage<T> option){
+		private <T> T getOptionValue(PlayerConfigStringableOptionClientStorage<T> option){
+			return getOptionValue(data, defaultPlayerConfigData, option);
+		}
+
+		private static <T> T getOptionValue(
+				PlayerConfigClientStorage data,
+				PlayerConfigClientStorage defaultPlayerConfigData,
+				PlayerConfigStringableOptionClientStorage<T> option){
 			T value;
-			if(option.isDefaulted() && data.getType() == PlayerConfigType.PLAYER)
-				value = defaultPlayerConfigData.getOptionStorage(option.getOption()).getValue();
+			if(option.isDefaulted())
+				value = defaultPlayerConfigData.getOption(option.getOption()).getValue();
 			else
 				value = option.getValue();
 			return value;
 		}
 
-		private <HT, T extends Comparable<T>> CycleButton.OnValueChange<HT> getRegularValueChangeListener(SimpleValueWidgetListElement.Final<T> el, PlayerConfigStringableOptionClientStorage<T> option, Function<HT, T> holderToValue, PlayerConfigClientStorage data) {
+		private <HT, T> CycleButton.OnValueChange<HT> getRegularValueChangeListener(SimpleValueWidgetListElement.Final<T> el, PlayerConfigStringableOptionClientStorage<T> option, Function<HT, T> holderToValue, PlayerConfigClientStorage data) {
 			return (b, vh) -> {
-				if(!option.isMutable())
+				if(!el.mutable)
 					return;
 				//on value change
 				T v = holderToValue.apply(vh);
@@ -205,7 +263,8 @@ public final class PlayerConfigScreen extends WidgetListScreen {
 			};
 		}
 
-		private <HT, T extends Comparable<T>> BiFunction<SimpleValueWidgetListElement.Final<T>, Vec3i, AbstractWidget> getIterationWidgetSupplierForValues(List<HT> values, PlayerConfigStringableOptionClientStorage<T> option, int elementWidth, int elementHeight, Component optionTitle, Function<T, HT> valueToHolder, Function<HT, T> holderToValue, PlayerConfigClientStorage data){
+		private <HT, T> BiFunction<SimpleValueWidgetListElement.Final<T>, Vec3i, AbstractWidget> getIterationWidgetSupplierForValues(Supplier<List<HT>> valuesSupplier, PlayerConfigStringableOptionClientStorage<T> option, int elementWidth, int elementHeight, Component optionTitle, Function<T, HT> valueToHolder, Function<HT, T> holderToValue, PlayerConfigClientStorage data){
+			final PlayerConfigClientStorage finalDefaultPlayerConfigData = defaultPlayerConfigData;
 			return (el, xy) -> CycleButton.<HT>builder(v -> {
 						Component defaultDisplay = option.getOption().getValueDisplayName(holderToValue.apply(v));
 						if(option.getType() == Integer.class){
@@ -216,54 +275,45 @@ public final class PlayerConfigScreen extends WidgetListScreen {
 						}
 						return defaultDisplay;
 					})
-					.withValues(values)
-					.withInitialValue(valueToHolder.apply(getOptionValue(option)))
+					.withValues(valuesSupplier.get())
+					.withInitialValue(valueToHolder.apply(getOptionValue(data, finalDefaultPlayerConfigData, option)))
 					.create(xy.getX(), xy.getY(), elementWidth, elementHeight, optionTitle, getRegularValueChangeListener(el, option, holderToValue, data));
 		}
 
-		private <T extends Comparable<T>> BiFunction<SimpleValueWidgetListElement.Final<T>, Vec3i, AbstractWidget> getIterationWidgetSupplier(PlayerConfigStringableOptionClientStorage<T> option, int elementWidth, int elementHeight, Component optionTitle, T currentValue, PlayerConfigClientStorage data){
+		private <T> BiFunction<SimpleValueWidgetListElement.Final<T>, Vec3i, AbstractWidget> getIterationWidgetSupplier(PlayerConfigStringableOptionClientStorage<T> option, int elementWidth, int elementHeight, Component optionTitle, T currentValue, PlayerConfigClientStorage data){
 			PlayerConfigClientStorage valueSourceConfig;
 			if(option.isDefaulted() && data.getType() == PlayerConfigType.PLAYER)
 				valueSourceConfig = defaultPlayerConfigData;
 			else
 				valueSourceConfig = data;
-			List<T> values;
-			if(option.getOption() instanceof PlayerConfigListIterationOptionSpec<T> listIterationOptionSpec) {
-				values = listIterationOptionSpec.getClientSideListGetter().apply(valueSourceConfig);
-				if(values == null)
-					values = Lists.newArrayList(currentValue);
-				else if(data.getType() != PlayerConfigType.PLAYER && data.getType() != PlayerConfigType.DEFAULT_PLAYER){
-					boolean staticProtectionLevelOption = !option.isDynamic() && option.getOption() instanceof PlayerConfigStaticListIterationOptionSpec iterationOptionSpec
-							&& iterationOptionSpec.getList() == PlayerConfig.PROTECTION_LEVELS;
-					if(staticProtectionLevelOption || option.isDynamic()){
-						boolean enablesProtection = (staticProtectionLevelOption || option.getId().contains("." + PlayerConfigExceptionDynamicOptionsLoader.BARRIER + "."))
-								&& option.getOption() != PlayerConfigOptions.PROTECT_CLAIMED_CHUNKS_PLAYER_DEATH_LOOT;
-						values = Lists.newArrayList(
-								values.get(0),
-								values.get(enablesProtection ? 1 : values.size() - 1)
-						);
-					}
-				}
-				else
-					values = Lists.newArrayList(values);
-			} else
-				values = Lists.newArrayList(currentValue);
 			@SuppressWarnings("unchecked")
 			T nullPlaceholder = (T) NULL_PLACEHOLDER;
-			if(data instanceof PlayerSubConfigClientStorage) {
-				values.add(0, nullPlaceholder);
-			}
-			return getIterationWidgetSupplierForValues(values, option, elementWidth, elementHeight, optionTitle, v -> v == null ? nullPlaceholder : v, h -> h == NULL_PLACEHOLDER ? null : h, data);
+			Supplier<List<T>> valuesSupplier = () -> {
+				List<T> values;
+				if (option.getOption() instanceof PlayerConfigListIterationOptionSpec<T> listIterationOptionSpec) {
+					values = listIterationOptionSpec.getClientSideListGetter().apply(valueSourceConfig);
+					if (values == null)
+						values = Lists.newArrayList(currentValue);
+					else
+						values = Lists.newArrayList(values);
+				} else
+					values = Lists.newArrayList(currentValue);
+				if (data instanceof PlayerSubConfigClientStorage) {
+					values.add(0, nullPlaceholder);
+				}
+				return values;
+			};
+			return getIterationWidgetSupplierForValues(valuesSupplier, option, elementWidth, elementHeight, optionTitle, v -> v == null ? nullPlaceholder : v, h -> h == NULL_PLACEHOLDER ? null : h, data);
 		}
 
 		private BiFunction<SimpleValueWidgetListElement.Final<Boolean>, Vec3i, AbstractWidget> getOnOffWidgetSupplier(PlayerConfigStringableOptionClientStorage<Boolean> option, int elementWidth, int elementHeight, Component optionTitle, BooleanValueHolder currentValue, PlayerConfigClientStorage data){
 			List<BooleanValueHolder> values = Lists.newArrayList(BooleanValueHolder.FALSE, BooleanValueHolder.TRUE);
 			if(data instanceof PlayerSubConfigClientStorage)
 				values.add(0, BooleanValueHolder.NULL);
-			return getIterationWidgetSupplierForValues(values, option, elementWidth, elementHeight, optionTitle, BooleanValueHolder::of, BooleanValueHolder::getValue, data);
+			return getIterationWidgetSupplierForValues(() -> values, option, elementWidth, elementHeight, optionTitle, BooleanValueHolder::of, BooleanValueHolder::getValue, data);
 		}
 
-		private <T extends Comparable<T>> SimpleValueWidgetListElement<T, ?> createIterationWidgetListElement(
+		private <T> SimpleValueWidgetListElement<T, ?> createIterationWidgetListElement(
 				PlayerConfigStringableOptionClientStorage<T> option, int elementWidth, int elementHeight,
 				Component optionTitle, List<FormattedCharSequence> tooltip, PlayerConfigClientStorage data){
 			T value = getOptionValue(option);
@@ -273,7 +323,7 @@ public final class PlayerConfigScreen extends WidgetListScreen {
 					.setH(elementHeight)
 					.setWidgetSupplier(widgetSupplier)
 					.setTooltip(tooltip)
-					.setMutable(option.isMutable())
+					.setMutable(isMutable(data, option))
 					.setStartValue(value)
 					.build();
 		}
@@ -288,7 +338,7 @@ public final class PlayerConfigScreen extends WidgetListScreen {
 					.setH(elementHeight)
 					.setWidgetSupplier(widgetSupplier)
 					.setTooltip(tooltip)
-					.setMutable(option.isMutable())
+					.setMutable(isMutable(data, option))
 					.setStartValue(value)
 					.build();
 		}
@@ -321,10 +371,13 @@ public final class PlayerConfigScreen extends WidgetListScreen {
 			PlayerConfigStringableOptionClientStorage<String> usedSubConfigOptionStorage;
 			if(data.getType() == PlayerConfigType.SERVER){
 				usedSubConfigSyncDest = mainPlayerConfigData;
-				usedSubConfigOptionStorage = mainPlayerConfigData.getOptionStorage(PlayerConfigOptions.USED_SERVER_SUBCLAIM);
+				usedSubConfigOptionStorage = mainPlayerConfigData.getOption(PlayerConfigOptions.USED_SERVER_SUBCLAIM);
+			} else if(data.getType() == PlayerConfigType.PARTY_CLAIMS){
+				usedSubConfigSyncDest = mainPlayerConfigData;
+				usedSubConfigOptionStorage = mainPlayerConfigData.getOption(PlayerConfigOptions.USED_PARTY_SUBCLAIM);
 			} else {
 				usedSubConfigSyncDest = data;
-				usedSubConfigOptionStorage = data.getOptionStorage(PlayerConfigOptions.USED_SUBCLAIM);
+				usedSubConfigOptionStorage = data.getOption(PlayerConfigOptions.USED_SUBCLAIM);
 			}
 
 			String selected = data.getSelectedSubConfig();
@@ -342,24 +395,26 @@ public final class PlayerConfigScreen extends WidgetListScreen {
 					data.getOrCreateSubConfig(data.getSelectedSubConfig()) : data;
 
 			elements.add(createSubConfigWidgetListElement(elementWidth, elementHeight, subConfigs, indexOfSelectedSub));
-			boolean isCurrentlyUsed = Objects.equals(usedSubConfigOptionStorage.getValue(), data.getSelectedSubConfig());
-			boolean canCreateSubs = data.getType() == PlayerConfigType.PLAYER || minecraft.player.hasPermissions(2);
+			boolean canCreateSubs = data.getPermissions().canEdit();
 
-			WidgetListElement<?> useSubConfigButtonWidget = SimpleWidgetListElement.Builder.begin()
-					.setW(elementWidth)
-					.setH(elementHeight)
-					.setMutable(!isCurrentlyUsed && !subData.isBeingDeleted())
-					.setTooltip(minecraft.font.split(Component.translatable(isCurrentlyUsed? "gui.xaero_pac_ui_sub_config_use_button_used_tooltip" : "gui.xaero_pac_ui_sub_config_use_button_tooltip"), 200))
-					.setWidgetSupplier((el, xy) -> Button.builder(isCurrentlyUsed ? Component.translatable("gui.xaero_pac_ui_sub_config_use_button_used") : Component.translatable("gui.xaero_pac_ui_sub_config_use_button", data.getSelectedSubConfig()),
-							b -> {
-								usedSubConfigOptionStorage.setValue(data.getSelectedSubConfig());
-								OpenPartiesAndClaims.INSTANCE.getClientDataInternal().getPlayerConfigClientSynchronizer().syncToServer(usedSubConfigSyncDest, usedSubConfigOptionStorage);
-								minecraft.setScreen(build());
-							}).bounds(xy.getX(), xy.getY(), elementWidth, elementHeight).build()).build();
-			elements.add(useSubConfigButtonWidget);
+			if(!data.getType().hasDimensionSubConfigs()){
+				boolean isCurrentlyUsed = Objects.equals(usedSubConfigOptionStorage.getValue(), data.getSelectedSubConfig());
+				WidgetListElement<?> useSubConfigButtonWidget = SimpleWidgetListElement.Builder.begin()
+						.setW(elementWidth)
+						.setH(elementHeight)
+						.setMutable(!isCurrentlyUsed && !subData.isBeingDeleted())
+						.setTooltip(minecraft.font.split(Component.translatable(isCurrentlyUsed? "gui.xaero_pac_ui_sub_config_use_button_used_tooltip" : "gui.xaero_pac_ui_sub_config_use_button_tooltip"), 200))
+						.setWidgetSupplier((el, xy) -> Button.builder(isCurrentlyUsed ? Component.translatable("gui.xaero_pac_ui_sub_config_use_button_used") : Component.translatable("gui.xaero_pac_ui_sub_config_use_button", data.getSelectedSubConfig()),
+								b -> {
+									usedSubConfigOptionStorage.setValue(data.getSelectedSubConfig());
+									OpenPartiesAndClaims.INSTANCE.getClientDataInternal().getPlayerConfigClientSynchronizer().syncToServer(usedSubConfigSyncDest, usedSubConfigOptionStorage);
+									minecraft.setScreen(build());
+								}).bounds(xy.getX(), xy.getY(), elementWidth, elementHeight).build()).build();
+				elements.add(useSubConfigButtonWidget);
+			}
 
-			// [Team Claims] Prevent deletion of team sub-configs from the UI
-			boolean isTeamSubConfig = data.getSelectedSubConfig() != null && data.getSelectedSubConfig().startsWith("team_");
+			// [Team Claims] a team sub-config is managed by the party, it can't be deleted manually
+			boolean isTeamSubConfig = xaero.pac.common.server.claims.TeamClaimsIntegration.isTeamSubId(data.getSelectedSubConfig());
 			WidgetListElement<?> deleteSubConfigButtonWidget = SimpleWidgetListElement.Builder.begin()
 					.setW(elementWidth)
 					.setH(elementHeight)
@@ -378,31 +433,81 @@ public final class PlayerConfigScreen extends WidgetListScreen {
 							}).bounds(xy.getX(), xy.getY(), elementWidth, elementHeight).build()).build();
 			elements.add(deleteSubConfigButtonWidget);
 
+			Component subIdRulesComponent = data.getType().hasDimensionSubConfigs() ?
+					Component.translatable("gui.xaero_pac_config_create_sub_id_dimension_rules") :
+					Component.translatable("gui.xaero_pac_config_create_sub_id_rules", PlayerConfig.MAX_SUB_ID_LENGTH);
+			int maxSubIdLength = data.getType().hasDimensionSubConfigs() ? 500 : PlayerConfig.MAX_SUB_ID_LENGTH;
 			WidgetListElement<?> createSubConfigWidget = TextWidgetListElement.Builder.begin()
 					.setW(elementWidth)
 					.setH(elementHeight)
 					.setTitle(Component.translatable("gui.xaero_pac_ui_sub_config_create_widget"))
-					.setTooltip(minecraft.font.split(Component.translatable("gui.xaero_pac_ui_sub_config_create_widget_tooltip", Component.translatable("gui.xaero_pac_config_create_sub_id_rules", PlayerConfig.MAX_SUB_ID_LENGTH)), 200))
+					.setTooltip(minecraft.font.split(Component.translatable("gui.xaero_pac_ui_sub_config_create_widget_tooltip", subIdRulesComponent), 200))
 					.setMutable(canCreateSubs && data.getSubCount() < data.getSubConfigLimit())
 					.setStartValue("")
 					.setFilter(Objects::nonNull)
-					.setValidator(s -> PlayerConfig.isValidSubId(s) && !usedSubConfigOptionStorage.getValidator().test(data, s))
+					.setValidator(s ->
+							data.getType().hasDimensionSubConfigs() ? PlayerConfig.isValidDimensionSubId(s) :
+									PlayerConfig.isValidSubId(s) && !usedSubConfigOptionStorage.getValidator().test(data, s)
+					)
 					.setResponder((el, s) -> {
 						data.setSyncInProgress(true);
 						data.setSelectedSubConfig(s);
 						OpenPartiesAndClaims.INSTANCE.getClientDataInternal().getPlayerConfigClientSynchronizer().requestCreateSubConfig(data, s);
 						minecraft.setScreen(build());
 					})
-					.setMaxLength(PlayerConfig.MAX_SUB_ID_LENGTH)
-					.setBoxWidth(75)
+					.setMaxLength(maxSubIdLength)
+					.setBoxWidth(112)
 					.build();
 			elements.add(createSubConfigWidget);
 		}
 
+		private boolean isMutable(PlayerConfigClientStorage data, PlayerConfigStringableOptionClientStorage<?> option){
+			// [Team Claims] team claims always grant the whole party full access, so the exception
+			// group is locked on a team sub-config (the server rejects changing it as well)
+			if(option.getOption() == PlayerConfigOptions.FULL_ACCESS
+					&& xaero.pac.common.server.claims.TeamClaimsIntegration.isTeamSubId(data.getSubId()))
+				return false;
+			// [Team Claims] the server only lets the party owner/admins edit a team sub-config
+			// (PlayerConfig.tryToSet), so a non-admin viewing their own team sub-config gets a
+			// read-only screen here too instead of edits that the server will just reject
+			if(isOwnTeamSubConfig(data) && !localPlayerIsPartyOwnerOrAdmin())
+				return false;
+			return data.getPermissions().canEdit() &&
+					(option.isPlayerMutable() || manager.isAdmin() && option.isAdminMutable());
+		}
+
+		// [Team Claims] true only for the local player's own team_* sub-config: not another
+		// player's config opened by an OP, and not a server/default/expired/wilderness/party-claims
+		// config, all of which have a null sub ID or a non-PLAYER type or a non-null owner
+		private boolean isOwnTeamSubConfig(PlayerConfigClientStorage data){
+			return xaero.pac.common.server.claims.TeamClaimsIntegration.isTeamSubId(data.getSubId())
+					&& data.getMain().getType() == PlayerConfigType.PLAYER
+					&& data.getMain().getOwner() == null;
+		}
+
+		// [Team Claims] falls through (true) when the local player's party/member info isn't
+		// available yet, so the stock mutability logic above decides instead of locking the widgets
+		private boolean localPlayerIsPartyOwnerOrAdmin(){
+			var localPlayer = Minecraft.getInstance().player;
+			if(localPlayer == null)
+				return true;
+			var party = OpenPartiesAndClaims.INSTANCE.getClientDataInternal().getClientPartyStorage().getParty();
+			if(party == null)
+				return true;
+			var member = party.getMemberInfo(localPlayer.getUUID());
+			if(member == null)
+				return true;
+			return member.isOwner() || member.getRank() == xaero.pac.common.parties.party.member.PartyMemberRank.ADMIN;
+		}
+
 		public PlayerConfigScreen build() {
-			if(manager == null || data == null
-					|| data.getType() == PlayerConfigType.PLAYER && defaultPlayerConfigData == null
-					|| data.getType() == PlayerConfigType.SERVER && mainPlayerConfigData == null)
+			if(manager == null || data == null)
+				throw new IllegalStateException();
+			if((data.getType() == PlayerConfigType.PLAYER || data.getType() == PlayerConfigType.PARTY_CLAIMS)
+					&& defaultPlayerConfigData == null)
+				throw new IllegalStateException();
+			if((data.getType() == PlayerConfigType.SERVER || data.getType() == PlayerConfigType.PARTY_CLAIMS)
+					&& mainPlayerConfigData == null)
 				throw new IllegalStateException();
 			boolean anotherPlayer = data.getType() == PlayerConfigType.PLAYER && data.getOwner() != null;
 			if(anotherPlayer && otherPlayerName == null)
@@ -416,31 +521,49 @@ public final class PlayerConfigScreen extends WidgetListScreen {
 			else
 				refreshHandler = (s,b) -> s.minecraft.setScreen(build());
 
-			Component title = this.title;
+			Component mainTitle = this.title;
+			Component title = null;
+			if(mainTitle == null) {
+				if(data.getType() == PlayerConfigType.PLAYER)
+					mainTitle = Component.translatable("gui.xaero_pac_ui_my_player_config");
+				else if(data.getType() == PlayerConfigType.SERVER)
+					mainTitle = Component.translatable("gui.xaero_pac_ui_server_claims_config");
+				else if(data.getType() == PlayerConfigType.PARTY_CLAIMS)
+					mainTitle = Component.translatable("gui.xaero_pac_ui_party_claims_config");
+				else
+					mainTitle = Component.translatable("gui.xaero_pac_ui_player_config");
+			}
 			boolean syncInProgress = data.isSyncInProgress();
-			if(!syncInProgress && (data.getType() == PlayerConfigType.PLAYER || data.getType() == PlayerConfigType.SERVER)) {
+			boolean hasSubConfigs = data.getType().supportsSubConfigs();
+			if(!syncInProgress && hasSubConfigs) {
 				addSubConfigControls(elements, elementWidth, elementHeight);
-				if(title == null){
-					if(data.getType() == PlayerConfigType.PLAYER)
-						title = Component.translatable("gui.xaero_pac_ui_my_player_config_sub", data.getSelectedSubConfig());
-					else
-						title = Component.translatable("gui.xaero_pac_ui_server_claims_config_sub", data.getSelectedSubConfig());
-				}
+				title = Component.translatable(
+						"gui.xaero_pac_ui_player_config_sub",
+						mainTitle,
+						data.getSelectedSubConfig()
+				);
 			}
 			if(title == null)
-				title = Component.translatable("gui.xaero_pac_ui_player_config");
+				title = mainTitle;
+
 			boolean subConfigSelected = data.isSubConfigSelected();
 			PlayerConfigClientStorage optionValueSourceData = subConfigSelected ? data.getOrCreateSubConfig(data.getSelectedSubConfig()) : data;
-			Stream<PlayerConfigStringableOptionClientStorage<?>> optionStream = syncInProgress || optionValueSourceData.isBeingDeleted() ?
+			boolean beingDeleted = optionValueSourceData.isBeingDeleted();
+			Stream<PlayerConfigStringableOptionClientStorage<?>> optionStream = syncInProgress || beingDeleted ?
 					Stream.empty() :
 					optionValueSourceData.typedOptionStream();
 			optionStream.forEach(optionStorage -> {
-				if(!optionStorage.getOption().getConfigTypeFilter().test(optionValueSourceData.getType())
+				if(!optionStorage.isSyncable()
+						|| !optionStorage.isDirectlyConfigurable()
+						|| !optionStorage.getOption().getConfigTypeFilter().test(optionValueSourceData.getType())
 						|| optionStorage.getOption() == PlayerConfigOptions.USED_SUBCLAIM
-						|| optionStorage.getOption() == PlayerConfigOptions.USED_SERVER_SUBCLAIM)
+						|| optionStorage.getOption() == PlayerConfigOptions.USED_SERVER_SUBCLAIM
+						|| optionStorage.getOption() == PlayerConfigOptions.USED_PARTY_SUBCLAIM
+				)
 					return;
-				if(optionValueSourceData instanceof PlayerSubConfigClientStorage && !manager.getOverridableOptions().contains(optionStorage.getOption()))
+				if(optionValueSourceData instanceof PlayerSubConfigClientStorage && !optionStorage.getOption().isOverridable())
 					return;
+				final boolean mutable = isMutable(optionValueSourceData, optionStorage);
 				Class<?> type = optionStorage.getType();
 				Component optionTitle = Component.translatable(optionStorage.getTranslation(), optionStorage.getTranslationArgs());
 				List<FormattedCharSequence> tooltip = Minecraft.getInstance().font.split(getUICommentForOption(optionStorage.getOption()), 200);
@@ -468,12 +591,12 @@ public final class PlayerConfigScreen extends WidgetListScreen {
 							.setH(elementHeight)
 							.setTitle(optionTitle)
 							.setTooltip(tooltip)
-							.setMutable(optionStorage.isMutable())
-							.setStartValue(value == null ? "" : optionStorage.getCommandOutputWriterCast().apply(value).getString())
+							.setMutable(mutable)
+							.setStartValue(value == null ? "" : optionStorage.getStringWriterCast().apply(value))
 							.setFilter(filter)
 							.setValidator(s -> subConfigSelected && s.isEmpty() || optionStorage.getStringValidator().test(optionValueSourceData, s))
 							.setResponder((el, s) -> {
-								if(!optionStorage.isMutable())
+								if(!mutable)
 									return;
 								//on value change
 								Object newValue;
@@ -492,7 +615,7 @@ public final class PlayerConfigScreen extends WidgetListScreen {
 				}
 			});
 			
-			return new PlayerConfigScreen(elements, listFactory.get(), refreshHandler, escape, parent, title, data, optionValueSourceData, syncInProgress, optionValueSourceData.isBeingDeleted());
+			return new PlayerConfigScreen(elements, listFactory.get(), refreshHandler, escape, parent, title, data, optionValueSourceData, syncInProgress, optionValueSourceData.isBeingDeleted(), mainTitle, otherPlayerName);
 		}
 
 		public static Builder begin(ListFactory listFactory) {

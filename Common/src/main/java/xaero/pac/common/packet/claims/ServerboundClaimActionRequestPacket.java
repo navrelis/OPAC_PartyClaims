@@ -1,6 +1,6 @@
 /*
  * Open Parties and Claims - adds chunk claims and player parties to Minecraft
- * Copyright (C) 2022-2025, Xaero <xaero1996@gmail.com> and contributors
+ * Copyright (C) 2022-2026, Xaero <xaero1996@gmail.com> and contributors
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of version 3 of the GNU Lesser General Public License
@@ -20,10 +20,14 @@ package xaero.pac.common.packet.claims;
 
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.NbtAccounter;
+import net.minecraft.nbt.Tag;
 import net.minecraft.network.FriendlyByteBuf;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerPlayer;
-import xaero.pac.common.claims.ClaimsManager;
-import xaero.pac.common.claims.player.request.ClaimActionRequest;
+import xaero.pac.common.claims.action.api.ClaimingAction;
+import xaero.pac.common.claims.player.mode.ClaimingMode;
+import xaero.pac.common.claims.player.mode.api.ClaimingModes;
+import xaero.pac.common.claims.action.request.ClaimActionRequest;
 import xaero.pac.common.server.player.data.ServerPlayerData;
 import xaero.pac.common.server.player.data.api.ServerPlayerDataAPI;
 
@@ -44,26 +48,29 @@ public class ServerboundClaimActionRequestPacket {
 		@Override
 		public ServerboundClaimActionRequestPacket apply(FriendlyByteBuf input) {
 			try {
-				if(input.readableBytes() > 1024)
+				if(input.readableBytes() > 2048)
 					return null;
 				CompoundTag tag = (CompoundTag) input.readNbt(NbtAccounter.unlimitedHeap());
 				if(tag == null)
 					return null;
 				byte actionByte = tag.getByte("a");
-				ClaimsManager.Action action;
+				ClaimingAction action;
 				try {
-					action = ClaimsManager.Action.values()[actionByte];
+					action = ClaimingAction.values()[actionByte];
 				} catch(ArrayIndexOutOfBoundsException aioobe) {
 					return null;
 				}
+				ResourceLocation dimension = ResourceLocation.parse(tag.getString("d"));
 				int left = tag.getInt("l");
 				int top = tag.getInt("t");
 				int right = tag.getInt("r");
 				int bottom = tag.getInt("b");
 				if(left > right || top > bottom)
 					return null;
-				boolean byServer = tag.getBoolean("s");
-				return new ServerboundClaimActionRequestPacket(new ClaimActionRequest(action, left, top, right, bottom, byServer));
+				ClaimingMode claimingMode = null;
+				if(tag.contains("m", Tag.TAG_STRING))
+					claimingMode = (ClaimingMode) ClaimingModes.get(tag.getString("m"));
+				return new ServerboundClaimActionRequestPacket(new ClaimActionRequest(action, dimension, left, top, right, bottom, claimingMode));
 			} catch(Throwable t) {
 				return null;
 			}
@@ -73,11 +80,13 @@ public class ServerboundClaimActionRequestPacket {
 		public void accept(ServerboundClaimActionRequestPacket t, FriendlyByteBuf u) {
 			CompoundTag tag = new CompoundTag();
 			tag.putByte("a", (byte) t.request.getAction().ordinal());
+			tag.putString("d", t.request.getDimension().toString());
 			tag.putInt("l", t.request.getLeft());
 			tag.putInt("t", t.request.getTop());
 			tag.putInt("r", t.request.getRight());
 			tag.putInt("b", t.request.getBottom());
-			tag.putBoolean("s", t.request.isByServer());
+			if(t.request.getMode() != null)
+				tag.putString("m", t.request.getMode().getId());
 			u.writeNbt(tag);
 		}
 		
@@ -87,6 +96,8 @@ public class ServerboundClaimActionRequestPacket {
 		
 		@Override
 		public void accept(ServerboundClaimActionRequestPacket t, ServerPlayer serverPlayer) {
+			if(t == null)
+				return;
 			ServerPlayerData playerData = (ServerPlayerData) ServerPlayerDataAPI.from(serverPlayer);
 			playerData.getClaimActionRequestHandler().onReceive(serverPlayer, t.request);
 		}

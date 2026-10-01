@@ -1,6 +1,6 @@
 /*
  * Open Parties and Claims - adds chunk claims and player parties to Minecraft
- * Copyright (C) 2022-2025, Xaero <xaero1996@gmail.com> and contributors
+ * Copyright (C) 2022-2026, Xaero <xaero1996@gmail.com> and contributors
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of version 3 of the GNU Lesser General Public License
@@ -24,9 +24,11 @@ import xaero.pac.common.server.IServerData;
 import xaero.pac.common.server.claims.ServerDimensionClaimsManager;
 import xaero.pac.common.server.claims.ServerRegionClaims;
 import xaero.pac.common.server.claims.sync.ClaimsManagerSynchronizer;
+import xaero.pac.common.server.config.ServerConfig;
 import xaero.pac.common.server.player.config.PlayerConfig;
 
 import java.util.Iterator;
+import java.util.UUID;
 
 public class ClaimsManagerPlayerDimensionRegionSync {
 
@@ -46,9 +48,16 @@ public class ClaimsManagerPlayerDimensionRegionSync {
 	public int handle(IServerData<?,?> serverData, ServerPlayer player, ClaimsManagerSynchronizer synchronizer, int limit) {
 		if(iterator.hasNext()) {
 			int count = 0;
+			UUID partyOwner = null;
+			if(ServerConfig.CONFIG.partyOwnedClaims.get())
+				partyOwner = serverData.getPlayerPartySystemManager().getPrimaryPartyOwnerByMember(player.getUUID());
 			while(iterator.hasNext()) {
 				ServerRegionClaims region = iterator.next();
-				if(!serverOnly && !ownedOnly || !serverOnly && region.containsStateOwner(player.getUUID()) || region.containsStateOwner(PlayerConfig.SERVER_CLAIM_UUID)) {
+				if(
+						!serverOnly && !ownedOnly ||
+						!serverOnly && (region.containsStateOwner(player.getUUID()) || region.containsStateOwner(partyOwner))||
+						region.containsStateOwner(PlayerConfig.SERVER_CLAIM_UUID)
+				) {
 					int paletteInts[] = region.getSyncablePaletteArray();
 					long[] storageDataCopy = region.getSyncableStorageData();
 					int storageBits = region.getSyncableStorageBits();

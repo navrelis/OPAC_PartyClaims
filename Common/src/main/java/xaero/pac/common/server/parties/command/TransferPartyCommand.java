@@ -1,6 +1,6 @@
 /*
  * Open Parties and Claims - adds chunk claims and player parties to Minecraft
- * Copyright (C) 2022-2025, Xaero <xaero1996@gmail.com> and contributors
+ * Copyright (C) 2022-2026, Xaero <xaero1996@gmail.com> and contributors
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of version 3 of the GNU Lesser General Public License
@@ -42,6 +42,7 @@ import xaero.pac.common.server.claims.player.IServerPlayerClaimInfo;
 import xaero.pac.common.server.config.ServerConfig;
 import xaero.pac.common.server.parties.party.IPartyManager;
 import xaero.pac.common.server.parties.party.IServerParty;
+import xaero.pac.common.server.player.data.ServerPlayerData;
 import xaero.pac.common.server.player.localization.AdaptiveLocalizer;
 
 import java.util.UUID;
@@ -65,12 +66,15 @@ public class TransferPartyCommand {
 						.then(Commands.literal("confirm")
 						.executes(context -> {
 							ServerPlayer player = context.getSource().getPlayerOrException();
-							UUID playerId = player.getUUID();
+							ServerPlayerData serverPlayerData = (ServerPlayerData) ServerPlayerData.from(player);
+							UUID contextPlayerId = serverPlayerData.getPartiesImpersonatedPlayerId();
+							if(contextPlayerId == null)
+								contextPlayerId = player.getUUID();
 							MinecraftServer server = context.getSource().getServer();
 							IServerData<IServerClaimsManager<IPlayerChunkClaim, IServerPlayerClaimInfo<IPlayerDimensionClaims<IPlayerClaimPosList>>, IServerDimensionClaimsManager<IServerRegionClaims>>, IServerParty<IPartyMember, IPartyPlayerInfo, IPartyAlly>> serverData = ServerData.from(server);
 							AdaptiveLocalizer adaptiveLocalizer = serverData.getAdaptiveLocalizer();
 							IPartyManager<IServerParty<IPartyMember, IPartyPlayerInfo, IPartyAlly>> partyManager = serverData.getPartyManager();
-							IServerParty<IPartyMember, IPartyPlayerInfo, IPartyAlly> playerParty = partyManager.getPartyByMember(playerId);
+							IServerParty<IPartyMember, IPartyPlayerInfo, IPartyAlly> playerParty = partyManager.getPartyByMember(contextPlayerId);
 
 							String targetUsername = StringArgumentType.getString(context, "new-owner");
 							IPartyMember targetMember = playerParty.getMemberInfo(targetUsername);
@@ -83,14 +87,17 @@ public class TransferPartyCommand {
 								context.getSource().sendFailure(adaptiveLocalizer.getFor(player, "gui.xaero_parties_transfer_already_owner", targetUsername));
 								return 0;
 							}
-							IPartyMember casterInfo = playerParty.getMemberInfo(playerId);
 							if(playerParty.changeOwner(targetMember.getUUID(), targetMember.getUsername())) {
 								UUID targetPlayerId = targetMember.getUUID();
 								ServerPlayer newOwnerPlayer = server.getPlayerList().getPlayer(targetPlayerId);
 								if (newOwnerPlayer != null)
-									server.getCommands().sendCommands(newOwnerPlayer);
-								server.getCommands().sendCommands(player);
-								new PartyOnCommandUpdater().update(playerId, serverData, playerParty, serverData.getPlayerConfigs(), mi -> false, Component.translatable("gui.xaero_parties_transfer_success", Component.literal(casterInfo.getUsername()).withStyle(s -> s.withColor(ChatFormatting.DARK_GREEN)), Component.literal(targetMember.getUsername()).withStyle(s -> s.withColor(ChatFormatting.YELLOW))));
+									serverData.getPlayerPermissionChangeHandler().sendCommandsAndUpdatePermissions(newOwnerPlayer, serverData, false);
+								serverData.getPlayerPermissionChangeHandler().sendCommandsAndUpdatePermissions(player, serverData, false);
+
+								Component callerName = Component.literal(player.getGameProfile().getName()).withStyle(ChatFormatting.DARK_GREEN);
+								Component targetName = Component.literal(targetMember.getUsername()).withStyle(ChatFormatting.YELLOW);
+
+								new PartyOnCommandUpdater().update(player, serverData, playerParty, serverData.getPlayerConfigManager(), mi -> false, Component.translatable("gui.xaero_parties_transfer_success", callerName, targetName));
 								return 1;
 							}
 							context.getSource().sendFailure(adaptiveLocalizer.getFor(player, "gui.xaero_parties_transfer_failed"));

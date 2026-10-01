@@ -22,7 +22,7 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.MinecraftServer;
 import xaero.pac.common.claims.player.PlayerChunkClaim;
 import xaero.pac.common.claims.result.api.ClaimResult;
-import xaero.pac.common.server.player.config.api.IPlayerConfigOptionSpecAPI;
+import xaero.pac.common.server.player.config.api.v2.IPlayerConfigOptionSpecAPI;
 
 import javax.annotation.Nullable;
 import java.util.UUID;
@@ -30,79 +30,114 @@ import java.util.UUID;
 /**
  * Bridge interface for Team Claims integration.
  * <p>
- * This allows the Common module to call into the NeoForge-specific Team Claims
- * implementation without a direct dependency. The handler is set by the NeoForge
+ * This allows the Common module to call into the platform (Fabric)-specific Team Claims
+ * implementation without a direct dependency. The handler is set by the platform (Fabric)
  * module during initialization.
  * <p>
  * The direct code modifications in ServerClaimsManager, PlayerConfig, PlayerClaimInfo,
- * PlayerConfigSynchronizer, and PlayerSubConfig all call through this bridge.
+ * PlayerSubConfig, ServerboundSubConfigExistencePacket, CreatePartyCommand and
+ * ClaimsManagerSynchronizer all call through this bridge. Every one of those hooks is a
+ * no-op while {@link #getHandler()} returns null, which is the case on a vanilla client,
+ * before the server addon is registered and after the server has stopped.
+ * <p>
+ * Team Claims only ever applies to sub-configs of a real <i>player</i> config whose sub ID
+ * starts with {@link #TEAM_SUB_ID_PREFIX}. Native party claims (server option
+ * {@code partyOwnedClaims}, {@code ClaimingModes.PARTY}, the party claims config) are a
+ * separate upstream feature and are never routed through this bridge.
  */
 public final class TeamClaimsIntegration {
 
 	/**
-	 * Handler interface implemented by the NeoForge Team Claims module.
+	 * Prefix of every sub-config ID that Team Claims manages.
+	 */
+	public static final String TEAM_SUB_ID_PREFIX = "team_";
+
+	/**
+	 * Handler interface implemented by the platform (Fabric) Team Claims module.
 	 * Provides all the hooks needed by the modified Common classes.
 	 */
 	public interface TeamClaimsHandler {
 
-		// ==================== Claim Operation Intercepts ====================
+		// ==================== Claim Operation Hooks ====================
 
 		/**
-		 * Called at the beginning of tryToUnclaimHelper.
-		 * Allows team members to unclaim each other's team claims.
-		 * @return non-null ClaimResult to override the method, null to proceed normally
+		 * Called by {@code ServerClaimsManager.tryToUnclaimHelper} when the requesting player
+		 * doesn't own the claim and the request isn't forced.
+		 *
+		 * @return true if the requesting player may unclaim this claim because it is a team
+		 *         claim of a party they're also a member of, in which case the normal unclaim
+		 *         path continues instead of failing with NOT_CLAIMED_BY_USER
 		 */
-		@Nullable
-		ClaimResult<PlayerChunkClaim> interceptUnclaim(
+		boolean allowsTeamUnclaim(
 				ServerClaimsManager claimsManager, ResourceLocation dimension,
-				UUID id, int x, int z, boolean replace, @Nullable PlayerChunkClaim currentClaim);
+				UUID id, int x, int z, PlayerChunkClaim currentClaim);
 
 		/**
-		 * Called at the beginning of tryToForceloadHelper.
-		 * Allows team members to toggle forceload on each other's team claims,
-		 * and checks team forceload budgets.
-		 * @return non-null ClaimResult to override the method, null to proceed normally
+		 * Called by {@code ServerClaimsManager.tryToForceloadHelper} when the requesting player
+		 * doesn't own the claim and the request isn't forced.
+		 *
+		 * @return true if the requesting player may toggle the forceload state of this claim
+		 *         because it is a team claim of a party they're also a member of
+		 */
+		boolean allowsTeamForceload(
+				ServerClaimsManager claimsManager, ResourceLocation dimension,
+				UUID id, int x, int z, PlayerChunkClaim currentClaim);
+
+		/**
+		 * Called by {@code ServerClaimsManager.tryToForceloadHelper} before a forceload is
+		 * enabled on an existing claim (never for unforceloading, server claims or forced
+		 * requests). Checks the shared team forceload budget of every party member.
+		 *
+		 * @return non-null ClaimResult to reject the forceload, null to proceed normally
 		 */
 		@Nullable
 		ClaimResult<PlayerChunkClaim> interceptForceload(
 				ServerClaimsManager claimsManager, ResourceLocation dimension,
-				UUID id, int x, int z, boolean enable, boolean replace,
-				boolean isServer, @Nullable PlayerChunkClaim currentClaim);
+				UUID id, int x, int z, PlayerChunkClaim currentClaim);
 
 		/**
-		 * Called at the beginning of tryToClaimHelper.
-		 * Checks team claim budgets for all party members.
-		 * @return non-null ClaimResult to override the method, null to proceed normally
+		 * Called by {@code ServerClaimsManager.tryToClaimHelper} for a new claim only
+		 * (never for the forceload/unforceload re-entry, server claims or forced requests).
+		 * Checks the shared team claim budget of every party member.
+		 *
+		 * @return non-null ClaimResult to reject the claim, null to proceed normally
 		 */
 		@Nullable
 		ClaimResult<PlayerChunkClaim> interceptClaim(
 				ServerClaimsManager claimsManager, ResourceLocation dimension,
-				UUID playerId, int subConfigIndex, int x, int z,
-				boolean forceLoaded, boolean replace, boolean isServer);
+				UUID playerId, int subConfigIndex, int x, int z, boolean forceLoaded);
 
 		// ==================== PlayerClaimInfo Overhead ====================
 
 		/**
 		 * Returns true if overhead is currently being computed (re-entrancy guard).
-		 * When true, getClaimCount/getForceloadCount should NOT add overhead.
+		 * When true, getClaimCount/getForceloadCount must NOT add overhead.
 		 */
 		boolean isComputingOverhead();
 
 		/**
-		 * Returns the team claim overhead for a player (claims by other party members).
+		 * Returns the team claim overhead for a player (team claims by other party members).
 		 */
 		int getTeamClaimOverheadForPlayer(UUID playerUUID);
 
 		/**
-		 * Returns the team forceload overhead for a player.
+		 * Returns the team forceload overhead for a player (team forceloads by other party members).
 		 */
 		int getTeamForceloadOverheadForPlayer(UUID playerUUID);
+
+		/**
+		 * Returns true if the player currently has any team claim/forceload overhead.
+		 * Used by the claim limits sync to force the client to display the server-computed
+		 * counts instead of counting the synced claim data locally.
+		 */
+		boolean hasTeamOverhead(UUID playerUUID);
 
 		// ==================== PlayerConfig Editing ====================
 
 		/**
 		 * Returns true if the current thread is performing an internal edit
-		 * (settings propagation, initial setup) that should bypass admin checks.
+		 * (settings propagation, initial setup) that should bypass the admin check
+		 * and must not be propagated again.
 		 */
 		boolean isInternalEditActive();
 
@@ -115,21 +150,14 @@ public final class TeamClaimsIntegration {
 		 * Called after a setting is successfully changed on a team sub-config.
 		 * Propagates the change to all other team members' sub-configs.
 		 */
-		@SuppressWarnings("rawtypes")
 		void onTeamSubConfigSettingChanged(UUID changedByPlayer,
-				IPlayerConfigOptionSpecAPI option, Comparable value);
+				IPlayerConfigOptionSpecAPI<?> option, Object value);
 
 		/**
 		 * Returns the current MinecraftServer instance, or null.
 		 */
 		@Nullable
 		MinecraftServer getServer();
-
-		/**
-		 * Returns true if the player is in a party that has tracked team claims.
-		 * Used by the base sync to force loading values for correct count display.
-		 */
-		boolean hasTeamOverhead(UUID playerUUID);
 
 		/**
 		 * Called immediately after a party is created.
@@ -143,7 +171,7 @@ public final class TeamClaimsIntegration {
 	private static volatile TeamClaimsHandler handler;
 
 	/**
-	 * Sets the handler. Called by the NeoForge module during OPAC addon registration.
+	 * Sets the handler. Called by the platform (Fabric) module during OPAC addon registration.
 	 */
 	public static void setHandler(@Nullable TeamClaimsHandler h) {
 		handler = h;
@@ -162,6 +190,23 @@ public final class TeamClaimsIntegration {
 	 */
 	public static boolean isActive() {
 		return handler != null;
+	}
+
+	/**
+	 * Returns true if the sub-config ID is a Team Claims sub-config ID. This is a pure string
+	 * check that doesn't need the handler, so it also works on the client side.
+	 */
+	public static boolean isTeamSubId(@Nullable String subId) {
+		return subId != null && subId.startsWith(TEAM_SUB_ID_PREFIX);
+	}
+
+	/**
+	 * Gets the current handler, but only if the specified sub-config ID is a team sub-config ID.
+	 * Returns null otherwise, which makes every caller a no-op for regular configs.
+	 */
+	@Nullable
+	public static TeamClaimsHandler getHandlerForSubId(@Nullable String subId) {
+		return isTeamSubId(subId) ? handler : null;
 	}
 
 	private TeamClaimsIntegration() {} // Prevent instantiation

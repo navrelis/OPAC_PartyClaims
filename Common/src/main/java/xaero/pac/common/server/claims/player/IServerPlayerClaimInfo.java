@@ -1,6 +1,6 @@
 /*
  * Open Parties and Claims - adds chunk claims and player parties to Minecraft
- * Copyright (C) 2022-2025, Xaero <xaero1996@gmail.com> and contributors
+ * Copyright (C) 2022-2026, Xaero <xaero1996@gmail.com> and contributors
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of version 3 of the GNU Lesser General Public License
@@ -19,22 +19,15 @@
 package xaero.pac.common.server.claims.player;
 
 import net.minecraft.resources.ResourceLocation;
-import xaero.pac.common.claims.player.IPlayerChunkClaim;
+import xaero.pac.common.claims.ClaimLocation;
 import xaero.pac.common.claims.player.IPlayerClaimInfo;
-import xaero.pac.common.claims.player.IPlayerClaimPosList;
 import xaero.pac.common.claims.player.IPlayerDimensionClaims;
 import xaero.pac.common.claims.player.api.IPlayerDimensionClaimsAPI;
-import xaero.pac.common.parties.party.IPartyPlayerInfo;
-import xaero.pac.common.parties.party.ally.IPartyAlly;
-import xaero.pac.common.parties.party.member.IPartyMember;
 import xaero.pac.common.server.IServerData;
-import xaero.pac.common.server.claims.IServerClaimsManager;
-import xaero.pac.common.server.claims.IServerDimensionClaimsManager;
-import xaero.pac.common.server.claims.IServerRegionClaims;
 import xaero.pac.common.server.claims.player.api.IServerPlayerClaimInfoAPI;
+import xaero.pac.common.server.claims.player.task.PlayerAreaClaimActionSpreadoutTask;
 import xaero.pac.common.server.claims.player.task.PlayerClaimReplaceSpreadoutTask;
 import xaero.pac.common.server.expiration.ObjectManagerIOExpirableObject;
-import xaero.pac.common.server.parties.party.IServerParty;
 import xaero.pac.common.server.player.config.IPlayerConfig;
 
 import javax.annotation.Nonnull;
@@ -71,6 +64,9 @@ public interface IServerPlayerClaimInfo<DC extends IPlayerDimensionClaims<?>> ex
 		return (Stream<Entry<ResourceLocation, IPlayerDimensionClaimsAPI>>)(Object)getTypedStream();
 	}
 
+	@Override
+	boolean isPartyOwned();
+
 	public Stream<Entry<ResourceLocation, DC>> getFullStream();
 
 	public long getRegisteredActivity();
@@ -83,8 +79,32 @@ public interface IServerPlayerClaimInfo<DC extends IPlayerDimensionClaims<?>> ex
 
 	public boolean hasReplacementTasks();
 
-	public void addReplacementTask(PlayerClaimReplaceSpreadoutTask task, IServerData<IServerClaimsManager<IPlayerChunkClaim, IServerPlayerClaimInfo<IPlayerDimensionClaims<IPlayerClaimPosList>>, IServerDimensionClaimsManager<IServerRegionClaims>>, IServerParty<IPartyMember, IPartyPlayerInfo, IPartyAlly>> serverData);
+	public void addReplacementTask(PlayerClaimReplaceSpreadoutTask task, IServerData<?, ?> serverData);
 
 	public PlayerClaimReplaceSpreadoutTask removeNextReplacementTask();
+
+	long getPartyNameSyncedTime();
+
+	void setLastAllowedClaimAccessOverLimitTime(long lastAllowedClaimAccessOverLimitTime);
+
+	long getLastAllowedClaimAccessOverLimitTime();
+
+	boolean isTransferInProgress();
+
+	void setTransferInProgress(boolean transferInProgress);
+
+	ClaimLocation getRandomClaimPos(boolean firstPosIfTooMany);
+
+	boolean isAreaClaimTaskInProgress();
+
+	void setAreaClaimTaskInProgress(PlayerAreaClaimActionSpreadoutTask areaClaimInProgress);
+
+	public boolean hasAreaClaimActionTasks();
+
+	public void addAreaClaimActionTask(PlayerAreaClaimActionSpreadoutTask task, IServerData<?, ?> serverData);
+
+	public PlayerAreaClaimActionSpreadoutTask removeNextAreaClaimActionTask();
+
+	void stopAllAreaClaimActionTasks(IServerData<?, ?> serverData);
 
 }

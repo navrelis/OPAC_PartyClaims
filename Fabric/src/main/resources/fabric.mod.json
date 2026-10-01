@@ -1,0 +1,47 @@
+{
+    "schemaVersion": 1,
+    "id": "${mod_id}",
+    "version": "${version}",
+  
+    "name": "${mod_display_name}",
+    "description": "${description}",
+    "authors": [
+      "${mod_author}",
+      "other contributors"
+    ],
+    "contact": {
+      "homepage": "${homepage}",
+      "sources": "${sources}"
+    },
+  
+    "license": "${license}",
+    "icon": "${mod_id}.png",
+  
+    "environment": "*",
+    "entrypoints": {
+      "client": [
+        "xaero.pac.OpenPartiesAndClaimsFabric"
+      ],
+      "server": [
+        "xaero.pac.OpenPartiesAndClaimsFabric"
+      ]
+    },
+    "mixins": [
+      "${mod_id}.mixins.json",
+      "${mod_id}.fabric.mixins.json"
+    ],
+  
+    "depends": {
+      "fabricloader": "${fabric_loader_version_range}",
+      "fabric": "${fabric_api_range}",
+      "minecraft": "${minecraft_version_range}",
+      "java": "${java_fabric_range}",
+      "forgeconfigapiport" : "${forgeconfigapiport_fabric_range}"
+    },
+    "suggests": {
+    },
+    "breaks" : {
+      "opaccreatesupport": "${fabric_extension_create_breaks_range}"
+    }
+  }
+  

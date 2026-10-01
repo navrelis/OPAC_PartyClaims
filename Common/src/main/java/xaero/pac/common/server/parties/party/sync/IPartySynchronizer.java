@@ -1,6 +1,6 @@
 /*
  * Open Parties and Claims - adds chunk claims and player parties to Minecraft
- * Copyright (C) 2022-2025, Xaero <xaero1996@gmail.com> and contributors
+ * Copyright (C) 2022-2026, Xaero <xaero1996@gmail.com> and contributors
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of version 3 of the GNU Lesser General Public License
@@ -29,6 +29,7 @@ public interface IPartySynchronizer
 	//internal api
 	
 	void syncToClient(ServerPlayer player, P party);
+	void syncToClientIncludingPrimarySwitch(ServerPlayer player, P party);
 	void syncToPartyAndAlliersUpdateName(P party, String value);
 	public IPartyMemberDynamicInfoSynchronizer<P> getOftenSyncedInfoSync();
 	public void onServerTick();

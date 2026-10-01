@@ -1,6 +1,6 @@
 /*
  * Open Parties and Claims - adds chunk claims and player parties to Minecraft
- * Copyright (C) 2022-2025, Xaero <xaero1996@gmail.com> and contributors
+ * Copyright (C) 2022-2026, Xaero <xaero1996@gmail.com> and contributors
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of version 3 of the GNU Lesser General Public License
@@ -28,13 +28,15 @@ import xaero.pac.client.world.capability.api.ClientWorldCapabilityTypes;
 public class ClientCore {
 
 	public static void onInitializeWorldBorder(ClientboundInitializeBorderPacket packet){
+		if(Minecraft.getInstance().level == null)//happens on some weird servers, can't do anything in such case
+			return;
 		ClientWorldMainCapability capability = (ClientWorldMainCapability) OpenPartiesAndClaims.INSTANCE.getCapabilityHelper().getCapability(Minecraft.getInstance().level, ClientWorldCapabilityTypes.MAIN_CAP);
 		IClientWorldData worldData = capability.getClientWorldDataInternal();
 		boolean serverHasMod = worldData.serverHasMod();
 		if(!serverHasMod) {
 			//the border packet is sent after the handshake, so if we didn't get a handshake up until this point, then there is no mod on the server side
 			OpenPartiesAndClaims.LOGGER.info("No Open Parties and Claims on the server! Resetting.");
-			OpenPartiesAndClaims.INSTANCE.getClientDataInternal().reset();
+			OpenPartiesAndClaims.INSTANCE.getClientDataInternal().reset(true);
 		}
 	}
 	

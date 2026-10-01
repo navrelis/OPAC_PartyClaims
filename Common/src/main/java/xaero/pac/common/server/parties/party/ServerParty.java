@@ -1,6 +1,6 @@
 /*
  * Open Parties and Claims - adds chunk claims and player parties to Minecraft
- * Copyright (C) 2022-2025, Xaero <xaero1996@gmail.com> and contributors
+ * Copyright (C) 2022-2026, Xaero <xaero1996@gmail.com> and contributors
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of version 3 of the GNU Lesser General Public License
@@ -28,7 +28,7 @@ import xaero.pac.common.parties.party.member.PartyMemberRank;
 import xaero.pac.common.server.expiration.ObjectManagerIOExpirableObject;
 import xaero.pac.common.server.info.ServerInfo;
 import xaero.pac.common.server.player.config.IPlayerConfig;
-import xaero.pac.common.server.player.config.api.PlayerConfigOptions;
+import xaero.pac.common.server.player.config.api.v2.PlayerConfigOptions;
 import xaero.pac.common.util.linked.ILinkedChainNode;
 import xaero.pac.common.util.linked.LinkedChain;
 
@@ -74,6 +74,7 @@ public final class ServerParty extends Party implements IServerParty<PartyMember
 					managedBy.getPartySynchronizer().syncToPartyUpdateOwner(this);
 					IPlayerConfig newOwnerConfig = managedBy.getPlayerConfigs().getLoadedConfig(newOwnerId);
 					managedBy.getPartySynchronizer().syncToPartyAndAlliersUpdateName(this, newOwnerConfig.getEffective(PlayerConfigOptions.PARTY_NAME));
+					managedBy.getPartySynchronizer().syncPrimaryPartySwitchForAll(this);
 				}
 			}
 			setDirty(true);
@@ -211,7 +212,7 @@ public final class ServerParty extends Party implements IServerParty<PartyMember
 	@Override
 	public void setDirty(boolean dirty) {
 		if(!this.dirty && dirty && managedBy != null)
-			managedBy.addToSave(this);
+			managedBy.getToSave().add(this);
 		this.dirty = dirty;
 	}
 

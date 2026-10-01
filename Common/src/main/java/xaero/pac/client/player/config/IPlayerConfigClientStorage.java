@@ -1,6 +1,6 @@
 /*
  * Open Parties and Claims - adds chunk claims and player parties to Minecraft
- * Copyright (C) 2022-2025, Xaero <xaero1996@gmail.com> and contributors
+ * Copyright (C) 2022-2026, Xaero <xaero1996@gmail.com> and contributors
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of version 3 of the GNU Lesser General Public License
@@ -19,9 +19,10 @@
 package xaero.pac.client.player.config;
 
 import xaero.pac.client.player.config.api.IPlayerConfigClientStorageAPI;
-import xaero.pac.client.player.config.api.IPlayerConfigStringableOptionClientStorageAPI;
-import xaero.pac.common.server.player.config.api.IPlayerConfigOptionSpecAPI;
+import xaero.pac.client.player.config.api.v2.IPlayerConfigStringableOptionClientStorageAPI;
+import xaero.pac.client.player.config.group.IClientPlayerConfigGroupManager;
 import xaero.pac.common.server.player.config.api.PlayerConfigType;
+import xaero.pac.common.server.player.config.api.v2.IPlayerConfigOptionSpecAPI;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
@@ -33,7 +34,7 @@ public interface IPlayerConfigClientStorage<OS extends IPlayerConfigStringableOp
 
 	//internal api
 	@Nonnull
-	public <T extends Comparable<T>> OS getOptionStorage(@Nonnull IPlayerConfigOptionSpecAPI<T> option);
+	public <T> IPlayerConfigStringableOptionClientStorage<T> getOption(@Nonnull IPlayerConfigOptionSpecAPI<T> option);
 
 	@Nonnull
 	public Stream<OS> typedOptionStream();
@@ -41,7 +42,7 @@ public interface IPlayerConfigClientStorage<OS extends IPlayerConfigStringableOp
 	@Nonnull
 	@Override
 	@SuppressWarnings("unchecked")
-	default Stream<IPlayerConfigStringableOptionClientStorageAPI<?>> optionStream(){
+	default Stream<IPlayerConfigStringableOptionClientStorageAPI<?>> options(){
 		return (Stream<IPlayerConfigStringableOptionClientStorageAPI<?>>)(Object)typedOptionStream();
 	}
 
@@ -70,6 +71,14 @@ public interface IPlayerConfigClientStorage<OS extends IPlayerConfigStringableOp
 	@Override
 	boolean isBeingDeleted();
 
+	@Nonnull
+	@Override
+	IClientPlayerConfigGroupManager getPlayerGroups();
+
+	@Nonnull
+	@Override
+	IPlayerConfigClientPermissions getPermissions();
+
 	public Stream<IPlayerConfigClientStorage<OS>> getSubConfigStream();
 
 	public void setSelectedSubConfig(String selectedSubConfig);
@@ -81,6 +90,8 @@ public interface IPlayerConfigClientStorage<OS extends IPlayerConfigStringableOp
 	public void removeSubConfig(String subId);
 
 	public void setGeneralState(boolean beingDeleted, int subConfigLimit);
+
+	UUID getOwnerForSync();
 
 	public static interface IBuilder<CS extends IPlayerConfigClientStorage<?>> {
 		

@@ -1,6 +1,6 @@
 /*
  * Open Parties and Claims - adds chunk claims and player parties to Minecraft
- * Copyright (C) 2022-2025, Xaero <xaero1996@gmail.com> and contributors
+ * Copyright (C) 2022-2026, Xaero <xaero1996@gmail.com> and contributors
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of version 3 of the GNU Lesser General Public License
@@ -18,32 +18,37 @@
 
 package xaero.pac.client.player.config;
 
+import xaero.pac.OpenPartiesAndClaims;
 import xaero.pac.client.player.config.api.IPlayerConfigClientStorageAPI;
+import xaero.pac.client.player.config.sub.PlayerSubConfigClientStorage;
 import xaero.pac.common.server.player.config.PlayerConfigOptionSpec;
+import xaero.pac.common.server.player.config.api.PlayerConfigType;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
+import java.util.Objects;
 import java.util.function.BiPredicate;
 
-public class PlayerConfigOptionClientStorage<T extends Comparable<T>> implements IPlayerConfigOptionClientStorage<T> {
+public class PlayerConfigOptionClientStorage<T> implements IPlayerConfigOptionClientStorage<T> {
 	
 	protected final PlayerConfigOptionSpec<T> option;
+	protected final PlayerConfigClientStorage config;
 	private T value;
-	private boolean defaulted;
-	private boolean mutable;
+	private Boolean cachedPlayerConfigurable;
+	private Boolean cachedOpConfigurable;
 	
-	public PlayerConfigOptionClientStorage(PlayerConfigOptionSpec<T> option, T value) {
+	public PlayerConfigOptionClientStorage(PlayerConfigOptionSpec<T> option, PlayerConfigClientStorage config, T value) {
 		super();
 		if(option == null)
 			throw new IllegalArgumentException();
+		this.config = config;
 		this.option = option;
 		this.value = value;
-		this.defaulted = true;
 	}
 	
 	@SuppressWarnings("unchecked")
-	public static <T extends Comparable<T>> PlayerConfigOptionClientStorage<T> createCast(PlayerConfigOptionSpec<T> option, Object value){
-		return new PlayerConfigOptionClientStorage<>(option, (T)value);
+	public static <T extends Comparable<T>> PlayerConfigOptionClientStorage<T> createCast(PlayerConfigOptionSpec<T> option, PlayerConfigClientStorage config, Object value){
+		return new PlayerConfigOptionClientStorage<>(option, config, (T)value);
 	}
 	
 	@Nonnull
@@ -114,42 +119,80 @@ public class PlayerConfigOptionClientStorage<T extends Comparable<T>> implements
 
 	@Override
 	public void setValue(T value) {
+		T oldValue = this.value;
 		this.value = value;
+		if(option.affectsClaimsVisually() && config.getType().hasDimensionSubConfigs() && !Objects.equals(oldValue, value))
+			OpenPartiesAndClaims.INSTANCE.getClientDataInternal().getClientClaimsSyncHandler()
+					.onDimensionSubConfigVisualChange(config, option);
 	}
 
 	@Override
 	@SuppressWarnings("unchecked")
 	public void setCastValue(Object value) {
-		if(value != null && getType() != value.getClass())
+		if(value != null && !getType().isAssignableFrom(value.getClass()))
 			throw new IllegalArgumentException();
 		setValue((T)value);
 	}
 
 	@Override
-	public void setDefaulted(boolean defaulted) {
-		this.defaulted = defaulted;
-	}
-
-	@Override
 	public boolean isDefaulted() {
-		return defaulted;
-	}
-
-	@Override
-	public void setMutable(boolean mutable) {
-		this.mutable = mutable;
+		return !isPlayerMutable() && !isAdminMutable();
 	}
 
 	@Override
 	public boolean isMutable() {
-		return mutable;
+		if(isPlayerMutable())
+			return true;
+		if(!isAdminMutable())
+			return false;
+		return OpenPartiesAndClaims.INSTANCE.getClientDataInternal().getPlayerConfigStorageManager().isAdmin();
+	}
+
+	@Override
+	public boolean isPlayerMutable() {
+		if(config.getType() != PlayerConfigType.PLAYER && config.getType() != PlayerConfigType.PARTY_CLAIMS)
+			return false;
+		if(!option.isOverridable() && config instanceof PlayerSubConfigClientStorage)
+			return false;
+		if(isAdminMutable())
+			return false;
+		return getCachedPlayerConfigurable();
+	}
+
+	@Override
+	public boolean isAdminMutable() {
+		if(config.getType() != PlayerConfigType.PLAYER && config.getType() != PlayerConfigType.PARTY_CLAIMS)
+			return true;
+		return getCachedOpConfigurable();
+	}
+
+	private boolean getCachedPlayerConfigurable(){
+		if(cachedPlayerConfigurable != null)
+			return cachedPlayerConfigurable;
+		cachedPlayerConfigurable = OpenPartiesAndClaims.INSTANCE.getClientDataInternal().getPlayerConfigStorageManager().isOptionPlayerConfigurable(option);
+		return cachedPlayerConfigurable;
+	}
+
+	private boolean getCachedOpConfigurable(){
+		if(cachedOpConfigurable != null)
+			return cachedOpConfigurable;
+		cachedOpConfigurable = OpenPartiesAndClaims.INSTANCE.getClientDataInternal().getPlayerConfigStorageManager().isOptionOpConfigurable(option);
+		return cachedOpConfigurable;
 	}
 
 	public boolean isDynamic() {
 		return option.isDynamic();
 	}
 
-	public static abstract class Builder<T extends Comparable<T>, B extends Builder<T, B>> {
+	public boolean isSyncable() {
+		return option.isSyncable();
+	}
+
+	public boolean isDirectlyConfigurable() {
+		return option.isDirectlyConfigurable();
+	}
+
+	public static abstract class Builder<T, B extends Builder<T, B>> {
 
 		protected final B self;
 		protected PlayerConfigOptionSpec<T> option;

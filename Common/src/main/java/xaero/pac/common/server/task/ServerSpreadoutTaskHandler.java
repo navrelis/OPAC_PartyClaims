@@ -1,6 +1,6 @@
 /*
  * Open Parties and Claims - adds chunk claims and player parties to Minecraft
- * Copyright (C) 2022-2025, Xaero <xaero1996@gmail.com> and contributors
+ * Copyright (C) 2022-2026, Xaero <xaero1996@gmail.com> and contributors
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of version 3 of the GNU Lesser General Public License
@@ -50,7 +50,7 @@ public abstract class ServerSpreadoutTaskHandler<T extends IServerSpreadoutTask<
 
 	protected abstract Iterator<H> getTaskHolderIterator(IServerData<?,?> serverData);
 
-	protected void handleTasksToAdd(List<T> tasksToAdd){
+	protected void handleTasksToAdd(List<T> tasksToAdd, IServerData<?,?> serverData){
 	}
 
 	public void onTick(IServerData<?,?> serverDataA){
@@ -81,7 +81,7 @@ public abstract class ServerSpreadoutTaskHandler<T extends IServerSpreadoutTask<
 			if(canDropTasks() && task.shouldDrop(serverData, taskHolder))
 				taskHolderIterator.remove();
 		}
-		handleTasksToAdd(tasksToAdd);
+		handleTasksToAdd(tasksToAdd, serverData);
 	}
 
 	protected boolean canDropTasks(){

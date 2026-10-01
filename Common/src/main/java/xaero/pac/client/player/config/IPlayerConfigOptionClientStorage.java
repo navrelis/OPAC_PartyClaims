@@ -1,6 +1,6 @@
 /*
  * Open Parties and Claims - adds chunk claims and player parties to Minecraft
- * Copyright (C) 2022-2025, Xaero <xaero1996@gmail.com> and contributors
+ * Copyright (C) 2022-2026, Xaero <xaero1996@gmail.com> and contributors
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of version 3 of the GNU Lesser General Public License
@@ -18,18 +18,14 @@
 
 package xaero.pac.client.player.config;
 
-import xaero.pac.client.player.config.api.IPlayerConfigOptionClientStorageAPI;
+import xaero.pac.client.player.config.api.v2.IPlayerConfigOptionClientStorageAPI;
 
-public interface IPlayerConfigOptionClientStorage<T extends Comparable<T>> extends IPlayerConfigOptionClientStorageAPI<T> {
+public interface IPlayerConfigOptionClientStorage<T> extends IPlayerConfigOptionClientStorageAPI<T> {
 	
 	//internal api
 
 	public void setValue(T value);
 
 	public void setCastValue(Object value);
-	
-	public void setDefaulted(boolean defaulted);
-	
-	public void setMutable(boolean mutable);
 
 }

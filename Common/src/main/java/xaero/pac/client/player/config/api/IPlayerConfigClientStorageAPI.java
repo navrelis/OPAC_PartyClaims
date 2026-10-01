@@ -1,6 +1,6 @@
 /*
  * Open Parties and Claims - adds chunk claims and player parties to Minecraft
- * Copyright (C) 2022-2025, Xaero <xaero1996@gmail.com> and contributors
+ * Copyright (C) 2022-2026, Xaero <xaero1996@gmail.com> and contributors
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of version 3 of the GNU Lesser General Public License
@@ -18,9 +18,14 @@
 
 package xaero.pac.client.player.config.api;
 
-import xaero.pac.common.server.player.config.api.IPlayerConfigOptionSpecAPI;
-import xaero.pac.common.server.player.config.api.PlayerConfigOptions;
+import xaero.pac.client.player.config.api.v2.IPlayerConfigStringableOptionClientStorageAPI;
+import xaero.pac.client.player.config.backwards.v1.CompatStringableOptionClientStorage;
+import xaero.pac.client.player.config.group.api.IClientPlayerConfigGroupManagerAPI;
+import xaero.pac.common.player.config.api.IPlayerConfigPermissionAPI;
 import xaero.pac.common.server.player.config.api.PlayerConfigType;
+import xaero.pac.common.server.player.config.api.v2.IPlayerConfigOptionSpecAPI;
+import xaero.pac.common.server.player.config.api.v2.PlayerConfigOptions;
+import xaero.pac.common.server.player.config.backwards.v1.CompatPlayerConfigOptionSpec;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
@@ -43,7 +48,7 @@ public interface IPlayerConfigClientStorageAPI {
 	 * @param <T>  the type of the option value
 	 */
 	@Nonnull
-	public <T extends Comparable<T>> IPlayerConfigStringableOptionClientStorageAPI<?> getOptionStorage(@Nonnull IPlayerConfigOptionSpecAPI<T> option);
+	public <T> IPlayerConfigStringableOptionClientStorageAPI<T> getOption(@Nonnull IPlayerConfigOptionSpecAPI<T> option);
 
 	/**
 	 * Gets the type {@link PlayerConfigType} of this config.
@@ -67,7 +72,7 @@ public interface IPlayerConfigClientStorageAPI {
 	 * @return the {@link Stream} of all config option value storages, not null
 	 */
 	@Nonnull
-	public Stream<IPlayerConfigStringableOptionClientStorageAPI<?>> optionStream();
+	public Stream<IPlayerConfigStringableOptionClientStorageAPI<?>> options();
 
 	/**
 	 * Gets an unmodifiable list of all string IDs of this config's sub-configs.
@@ -143,5 +148,65 @@ public interface IPlayerConfigClientStorageAPI {
 	 * @return the sub-config limit
 	 */
 	public int getSubConfigLimit();
-	
+
+	/**
+	 * Gets the API for this config's player groups.
+	 *
+	 * @return the player groups API for this config.
+	 */
+	@Nonnull
+	IClientPlayerConfigGroupManagerAPI getPlayerGroups();
+
+	/**
+	 * Gets the main config whether this is a sub-config or not.
+	 *
+	 * @return this sub-config's parent main config, or this config if it is the main config
+	 */
+	@Nonnull
+	IPlayerConfigClientStorageAPI getMain();
+
+	/**
+	 * Gets the API for the permissions the local client player has for this config.
+	 *
+	 * @return this config's permission API for the local client player
+	 */
+	@Nonnull
+	IPlayerConfigPermissionAPI getPermissions();
+
+	/**
+	 * @deprecated use {@link #getOption(IPlayerConfigOptionSpecAPI)} instead<p>
+	 * Gets the config option value storage for a specified config option in this config.
+	 * <p>
+	 * All player config option types are statically accessible in {@link xaero.pac.common.server.player.config.api.PlayerConfigOptions}.
+	 *
+	 * @param option  the player config option, not null
+	 * @return the value storage for the config option, not null
+	 * @param <T>  the type of the option value
+	 */
+	@Deprecated
+	default <T extends Comparable<T>>xaero.pac.client.player.config.api.IPlayerConfigStringableOptionClientStorageAPI<?> getOptionStorage(@Nonnull xaero.pac.common.server.player.config.api.IPlayerConfigOptionSpecAPI<T> option){
+		CompatPlayerConfigOptionSpec<T, ?> compatOption = (CompatPlayerConfigOptionSpec<T, ?>) option;
+		return createCompatOptionStorage(compatOption);
+	}
+
+	/**
+	 * @deprecated just a backwards compatibility helper method
+	 */
+	@Deprecated
+	private <T extends Comparable<T>, R> CompatStringableOptionClientStorage<T, R> createCompatOptionStorage(CompatPlayerConfigOptionSpec<T, R> compatOption){
+		IPlayerConfigStringableOptionClientStorageAPI<R> realStorage = getOption(compatOption.realOption);
+		return new CompatStringableOptionClientStorage<>(realStorage, compatOption);
+	}
+
+	/**
+	 * @deprecated use {@link #options()} instead<p>
+	 * Gets a stream of all config option value storages for this config.
+	 *
+	 * @return the {@link Stream} of all config option value storages, not null
+	 */
+	@Deprecated
+	default Stream<xaero.pac.client.player.config.api.IPlayerConfigStringableOptionClientStorageAPI<?>> optionStream(){
+		return xaero.pac.common.server.player.config.api.PlayerConfigOptions.OPTIONS.values().stream().map(this::getOptionStorage);
+	}
+
 }

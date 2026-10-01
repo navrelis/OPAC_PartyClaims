@@ -1,6 +1,6 @@
 /*
  * Open Parties and Claims - adds chunk claims and player parties to Minecraft
- * Copyright (C) 2022-2025, Xaero <xaero1996@gmail.com> and contributors
+ * Copyright (C) 2022-2026, Xaero <xaero1996@gmail.com> and contributors
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of version 3 of the GNU Lesser General Public License
@@ -46,7 +46,8 @@ public abstract class ObjectManagerIO
 	private final SerializedDataFileIO<S,I> serializedDataFileIO;
 	private final IOThreadWorker ioThreadWorker;
 	protected final MinecraftServer server;
-	private final FileIOHelper fileIOHelper;
+	protected final FileIOHelper fileIOHelper;
+	protected boolean liveSaving;
 
 	@SuppressWarnings("unchecked")
 	protected ObjectManagerIO(SerializationHandler<S, I, T, M> serializationHandler, SerializedDataFileIO<S,I> serializedDataFileIO, IOThreadWorker ioThreadWorker, MinecraftServer server, String fileExtension, M manager, FileIOHelper fileIOHelper) {
@@ -105,8 +106,8 @@ public abstract class ObjectManagerIO
 			return null;
 		if(fileName.startsWith("._"))//AppleDouble files
 			return null;
-		I id = getObjectId(fileName.substring(0, fileName.lastIndexOf('.')), file, filePathConfig);
 		try {
+			I id = getObjectId(fileName.substring(0, fileName.lastIndexOf('.')), file, filePathConfig);
 			S serializedData = ioThreadWorker.get(() -> readSerializedData(id, file, serializedDataFileIO, 20));
 			T object = serializationHandler.deserialize(id, manager, serializedData);
 			return object;
@@ -260,7 +261,17 @@ public abstract class ObjectManagerIO
 			}
 		}
 	}
-	
+
+	public void setLiveSaving(boolean liveSaving) {
+		if(!this.liveSaving && liveSaving)
+			manager.getToSave().beforeLiveSave();
+		this.liveSaving = liveSaving;
+	}
+
+	public boolean isLiveSaving() {
+		return liveSaving;
+	}
+
 	public static abstract class Builder <
 		S, 
 		I,
@@ -333,7 +344,9 @@ public abstract class ObjectManagerIO
 					serializedDataFileIO == null || ioThreadWorker == null ||
 					server == null || fileIOHelper == null || manager == null)
 				throw new IllegalStateException();
-			return buildInternally();
+			ObjectManagerIO<S,I,T,M> result = buildInternally();
+			manager.setIo(result);
+			return result;
 		}
 		
 		protected abstract ObjectManagerIO<S,I,T,M> buildInternally();

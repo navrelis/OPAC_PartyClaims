@@ -1,6 +1,6 @@
 /*
  * Open Parties and Claims - adds chunk claims and player parties to Minecraft
- * Copyright (C) 2022-2025, Xaero <xaero1996@gmail.com> and contributors
+ * Copyright (C) 2022-2026, Xaero <xaero1996@gmail.com> and contributors
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of version 3 of the GNU Lesser General Public License
@@ -20,10 +20,16 @@ package xaero.pac.common.packet.claims;
 
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.NbtAccounter;
+import net.minecraft.nbt.ListTag;
+import net.minecraft.nbt.StringTag;
+import net.minecraft.nbt.Tag;
 import net.minecraft.network.FriendlyByteBuf;
+import net.minecraft.network.chat.Component;
+import net.minecraft.resources.ResourceLocation;
 import xaero.pac.OpenPartiesAndClaims;
 import xaero.pac.common.claims.result.api.AreaClaimResult;
 import xaero.pac.common.claims.result.api.ClaimResult;
+import xaero.pac.common.util.json.XaeroJsonUtils;
 
 import java.util.HashSet;
 import java.util.Iterator;
@@ -46,7 +52,7 @@ public class ClientboundClaimResultPacket {
 		@Override
 		public ClientboundClaimResultPacket apply(FriendlyByteBuf input) {
 			try {
-				if(input.readableBytes() > 2048)
+				if(input.readableBytes() > 16384)
 					return null;
 				CompoundTag tag = (CompoundTag) input.readNbt(NbtAccounter.unlimitedHeap());
 				if(tag == null)
@@ -63,11 +69,23 @@ public class ClientboundClaimResultPacket {
 					}
 					resultTypes.add(resultType);
 				}
+				ListTag customReasonListTag = tag.getList("crl", Tag.TAG_STRING);
+				Set<Component> customReasons = new HashSet<>();
+				for (Tag listElementTag : customReasonListTag) {
+					StringTag customReasonJsonTag = (StringTag) listElementTag;
+					String customReasonJson = customReasonJsonTag.getAsString();
+					Component customReason = XaeroJsonUtils.fromJson(customReasonJson);
+					if(customReason == null)
+						continue;
+					customReasons.add(customReason);
+				}
+				String dimString = tag.getString("d");
+				ResourceLocation dimension = ResourceLocation.parse(dimString);
 				int left = tag.getInt("l");
 				int top = tag.getInt("t");
 				int right = tag.getInt("r");
 				int bottom = tag.getInt("b");
-				return new ClientboundClaimResultPacket(new AreaClaimResult(resultTypes, left, top, right, bottom));
+				return new ClientboundClaimResultPacket(new AreaClaimResult(resultTypes, customReasons, dimension, left, top, right, bottom));
 			} catch(Throwable t) {
 				OpenPartiesAndClaims.LOGGER.error("invalid packet", t);
 				return null;
@@ -77,14 +95,23 @@ public class ClientboundClaimResultPacket {
 		@Override
 		public void accept(ClientboundClaimResultPacket t, FriendlyByteBuf u) {
 			CompoundTag tag = new CompoundTag();
-			Iterator<ClaimResult.Type> iterator = t.result.getResultTypesIterable().iterator();
+			Iterator<ClaimResult.Type> typeIterator = t.result.getResultTypesIterable().iterator();
 			byte[] resultTypes = new byte[t.result.getSize()];
 			int index = 0;
-			while (iterator.hasNext()) {
-				resultTypes[index] = (byte) iterator.next().ordinal();
+			while (typeIterator.hasNext()) {
+				resultTypes[index] = (byte) typeIterator.next().ordinal();
 				index++;
 			}
+			ListTag customReasonListTag = new ListTag();
+			for (Component customReason : t.result.getCustomReasons()) {
+				String componentJson = XaeroJsonUtils.toJson(customReason);
+				if(componentJson == null)
+					continue;
+				customReasonListTag.add(StringTag.valueOf(componentJson));
+			}
 			tag.putByteArray("ta", resultTypes);
+			tag.put("crl", customReasonListTag);
+			tag.putString("d", t.result.getDimension().toString());
 			tag.putInt("l", t.result.getLeft());
 			tag.putInt("t", t.result.getTop());
 			tag.putInt("r", t.result.getRight());
@@ -98,6 +125,8 @@ public class ClientboundClaimResultPacket {
 		
 		@Override
 		public void accept(ClientboundClaimResultPacket t) {
+			if(t == null)
+				return;
 			OpenPartiesAndClaims.INSTANCE.getClientDataInternal().getClientClaimsSyncHandler().onClaimResult(t.result);
 		}
 		

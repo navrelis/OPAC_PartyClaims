@@ -1,6 +1,6 @@
 /*
  * Open Parties and Claims - adds chunk claims and player parties to Minecraft
- * Copyright (C) 2022-2025, Xaero <xaero1996@gmail.com> and contributors
+ * Copyright (C) 2022-2026, Xaero <xaero1996@gmail.com> and contributors
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of version 3 of the GNU Lesser General Public License
@@ -18,6 +18,7 @@
 
 package xaero.pac.common.server.parties.command;
 
+import com.mojang.authlib.GameProfile;
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 import net.minecraft.ChatFormatting;
@@ -41,6 +42,7 @@ import xaero.pac.common.server.claims.player.IServerPlayerClaimInfo;
 import xaero.pac.common.server.config.ServerConfig;
 import xaero.pac.common.server.parties.party.IPartyManager;
 import xaero.pac.common.server.parties.party.IServerParty;
+import xaero.pac.common.server.player.data.ServerPlayerData;
 import xaero.pac.common.server.player.localization.AdaptiveLocalizer;
 
 import java.util.UUID;
@@ -54,23 +56,32 @@ public class LeavePartyCommand {
 				.requires(requirement)
 				.executes(context -> {
 					ServerPlayer player = context.getSource().getPlayerOrException();
-					UUID playerId = player.getUUID();
+					ServerPlayerData serverPlayerData = (ServerPlayerData) ServerPlayerData.from(player);
+					GameProfile contextProfile = serverPlayerData.getPartiesImpersonatedPlayerProfile();
+					if(contextProfile == null)
+						contextProfile = player.getGameProfile();
+					UUID contextPlayerId = contextProfile.getId();
 					MinecraftServer server = context.getSource().getServer();
 					IServerData<IServerClaimsManager<IPlayerChunkClaim, IServerPlayerClaimInfo<IPlayerDimensionClaims<IPlayerClaimPosList>>, IServerDimensionClaimsManager<IServerRegionClaims>>, IServerParty<IPartyMember, IPartyPlayerInfo, IPartyAlly>> serverData = ServerData.from(server);
 					AdaptiveLocalizer adaptiveLocalizer = serverData.getAdaptiveLocalizer();
 					IPartyManager<IServerParty<IPartyMember, IPartyPlayerInfo, IPartyAlly>> partyManager = serverData.getPartyManager();
-					IServerParty<IPartyMember, IPartyPlayerInfo, IPartyAlly> playerParty = partyManager.getPartyByMember(playerId);
-					if(playerParty.getOwner().getUUID().equals(playerId)) {
+					IServerParty<IPartyMember, IPartyPlayerInfo, IPartyAlly> playerParty = partyManager.getPartyByMember(contextPlayerId);
+					if(playerParty.getOwner().getUUID().equals(contextPlayerId)) {
 						Component confirmComponent = adaptiveLocalizer.getFor(player, "gui.xaero_parties_leave_own_party");
 						context.getSource().sendFailure(confirmComponent);
 						return 0;
 					} else {
-						IPartyMember memberToRemove = playerParty.getMemberInfo(playerId);
+						IPartyMember memberToRemove = playerParty.getMemberInfo(contextPlayerId);
 						playerParty.removeMember(memberToRemove.getUUID());
+
+						Component message;
+						if(serverPlayerData.getPartiesImpersonatedPlayerId() == null)
+							message = Component.translatable("gui.xaero_parties_leave_party_message", Component.literal(memberToRemove.getUsername()).withStyle(s -> s.withColor(ChatFormatting.YELLOW)));
+						else
+							message = KickPartyCommand.getKickMessage(player, contextProfile.getName());
+						new PartyOnCommandUpdater().update(player, serverData, playerParty, serverData.getPlayerConfigManager(), mi -> false, message);
 						
-						new PartyOnCommandUpdater().update(playerId, serverData, playerParty, serverData.getPlayerConfigs(), mi -> false, Component.translatable("gui.xaero_parties_leave_party_message", Component.literal(memberToRemove.getUsername()).withStyle(s -> s.withColor(ChatFormatting.YELLOW))));
-						
-						server.getCommands().sendCommands(player);
+						serverData.getPlayerPermissionChangeHandler().sendCommandsAndUpdatePermissions(player, serverData, false);
 						player.sendSystemMessage(adaptiveLocalizer.getFor(player, "gui.xaero_parties_leave_caster_message", playerParty.getDefaultName()));
 						return 1;
 					}

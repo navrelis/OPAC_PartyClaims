@@ -1,6 +1,6 @@
 /*
  * Open Parties and Claims - adds chunk claims and player parties to Minecraft
- * Copyright (C) 2022-2025, Xaero <xaero1996@gmail.com> and contributors
+ * Copyright (C) 2022-2026, Xaero <xaero1996@gmail.com> and contributors
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of version 3 of the GNU Lesser General Public License
@@ -18,9 +18,11 @@
 
 package xaero.pac.common.server.parties.command;
 
+import com.mojang.authlib.GameProfile;
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.builder.LiteralArgumentBuilder;
+import com.mojang.brigadier.context.CommandContext;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
 import net.minecraft.server.MinecraftServer;
@@ -42,9 +44,8 @@ import xaero.pac.common.server.claims.player.IServerPlayerClaimInfo;
 import xaero.pac.common.server.config.ServerConfig;
 import xaero.pac.common.server.parties.party.IPartyManager;
 import xaero.pac.common.server.parties.party.IServerParty;
-import xaero.pac.common.server.player.config.api.IPlayerConfigAPI;
-import xaero.pac.common.server.player.config.api.IPlayerConfigManagerAPI;
-import xaero.pac.common.server.player.config.api.PlayerConfigOptions;
+import xaero.pac.common.server.player.config.api.v2.PlayerConfigOptions;
+import xaero.pac.common.server.player.data.ServerPlayerData;
 import xaero.pac.common.server.player.localization.AdaptiveLocalizer;
 
 import javax.annotation.Nullable;
@@ -53,44 +54,44 @@ import java.util.function.Predicate;
 public class CreatePartyCommand {
 	
 	public void register(CommandDispatcher<CommandSourceStack> dispatcher, Commands.CommandSelection environment, CommandRequirementProvider commandRequirementProvider) {
-		Predicate<CommandSourceStack> requirement = commandRequirementProvider.getNonMemberRequirement(p -> true);
+		Predicate<CommandSourceStack> requirement = commandRequirementProvider.getNonMemberRequirement(p -> true, false);
 		LiteralArgumentBuilder<CommandSourceStack> command = Commands.literal(PartyCommandRegister.COMMAND_PREFIX).requires(c -> ServerConfig.CONFIG.partiesEnabled.get()).then(Commands.literal("create")
 				.requires(requirement)
+				// [Team Claims] optional team name, which becomes the party name and the team sub-config ID
 				.then(Commands.argument("teamname", StringArgumentType.greedyString())
 						.executes(context -> executeCreate(context, StringArgumentType.getString(context, "teamname"))))
 				.executes(context -> executeCreate(context, null)));
 		dispatcher.register(command);
 	}
 
-	private int executeCreate(com.mojang.brigadier.context.CommandContext<CommandSourceStack> context, @Nullable String teamName) {
+	private int executeCreate(CommandContext<CommandSourceStack> context, @Nullable String teamName) {
 		Entity entity = context.getSource().getEntity();
 		if(entity == null || !(entity instanceof Player))
 			return 0;
 		ServerPlayer player = (ServerPlayer) entity;
+		ServerPlayerData serverPlayerData = (ServerPlayerData) ServerPlayerData.from(player);
+		GameProfile ownerProfile = serverPlayerData.getPartiesImpersonatedPlayerProfile();
+		if(ownerProfile == null)
+			ownerProfile = player.getGameProfile();
 		MinecraftServer server = context.getSource().getServer();
 		IServerData<IServerClaimsManager<IPlayerChunkClaim, IServerPlayerClaimInfo<IPlayerDimensionClaims<IPlayerClaimPosList>>, IServerDimensionClaimsManager<IServerRegionClaims>>, IServerParty<IPartyMember, IPartyPlayerInfo, IPartyAlly>> serverData = ServerData.from(server);
 		AdaptiveLocalizer adaptiveLocalizer = serverData.getAdaptiveLocalizer();
 		IPartyManager<IServerParty<IPartyMember, IPartyPlayerInfo, IPartyAlly>> partyManager = serverData.getPartyManager();
-		partyManager.createPartyForOwner(player);
-
-		// [Team Claims] Set PARTY_NAME if a teamname was provided
-		if (teamName != null && !teamName.isBlank()) {
-			try {
-				IPlayerConfigManagerAPI configManager = xaero.pac.common.server.api.OpenPACServerAPI.get(server).getPlayerConfigs();
-				IPlayerConfigAPI playerConfig = configManager.getLoadedConfig(player.getUUID());
-				playerConfig.tryToSet(PlayerConfigOptions.PARTY_NAME, teamName);
-			} catch (Exception ignored) {}
-		}
-
-		// [Team Claims] Immediately create team config + sub-config for the new party
+		partyManager.createPartyForOwner(ownerProfile);
+		// [Team Claims] name the new party after the given team name
+		if(teamName != null && !teamName.isBlank())
+			serverData.getPlayerConfigManager().getLoadedConfig(ownerProfile.getId())
+					.tryToSet(PlayerConfigOptions.PARTY_NAME, teamName);
+		// [Team Claims] create the team config and everyone's team sub-config right away
 		xaero.pac.common.server.claims.TeamClaimsIntegration.TeamClaimsHandler tcHandler =
 				xaero.pac.common.server.claims.TeamClaimsIntegration.getHandler();
-		if (tcHandler != null) {
-			tcHandler.onPartyCreated(player);
+		if(tcHandler != null) {
+			ServerPlayer tcOwner = server.getPlayerList().getPlayer(ownerProfile.getId());
+			if(tcOwner != null)
+				tcHandler.onPartyCreated(tcOwner);
 		}
-
 		player.sendSystemMessage(adaptiveLocalizer.getFor(player, "gui.xaero_parties_party_created"));
-		server.getCommands().sendCommands(player);
+		serverData.getPlayerPermissionChangeHandler().sendCommandsAndUpdatePermissions(player, serverData, false);
 		return 1;
 	}
 

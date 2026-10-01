@@ -1,6 +1,6 @@
 /*
  * Open Parties and Claims - adds chunk claims and player parties to Minecraft
- * Copyright (C) 2022-2025, Xaero <xaero1996@gmail.com> and contributors
+ * Copyright (C) 2022-2026, Xaero <xaero1996@gmail.com> and contributors
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of version 3 of the GNU Lesser General Public License
@@ -18,7 +18,11 @@
 
 package xaero.pac.common.server.player.config;
 
-import xaero.pac.common.server.player.config.api.IPlayerConfigManagerAPI;
+import net.minecraft.server.MinecraftServer;
+import xaero.pac.common.server.claims.IServerClaimsManager;
+import xaero.pac.common.server.claims.forceload.ForceLoadTicketManager;
+import xaero.pac.common.server.parties.system.IPlayerPartySystemManager;
+import xaero.pac.common.server.player.config.api.v2.IPlayerConfigManagerAPI;
 import xaero.pac.common.server.player.config.sync.IPlayerConfigSynchronizer;
 
 import javax.annotation.Nonnull;
@@ -31,6 +35,9 @@ public interface IPlayerConfigManager extends IPlayerConfigManagerAPI {
 	@Nonnull
 	@Override
 	public IPlayerConfig getLoadedConfig(@Nullable UUID id);
+	@Nullable
+	@Override
+	public IPlayerConfig getPartyOwnerConfig(@Nonnull UUID memberId);
 	@Nonnull
 	@Override
 	public IPlayerConfig getDefaultConfig();
@@ -44,5 +51,9 @@ public interface IPlayerConfigManager extends IPlayerConfigManagerAPI {
 	@Override
 	public IPlayerConfig getExpiredClaimConfig();
 	public IPlayerConfigSynchronizer getSynchronizer();
+	MinecraftServer getServer();
+	public IPlayerPartySystemManager getPartySystemManager();
+	public ForceLoadTicketManager getForceLoadTicketManager();
+	public IServerClaimsManager<?, ?, ?> getClaimsManager();
 	
 }

@@ -1,6 +1,6 @@
 /*
  * Open Parties and Claims - adds chunk claims and player parties to Minecraft
- * Copyright (C) 2022-2025, Xaero <xaero1996@gmail.com> and contributors
+ * Copyright (C) 2022-2026, Xaero <xaero1996@gmail.com> and contributors
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of version 3 of the GNU Lesser General Public License
@@ -26,12 +26,12 @@ import javax.annotation.Nonnull;
 import java.util.function.BiPredicate;
 import java.util.function.Function;
 
-public final class PlayerConfigStringableOptionClientStorage<T extends Comparable<T>> extends PlayerConfigOptionClientStorage<T> implements IPlayerConfigStringableOptionClientStorage<T> {
+public final class PlayerConfigStringableOptionClientStorage<T> extends PlayerConfigOptionClientStorage<T> implements IPlayerConfigStringableOptionClientStorage<T> {
 	
 	private final BiPredicate<IPlayerConfigClientStorageAPI, String> stringValidator;
 	
-	private PlayerConfigStringableOptionClientStorage(PlayerConfigOptionSpec<T> option, T value, BiPredicate<IPlayerConfigClientStorageAPI, String> stringValidator) {
-		super(option, value);
+	private PlayerConfigStringableOptionClientStorage(PlayerConfigOptionSpec<T> option, PlayerConfigClientStorage config, T value, BiPredicate<IPlayerConfigClientStorageAPI, String> stringValidator) {
+		super(option, config , value);
 		this.stringValidator = stringValidator;
 	}
 	
@@ -42,10 +42,14 @@ public final class PlayerConfigStringableOptionClientStorage<T extends Comparabl
 	}
 
 	@Nonnull
-	@SuppressWarnings("unchecked")
 	@Override
-	public Function<Object, Component> getCommandOutputWriterCast() {
-		return (Function<Object, Component>) (Object) option.getCommandOutputWriter();
+	@SuppressWarnings("unchecked")
+	public Function<Object, Component> getComponentWriterCast() {
+		return (Function<Object, Component>) option.getComponentWriter();
+	}
+
+	public Function<Object, String> getStringWriterCast() {
+		return option.getStringWriterCast();
 	}
 
 	@Nonnull
@@ -54,7 +58,21 @@ public final class PlayerConfigStringableOptionClientStorage<T extends Comparabl
 		return stringValidator;
 	}
 	
-	public static final class Builder<T extends Comparable<T>> extends PlayerConfigOptionClientStorage.Builder<T, Builder<T>> {
+	public static final class Builder<T> extends PlayerConfigOptionClientStorage.Builder<T, Builder<T>> {
+
+		private PlayerConfigClientStorage config;
+
+		@Override
+		public Builder<T> setDefault() {
+			super.setDefault();
+			setConfig(null);
+			return self;
+		}
+
+		public Builder<T> setConfig(PlayerConfigClientStorage config) {
+			this.config = config;
+			return self;
+		}
 
 		@Override
 		protected PlayerConfigOptionClientStorage<T> buildInternally() {
@@ -67,15 +85,17 @@ public final class PlayerConfigStringableOptionClientStorage<T extends Comparabl
 				}
 				return option.getClientSideValidator().test(c, parsedValue);
 			};
-			return new PlayerConfigStringableOptionClientStorage<T>(option, value, stringValidatorPredicate);
+			return new PlayerConfigStringableOptionClientStorage<T>(option, config, value, stringValidatorPredicate);
 		}
 		
 		@Override
 		public PlayerConfigStringableOptionClientStorage<T> build() {
+			if(config == null)
+				throw new IllegalStateException();
 			return (PlayerConfigStringableOptionClientStorage<T>) super.build();
 		}
 		
-		public static <T extends Comparable<T>> Builder<T> begin(){
+		public static <T> Builder<T> begin(){
 			return new Builder<T>().setDefault();
 		}
 		

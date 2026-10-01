@@ -1,6 +1,6 @@
 /*
  * Open Parties and Claims - adds chunk claims and player parties to Minecraft
- * Copyright (C) 2022-2025, Xaero <xaero1996@gmail.com> and contributors
+ * Copyright (C) 2022-2026, Xaero <xaero1996@gmail.com> and contributors
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of version 3 of the GNU Lesser General Public License
@@ -26,17 +26,14 @@ import xaero.pac.client.gui.PlayerConfigScreen;
 import xaero.pac.common.misc.MapFactory;
 import xaero.pac.common.player.config.dynamic.PlayerConfigDynamicOptions;
 import xaero.pac.common.server.player.config.PlayerConfig;
-import xaero.pac.common.server.player.config.api.IPlayerConfigOptionSpecAPI;
-import xaero.pac.common.server.player.config.api.PlayerConfigOptions;
+import xaero.pac.common.server.player.config.PlayerConfigOptionSpec;
 import xaero.pac.common.server.player.config.api.PlayerConfigType;
-import xaero.pac.common.server.player.config.sub.PlayerSubConfig;
+import xaero.pac.common.server.player.config.api.v2.IPlayerConfigOptionSpecAPI;
+import xaero.pac.common.server.player.config.api.v2.PlayerConfigOptions;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
-import java.util.ArrayList;
-import java.util.HashSet;
-import java.util.LinkedHashMap;
-import java.util.Set;
+import java.util.*;
 import java.util.stream.Stream;
 
 public class PlayerConfigClientStorageManager implements IPlayerConfigClientStorageManager<PlayerConfigClientStorage> {
@@ -46,23 +43,42 @@ public class PlayerConfigClientStorageManager implements IPlayerConfigClientStor
 	private PlayerConfigClientStorage wildernessConfig;
 	private PlayerConfigClientStorage defaultPlayerConfig;
 	private PlayerConfigClientStorage myPlayerConfig;
+	private PlayerConfigClientStorage partyClaimsConfig;
 	private PlayerConfigClientStorage otherPlayerConfig;//temporary storage
+	private boolean waitingForOtherPlayerConfig;
 	private PlayerConfigDynamicOptions dynamicOptions;
-	private final Set<IPlayerConfigOptionSpecAPI<?>> overridableOptions;
+	private boolean admin;
+	private final Set<String> playerConfigurableOptions;
+	private final Set<String> opConfigurableOptions;
 
-	private PlayerConfigClientStorageManager(Set<IPlayerConfigOptionSpecAPI<?>> overridableOptions) {
+	private PlayerConfigClientStorageManager(Set<String> playerConfigurableOptions, Set<String> opConfigurableOptions) {
 		super();
-		this.overridableOptions = overridableOptions;
+		this.playerConfigurableOptions = playerConfigurableOptions;
+		this.opConfigurableOptions = opConfigurableOptions;
 	}
 
-	private void set(PlayerConfigClientStorage serverClaimsConfig, PlayerConfigClientStorage expiredClaimsConfig,
-											 PlayerConfigClientStorage wildernessConfig, PlayerConfigClientStorage defaultPlayerConfig,
-											 PlayerConfigClientStorage myPlayerConfig) {
+	private void set(
+			PlayerConfigClientStorage serverClaimsConfig, PlayerConfigClientStorage expiredClaimsConfig,
+			PlayerConfigClientStorage wildernessConfig, PlayerConfigClientStorage defaultPlayerConfig,
+			PlayerConfigClientStorage myPlayerConfig, PlayerConfigClientStorage partyClaimsConfig
+	) {
 		this.serverClaimsConfig = serverClaimsConfig;
 		this.expiredClaimsConfig = expiredClaimsConfig;
 		this.wildernessConfig = wildernessConfig;
 		this.defaultPlayerConfig = defaultPlayerConfig;
 		this.myPlayerConfig = myPlayerConfig;
+		this.partyClaimsConfig = partyClaimsConfig;
+	}
+
+	@Override
+	public PlayerConfigClientStorage getGlobalConfigForClaimOwner(UUID claimOwnerId){
+		if(claimOwnerId == null)
+			return getWildernessConfig();
+		if(PlayerConfig.SERVER_CLAIM_UUID.equals(claimOwnerId))
+			return getServerClaimsConfig();
+		if(PlayerConfig.EXPIRED_CLAIM_UUID.equals(claimOwnerId))
+			return getExpiredClaimsConfig();
+		return null;
 	}
 
 	@Nonnull
@@ -95,16 +111,25 @@ public class PlayerConfigClientStorageManager implements IPlayerConfigClientStor
 		return myPlayerConfig;
 	}
 
+	@Override
+	@Nonnull
+	public PlayerConfigClientStorage getPartyClaimsConfig() {
+		return partyClaimsConfig;
+	}
+
 	public void reset(){
+		playerConfigurableOptions.clear();
+		opConfigurableOptions.clear();
 		serverClaimsConfig.reset();
 		expiredClaimsConfig.reset();
 		wildernessConfig.reset();
 		defaultPlayerConfig.reset();
 		myPlayerConfig.reset();
+		partyClaimsConfig.reset();
 		otherPlayerConfig = null;
 		dynamicOptions = null;
-		overridableOptions.clear();
-		overridableOptions.addAll(PlayerSubConfig.STATIC_OVERRIDABLE_OPTIONS);
+		waitingForOtherPlayerConfig = false;
+		admin = false;
 	}
 
 	@Override
@@ -119,9 +144,6 @@ public class PlayerConfigClientStorageManager implements IPlayerConfigClientStor
 
 	public void setDynamicOptions(PlayerConfigDynamicOptions dynamicOptions) {
 		this.dynamicOptions = dynamicOptions;
-		overridableOptions.clear();
-		overridableOptions.addAll(PlayerSubConfig.STATIC_OVERRIDABLE_OPTIONS);
-		overridableOptions.addAll(dynamicOptions.getOptions().values());
 	}
 
 	@Nullable
@@ -210,6 +232,22 @@ public class PlayerConfigClientStorageManager implements IPlayerConfigClientStor
 	}
 
 	@Override
+	public void openPartyClaimsConfigScreen(@Nullable Screen escape, @Nullable Screen parent) {
+		PlayerConfigClientStorage config = getPartyClaimsConfig();
+		Minecraft.getInstance().setScreen(
+				PlayerConfigScreen.Builder
+				.begin(ArrayList::new)
+				.setParent(parent)
+				.setEscape(escape)
+				.setMainPlayerConfigData(getMyPlayerConfig())
+				.setData(config)
+				.setManager(this)
+				.setDefaultPlayerConfigData(getDefaultPlayerConfig())
+				.build()
+		);
+	}
+
+	@Override
 	public void openOtherPlayerConfigScreen(@Nullable Screen escape, @Nullable Screen parent, @Nonnull String playerName) {
 		if(!playerName.isEmpty())
 			Minecraft.getInstance().setScreen(new OtherPlayerConfigWaitScreen(escape, parent, playerName));
@@ -233,9 +271,46 @@ public class PlayerConfigClientStorageManager implements IPlayerConfigClientStor
 			result = dynamicOptions.getOptions().get(id);
 		return result;
 	}
-	
-	public Set<IPlayerConfigOptionSpecAPI<?>> getOverridableOptions() {
-		return overridableOptions;
+
+	@Override
+	public boolean isWaitingForOtherPlayerConfig() {
+		return waitingForOtherPlayerConfig;
+	}
+
+	@Override
+	public void setWaitingForOtherPlayerConfig(boolean waitingForOtherPlayerConfig) {
+		this.waitingForOtherPlayerConfig = waitingForOtherPlayerConfig;
+	}
+
+	@Override
+	public void setAdmin(boolean admin) {
+		this.admin = admin;
+	}
+
+	@Override
+	public boolean isAdmin() {
+		return admin;
+	}
+
+	@Override
+	public void setConfigurableOptions(List<String> playerConfigurableList, List<String> opConfigurableList) {
+		playerConfigurableOptions.clear();
+		playerConfigurableOptions.addAll(playerConfigurableList);
+		opConfigurableOptions.clear();
+		opConfigurableOptions.addAll(opConfigurableList);
+	}
+
+	@Override
+	public boolean isOptionPlayerConfigurable(IPlayerConfigOptionSpecAPI<?> option){
+		return ((PlayerConfigOptionSpec<?>)option).isForcedPlayerConfigurable() ||
+				playerConfigurableOptions.contains(option.getId()) ||
+				playerConfigurableOptions.contains(option.getShortenedId());
+	}
+
+	@Override
+	public boolean isOptionOpConfigurable(IPlayerConfigOptionSpecAPI<?> option){
+		return opConfigurableOptions.contains(option.getId()) ||
+				opConfigurableOptions.contains(option.getShortenedId());
 	}
 
 	public static final class Builder {
@@ -248,13 +323,14 @@ public class PlayerConfigClientStorageManager implements IPlayerConfigClientStor
 		}
 
 		public PlayerConfigClientStorageManager build() {
-			PlayerConfigClientStorageManager manager = new PlayerConfigClientStorageManager(new HashSet<>(PlayerSubConfig.STATIC_OVERRIDABLE_OPTIONS));
+			PlayerConfigClientStorageManager manager = new PlayerConfigClientStorageManager(new HashSet<>(), new HashSet<>());
 			PlayerConfigClientStorage serverClaimsConfig = PlayerConfigClientStorage.FinalBuilder.begin(LinkedHashMap::new).setType(PlayerConfigType.SERVER).setOwner(PlayerConfig.SERVER_CLAIM_UUID).setManager(manager).build();
 			PlayerConfigClientStorage expiredClaimsConfig = PlayerConfigClientStorage.FinalBuilder.begin(LinkedHashMap::new).setType(PlayerConfigType.EXPIRED).setOwner(PlayerConfig.EXPIRED_CLAIM_UUID).setManager(manager).build();
 			PlayerConfigClientStorage wildernessConfig = PlayerConfigClientStorage.FinalBuilder.begin(LinkedHashMap::new).setType(PlayerConfigType.WILDERNESS).setOwner(null).setManager(manager).build();
 			PlayerConfigClientStorage defaultPlayerConfig = PlayerConfigClientStorage.FinalBuilder.begin(LinkedHashMap::new).setType(PlayerConfigType.DEFAULT_PLAYER).setOwner(null).setManager(manager).build();
 			PlayerConfigClientStorage myPlayerConfig = PlayerConfigClientStorage.FinalBuilder.begin(LinkedHashMap::new).setType(PlayerConfigType.PLAYER).setOwner(null).setManager(manager).build();
-			manager.set(serverClaimsConfig, expiredClaimsConfig, wildernessConfig, defaultPlayerConfig, myPlayerConfig);
+			PlayerConfigClientStorage partyClaimsConfig = PlayerConfigClientStorage.FinalBuilder.begin(LinkedHashMap::new).setType(PlayerConfigType.PARTY_CLAIMS).setOwner(null).setManager(manager).build();
+			manager.set(serverClaimsConfig, expiredClaimsConfig, wildernessConfig, defaultPlayerConfig, myPlayerConfig, partyClaimsConfig);
 			return manager;
 		}
 

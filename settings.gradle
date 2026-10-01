@@ -18,11 +18,23 @@ pluginManagement {
             url = 'https://repo.spongepowered.org/repository/maven-public/'
         }
     }
+    resolutionStrategy {
+        eachPlugin {
+            // Fabric only publishes a "plugins {}" marker artifact for fabric-loom
+            // 1.14.0-alpha.32 and newer; older markers (including 1.8-SNAPSHOT, used
+            // by upstream) have been pruned from maven.fabricmc.net. The plain
+            // net.fabricmc:fabric-loom implementation artifact for 1.11.8 is still
+            // published, so resolve the plugin id straight to that module.
+            if (requested.id.id == 'fabric-loom') {
+                useModule("net.fabricmc:fabric-loom:${requested.version}")
+            }
+        }
+    }
 }
 
 plugins {
-    id 'org.gradle.toolchains.foojay-resolver-convention' version '0.9.0'
+    id 'org.gradle.toolchains.foojay-resolver-convention' version '0.8.0'
 }
 
 rootProject.name = "Open Parties and Claims"
-include("Common", "NeoForge")
+include("Common", "Fabric", "CreateSupportCommon")

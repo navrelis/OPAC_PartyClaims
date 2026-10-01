@@ -1,6 +1,6 @@
 /*
  * Open Parties and Claims - adds chunk claims and player parties to Minecraft
- * Copyright (C) 2022-2025, Xaero <xaero1996@gmail.com> and contributors
+ * Copyright (C) 2022-2026, Xaero <xaero1996@gmail.com> and contributors
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of version 3 of the GNU Lesser General Public License
@@ -18,6 +18,9 @@
 
 package xaero.pac.common.claims.result.api;
 
+import net.minecraft.network.chat.Component;
+import net.minecraft.resources.ResourceLocation;
+
 import javax.annotation.Nonnull;
 import java.util.Arrays;
 import java.util.Collections;
@@ -31,6 +34,8 @@ import java.util.stream.Stream;
 public class AreaClaimResult {
 	
 	private final List<ClaimResult.Type> resultTypes;
+	private final Set<Component> customReasons;
+	private final ResourceLocation dimension;
 	private final int left;
 	private final int top;
 	private final int right;
@@ -40,16 +45,20 @@ public class AreaClaimResult {
 	 * A constructor for internal usage
 	 *
 	 * @param resultTypes  a set of all resul types
+	 * @param customReasons  a set of custom reasons
+	 * @param dimension  the dimension of the area
 	 * @param left  lowest X coordinate value in this area
 	 * @param top  lowest Z coordinate value in this area
 	 * @param right  highest X coordinate value in this area
 	 * @param bottom  highest Z coordinate value in this area
 	 */
-	public AreaClaimResult(Set<ClaimResult.Type> resultTypes, int left, int top, int right, int bottom) {
+	public AreaClaimResult(Set<ClaimResult.Type> resultTypes, Set<Component> customReasons, ResourceLocation dimension, int left, int top, int right, int bottom) {
 		super();
 		List<ClaimResult.Type> resultTypeList = Arrays.asList(resultTypes.toArray(new ClaimResult.Type[resultTypes.size()]));
 		Collections.sort(resultTypeList);
 		this.resultTypes = Collections.unmodifiableList(resultTypeList);
+		this.customReasons = Collections.unmodifiableSet(customReasons);
+		this.dimension = dimension;
 		this.left = left;
 		this.top = top;
 		this.right = right;
@@ -83,6 +92,16 @@ public class AreaClaimResult {
 	@Nonnull
 	public Stream<ClaimResult.Type> getResultTypesStream() {
 		return resultTypes.stream();
+	}
+
+	/**
+	 * Gets the dimension ID of this area.
+	 *
+	 * @return the dimension ID, not null
+	 */
+	@Nonnull
+	public ResourceLocation getDimension() {
+		return dimension;
 	}
 
 	/**
@@ -120,5 +139,16 @@ public class AreaClaimResult {
 	public int getBottom() {
 		return bottom;
 	}
-	
+
+	/**
+	 * Gets a set of all custom reasons given by addons when overriding the claiming action permission during
+	 * the claiming process.
+	 *
+	 * @return the Set of all custom reasons, not null
+	 */
+	@Nonnull
+	public Set<Component> getCustomReasons() {
+		return customReasons;
+	}
+
 }

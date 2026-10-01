@@ -1,6 +1,6 @@
 /*
  * Open Parties and Claims - adds chunk claims and player parties to Minecraft
- * Copyright (C) 2022-2025, Xaero <xaero1996@gmail.com> and contributors
+ * Copyright (C) 2022-2026, Xaero <xaero1996@gmail.com> and contributors
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of version 3 of the GNU Lesser General Public License
@@ -38,11 +38,13 @@ import xaero.pac.common.server.claims.IServerClaimsManager;
 import xaero.pac.common.server.claims.IServerDimensionClaimsManager;
 import xaero.pac.common.server.claims.IServerRegionClaims;
 import xaero.pac.common.server.claims.player.IServerPlayerClaimInfo;
+import xaero.pac.common.server.config.ServerConfig;
 import xaero.pac.common.server.parties.party.IServerParty;
 import xaero.pac.common.server.player.config.IPlayerConfig;
 import xaero.pac.common.server.player.config.IPlayerConfigManager;
 import xaero.pac.common.server.player.config.api.PlayerConfigType;
 import xaero.pac.common.server.player.config.sub.PlayerSubConfigDeletionStarter;
+import xaero.pac.common.server.player.config.util.ServerPlayerConfigUtils;
 import xaero.pac.common.server.player.data.ServerPlayerData;
 
 import java.util.Objects;
@@ -111,18 +113,37 @@ public class ServerboundSubConfigExistencePacket extends PlayerConfigPacket {
 	}
 	
 	public static class ServerHandler implements BiConsumer<ServerboundSubConfigExistencePacket,ServerPlayer> {
-		
+
+		private boolean checkBlockedBecauseOverClaimLimit(IPlayerConfig config, ServerPlayer player){
+			if(!ServerConfig.CONFIG.claimsEnabled.get())
+				return false;
+			if(!ServerPlayerConfigUtils.isOverClaimLimit(config))
+				return false;
+			Component message = Component.translatable("gui.xaero_pac_config_claim_count_over_limit")
+					.withStyle(ChatFormatting.RED);
+			player.sendSystemMessage(message);
+			return true;
+		}
+
 		@Override
 		public void accept(ServerboundSubConfigExistencePacket t, ServerPlayer serverPlayer) {
-			if(t.type != PlayerConfigType.PLAYER && t.type != PlayerConfigType.SERVER) {
+			if(t == null)
+				return;
+			if(!t.type.supportsSubConfigs()) {
 				OpenPartiesAndClaims.LOGGER.info("Someone is trying to create/delete a sub-config for an invalid config type! Name: " + serverPlayer.getGameProfile().getName());
+				return;
+			}
+			if(t.type == PlayerConfigType.PARTY_CLAIMS && t.owner != null) {
+				OpenPartiesAndClaims.LOGGER.info("Someone is trying to create/delete a sub-config for party claims of another player: " + serverPlayer.getGameProfile().getName());
 				return;
 			}
 			boolean isOP = serverPlayer.hasPermissions(2);
 			boolean isServer = t.type == PlayerConfigType.SERVER;
-			UUID ownerId = isServer ? null : t.owner == null ? serverPlayer.getUUID() : t.owner;
+			boolean isDimensionBased = t.type.hasDimensionSubConfigs();
+			boolean isGlobal = t.type.isGlobal();
+			UUID ownerId = isServer || isDimensionBased ? null : t.owner == null ? serverPlayer.getUUID() : t.owner;
 			if(!isOP) {
-				if(isServer) {
+				if(isGlobal) {
 					OpenPartiesAndClaims.LOGGER.info("Non-op player is attempting to create/delete a sub-config without required permissions! Name: " + serverPlayer.getGameProfile().getName());
 					return;
 				}
@@ -132,18 +153,25 @@ public class ServerboundSubConfigExistencePacket extends PlayerConfigPacket {
 				}
 			}
 			IServerData<IServerClaimsManager<IPlayerChunkClaim, IServerPlayerClaimInfo<IPlayerDimensionClaims<IPlayerClaimPosList>>, IServerDimensionClaimsManager<IServerRegionClaims>>, IServerParty<IPartyMember, IPartyPlayerInfo, IPartyAlly>> serverData = ServerData.from(serverPlayer.getServer());
-			IPlayerConfigManager playerConfigs = serverData.getPlayerConfigs();
-			IPlayerConfig config = !isServer ?
-										playerConfigs.getLoadedConfig(ownerId) :
-										playerConfigs.getServerClaimConfig();
+			if(!isOP && t.type == PlayerConfigType.PARTY_CLAIMS &&
+					!serverData.getPlayerPartySystemManager().canEditPartyConfig(serverPlayer.getUUID())
+			){
+				OpenPartiesAndClaims.LOGGER.info("Non-op player is attempting to add/remove party sub-config without required permissions! Name: " + serverPlayer.getGameProfile().getName());
+				return;
+			}
+			IPlayerConfigManager playerConfigs = serverData.getPlayerConfigManager();
+			IPlayerConfig config = ServerPlayerConfigUtils.getTargetConfig(ownerId, serverPlayer.getUUID(), t.type, playerConfigs);
+			if(config == null)
+				return;
 			ServerPlayerData playerData = (ServerPlayerData) ServerPlayerData.from(serverPlayer);
 			if(serverData.getServerTickHandler().getTickCounter() == playerData.getLastSubConfigCreationTick())
 				return;//going too fast
 			playerData.setLastSubConfigCreationTick(serverData.getServerTickHandler().getTickCounter());
 
+			boolean blockedBecauseOverClaimLimit = !isOP && checkBlockedBecauseOverClaimLimit(config, serverPlayer);
 			if(t.create) {
 				boolean reachedLimit = config.getSubCount() >= config.getSubConfigLimit();
-				if (reachedLimit || config.createSubConfig(t.subId) == null || !isServer && !Objects.equals(ownerId, serverPlayer.getUUID())) {
+				if (reachedLimit || blockedBecauseOverClaimLimit || config.createSubConfig(t.subId) == null || !isGlobal && !Objects.equals(ownerId, serverPlayer.getUUID())) {
 					playerConfigs.getSynchronizer().confirmSubConfigCreationSync(serverPlayer, config);//need to notify the client even when unsuccessful
 					if(reachedLimit) {
 						MutableComponent limitReachedMessage = Component.translatable("gui.xaero_pac_config_create_sub_id_limit_reached", config.getSubConfigLimit());
@@ -152,31 +180,40 @@ public class ServerboundSubConfigExistencePacket extends PlayerConfigPacket {
 					}
 				}
 			} else {
-
-				// [Team Claims] Prevent manual deletion of team sub-configs
-				if (t.subId != null && t.subId.startsWith("team_")) {
-					xaero.pac.common.server.claims.TeamClaimsIntegration.TeamClaimsHandler tcHandler =
-							xaero.pac.common.server.claims.TeamClaimsIntegration.getHandler();
-					if (tcHandler != null) {
-						serverPlayer.sendSystemMessage(net.minecraft.network.chat.Component.literal(
-								"\u00A7c[Team Claims] Team sub-configs cannot be deleted manually. Leave the party to remove it."));
-						playerConfigs.getSynchronizer().syncGeneralState(serverPlayer, config.getSubConfig(t.subId));
-						return;
-					}
-				}
-
 				IPlayerConfig subConfig = config.getSubConfig(t.subId);
 				if(subConfig == null)
 					return;
 				if(subConfig == config)
 					return;
+				// [Team Claims] a team sub-config is managed by the party, it can't be deleted manually
+				if(config.getType() == PlayerConfigType.PLAYER
+						&& xaero.pac.common.server.claims.TeamClaimsIntegration.getHandlerForSubId(t.subId) != null) {
+					serverPlayer.sendSystemMessage(serverData.getAdaptiveLocalizer()
+							.getFor(serverPlayer, "gui.xaero_pac_team_claims_sub_delete_denied")
+							.withStyle(ChatFormatting.RED));
+					playerConfigs.getSynchronizer().syncGeneralState(serverPlayer, subConfig);//notify client
+					return;
+				}
+				if(config.getPlayerId() == null || config.getType().hasDimensionSubConfigs()){//doesn't have individual claims tied to sub-configs
+					config.removeSubConfig(t.subId);
+					return;
+				}
+				if(blockedBecauseOverClaimLimit) {
+					playerConfigs.getSynchronizer().syncGeneralState(serverPlayer, subConfig);//notify client
+					return;
+				}
 				IServerPlayerClaimInfo<IPlayerDimensionClaims<IPlayerClaimPosList>> playerInfo = serverData.getServerClaimsManager().getPlayerInfo(config.getPlayerId());
+				if(playerInfo.isTransferInProgress()){
+					serverPlayer.sendSystemMessage(Component.translatable("gui.xaero_pac_config_transfer_in_progress"));
+					playerConfigs.getSynchronizer().syncGeneralState(serverPlayer, subConfig);//notify client
+					return;
+				}
 				if(playerInfo.hasReplacementTasks()){
 					serverPlayer.sendSystemMessage(Component.translatable("gui.xaero_pac_config_delete_sub_already_replacing"));
 					playerConfigs.getSynchronizer().syncGeneralState(serverPlayer, subConfig);//notify client
 					return;
 				}
-				new PlayerSubConfigDeletionStarter().start(serverPlayer, playerInfo, subConfig, serverData);
+				new PlayerSubConfigDeletionStarter().start(serverPlayer, playerInfo, subConfig, serverData, true);
 			}
 		}
 		

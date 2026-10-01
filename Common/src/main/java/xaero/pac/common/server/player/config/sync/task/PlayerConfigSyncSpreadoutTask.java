@@ -1,6 +1,6 @@
 /*
  * Open Parties and Claims - adds chunk claims and player parties to Minecraft
- * Copyright (C) 2022-2025, Xaero <xaero1996@gmail.com> and contributors
+ * Copyright (C) 2022-2026, Xaero <xaero1996@gmail.com> and contributors
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of version 3 of the GNU Lesser General Public License
@@ -22,9 +22,14 @@ import net.minecraft.server.level.ServerPlayer;
 import xaero.pac.common.claims.player.IPlayerChunkClaim;
 import xaero.pac.common.claims.player.IPlayerClaimPosList;
 import xaero.pac.common.claims.player.IPlayerDimensionClaims;
+import xaero.pac.common.packet.config.group.PlayerConfigGroupGroupPacket;
+import xaero.pac.common.packet.config.group.PlayerConfigGroupMemberPacket;
 import xaero.pac.common.parties.party.IPartyPlayerInfo;
 import xaero.pac.common.parties.party.ally.IPartyAlly;
 import xaero.pac.common.parties.party.member.IPartyMember;
+import xaero.pac.common.player.config.group.custom.CustomPlayerConfigGroupData;
+import xaero.pac.common.player.config.group.custom.CustomPlayerGroupIncludedGroup;
+import xaero.pac.common.player.config.group.custom.CustomPlayerGroupMember;
 import xaero.pac.common.server.IServerData;
 import xaero.pac.common.server.claims.IServerClaimsManager;
 import xaero.pac.common.server.claims.IServerDimensionClaimsManager;
@@ -33,27 +38,42 @@ import xaero.pac.common.server.claims.player.IServerPlayerClaimInfo;
 import xaero.pac.common.server.parties.party.IServerParty;
 import xaero.pac.common.server.player.config.IPlayerConfig;
 import xaero.pac.common.server.player.config.PlayerConfig;
+import xaero.pac.common.server.player.config.api.PlayerConfigType;
+import xaero.pac.common.server.player.config.group.custom.CustomPlayerConfigGroup;
+import xaero.pac.common.server.player.config.group.custom.ICustomPlayerConfigGroup;
 import xaero.pac.common.server.player.config.sub.PlayerSubConfig;
 import xaero.pac.common.server.player.config.sync.PlayerConfigSynchronizer;
 import xaero.pac.common.server.task.player.ServerPlayerSpreadoutTask;
 
-import java.util.Deque;
-import java.util.Iterator;
-import java.util.LinkedList;
+import java.util.*;
 
 public final class PlayerConfigSyncSpreadoutTask extends ServerPlayerSpreadoutTask<PlayerConfigSyncSpreadoutTask> {
 
-	private final Deque<IPlayerConfig> configsToSync;
+	private final Deque<ConfigQueueEntry> configsToSync;
+	private final Deque<ConfigQueueEntry> configsForGroupSync;
 	private Iterator<IPlayerConfig> currentSubIterator;
+	private Iterator<ICustomPlayerConfigGroup> groupIterator;
+	private CustomPlayerConfigGroupData currentlySyncedGroup;
+	private Iterator<CustomPlayerGroupMember> groupMemberIterator;
+	private Iterator<CustomPlayerGroupIncludedGroup> groupIncludedGroupIterator;
 
-	private PlayerConfigSyncSpreadoutTask(Deque<IPlayerConfig>configsToSync) {
+	private PlayerConfigSyncSpreadoutTask(Deque<ConfigQueueEntry>configsToSync, Deque<ConfigQueueEntry> configsForGroupSync) {
 		this.configsToSync = configsToSync;
+		this.configsForGroupSync = configsForGroupSync;
 	}
 
 	public void addConfigToSync(IPlayerConfig config){
-		if(configsToSync.contains(config))
+		ConfigQueueEntry entry = new ConfigQueueEntry(config, null);
+		if(configsToSync.contains(entry))
 			return;
-		configsToSync.addLast(config);
+		configsToSync.addLast(entry);
+	}
+
+	public void addConfigToSync(IPlayerConfig config, PlayerConfigType forcedType){
+		ConfigQueueEntry entry = new ConfigQueueEntry(config, forcedType);
+		if(configsToSync.contains(entry))
+			return;
+		configsToSync.addLast(entry);
 	}
 
 	public boolean stillNeedsSyncing(IPlayerConfig config){
@@ -62,7 +82,7 @@ public final class PlayerConfigSyncSpreadoutTask extends ServerPlayerSpreadoutTa
 
 	@Override
 	public boolean shouldWork(IServerData<IServerClaimsManager<IPlayerChunkClaim, IServerPlayerClaimInfo<IPlayerDimensionClaims<IPlayerClaimPosList>>, IServerDimensionClaimsManager<IServerRegionClaims>>, IServerParty<IPartyMember, IPartyPlayerInfo, IPartyAlly>> serverData, ServerPlayer player) {
-		return !configsToSync.isEmpty();
+		return !configsToSync.isEmpty() || !configsForGroupSync.isEmpty();
 	}
 
 	@Override
@@ -74,17 +94,21 @@ public final class PlayerConfigSyncSpreadoutTask extends ServerPlayerSpreadoutTa
 	public void onTick(IServerData<IServerClaimsManager<IPlayerChunkClaim, IServerPlayerClaimInfo<IPlayerDimensionClaims<IPlayerClaimPosList>>, IServerDimensionClaimsManager<IServerRegionClaims>>, IServerParty<IPartyMember, IPartyPlayerInfo, IPartyAlly>> serverData, ServerPlayer player, int perTick) {
 		int toSync = perTick;
 		while(toSync > 0 && !configsToSync.isEmpty()) {
-			PlayerConfigSynchronizer synchronizer = (PlayerConfigSynchronizer) serverData.getPlayerConfigs().getSynchronizer();
-			PlayerConfig<?> config = (PlayerConfig<?>) configsToSync.getFirst();
-
+			PlayerConfigSynchronizer synchronizer = (PlayerConfigSynchronizer) serverData.getPlayerConfigManager().getSynchronizer();
+			ConfigQueueEntry configEntry = configsToSync.getFirst();
+			PlayerConfig<?> config = (PlayerConfig<?>) configEntry.config;
+			synchronizer.forceConfigType(configEntry.forcedType);
+			boolean isSub = config instanceof PlayerSubConfig<?>;
 			if (currentSubIterator == null) {
-				toSync--;
+				toSync -= 64;
 				synchronizer.sendSyncState(player, config, true);
+				if(!isSub)
+					synchronizer.sendPermissions(player, config.getType());
 				synchronizer.syncToClient(player, config, true);
-				currentSubIterator = config.getSubConfigIterator();
+				currentSubIterator = isSub ? Collections.emptyIterator() : config.getSubConfigIterator();
 			}
 			while (toSync > 0 && currentSubIterator.hasNext()) {
-				toSync--;
+				toSync -= 64;
 				PlayerSubConfig<?> subConfigToSync = (PlayerSubConfig<?>) currentSubIterator.next();
 				synchronizer.syncToClient(player, subConfigToSync, true);
 			}
@@ -92,8 +116,96 @@ public final class PlayerConfigSyncSpreadoutTask extends ServerPlayerSpreadoutTa
 				synchronizer.sendSyncState(player, config, false);
 				configsToSync.removeFirst();
 				currentSubIterator = null;
+				if(!isSub)
+					configsForGroupSync.add(configEntry);
+				else
+					synchronizer.sendGroupSyncState(player, config, false);
 			}
+			synchronizer.forceConfigType(null);
 		}
+		//only sync group contents after all config values have been synced so that the config UI access doesn't get delayed
+		while(toSync > 0 && !configsForGroupSync.isEmpty()) {
+			PlayerConfigSynchronizer synchronizer = (PlayerConfigSynchronizer) serverData.getPlayerConfigManager().getSynchronizer();
+			ConfigQueueEntry configEntry = configsForGroupSync.getFirst();
+			PlayerConfig<?> config = (PlayerConfig<?>) configEntry.config;
+			if(groupIterator == null)
+				groupIterator = config.getPlayerGroups().getAllCustom().iterator();
+			if(currentlySyncedGroup == null && groupIterator.hasNext())
+				currentlySyncedGroup = ((CustomPlayerConfigGroup) groupIterator.next()).getData();
+			synchronizer.forceConfigType(configEntry.forcedType);
+			if(currentlySyncedGroup == null){
+				configsForGroupSync.removeFirst();
+				groupIterator = null;
+				synchronizer.sendGroupSyncState(player, config, false);
+				synchronizer.forceConfigType(null);
+				continue;
+			}
+			toSync = handleGroupContentsSync(toSync, synchronizer, config, player);
+			synchronizer.forceConfigType(null);
+		}
+	}
+
+	private int handleGroupContentsSync(
+			int toSync,
+			PlayerConfigSynchronizer synchronizer,
+			PlayerConfig<?> config,
+			ServerPlayer player
+	){
+		toSync = handleGroupMembersSync(toSync, synchronizer, config, player);
+		toSync = handleGroupIncludedGroupsSync(toSync, synchronizer, config, player);
+		if(isCurrentGroupContentsStepDone())
+			currentlySyncedGroup = null;
+		return toSync;
+	}
+
+	private int handleGroupMembersSync(
+			int toSync,
+			PlayerConfigSynchronizer synchronizer,
+			PlayerConfig<?> config,
+			ServerPlayer player
+	){
+		if(isCurrentGroupContentsStepDone())
+			groupMemberIterator = currentlySyncedGroup.getDirectMembersChainIterator();
+		if(groupMemberIterator == null)
+			return toSync;
+		while (toSync > 0 && groupMemberIterator.hasNext()) {
+			toSync--;
+			CustomPlayerGroupMember member = groupMemberIterator.next();
+			synchronizer.syncGroupMemberUpdate(
+					player, config, currentlySyncedGroup.getId(),
+					PlayerConfigGroupMemberPacket.Action.INCLUDE, member.getId(), member.getDisplayName()
+			);
+		}
+		if(!groupMemberIterator.hasNext())
+			groupMemberIterator = null;
+		return toSync;
+	}
+
+	private int handleGroupIncludedGroupsSync(
+			int toSync,
+			PlayerConfigSynchronizer synchronizer,
+			PlayerConfig<?> config,
+			ServerPlayer player
+	){
+		if(isCurrentGroupContentsStepDone())
+			groupIncludedGroupIterator = currentlySyncedGroup.getDirectGroupsChainIterator();
+		if(groupIncludedGroupIterator == null)
+			return toSync;
+		while (toSync > 0 && groupIncludedGroupIterator.hasNext()) {
+			toSync--;
+			CustomPlayerGroupIncludedGroup includedGroup = groupIncludedGroupIterator.next();
+			synchronizer.syncGroupGroupUpdate(
+					player, config, currentlySyncedGroup.getId(),
+					PlayerConfigGroupGroupPacket.Action.INCLUDE, includedGroup.getId()
+			);
+		}
+		if(!groupIncludedGroupIterator.hasNext())
+			groupIncludedGroupIterator = null;
+		return toSync;
+	}
+
+	private boolean isCurrentGroupContentsStepDone(){
+		return groupMemberIterator == null && groupIncludedGroupIterator == null;
 	}
 
 	public static final class Builder {
@@ -106,11 +218,35 @@ public final class PlayerConfigSyncSpreadoutTask extends ServerPlayerSpreadoutTa
 		}
 
 		public PlayerConfigSyncSpreadoutTask build(){
-			return new PlayerConfigSyncSpreadoutTask(new LinkedList<>());
+			return new PlayerConfigSyncSpreadoutTask(new LinkedList<>(), new LinkedList<>());
 		}
 
 		public static Builder begin(){
 			return new Builder().setDefault();
+		}
+
+	}
+
+	private class ConfigQueueEntry {
+
+		private final IPlayerConfig config;
+		private final PlayerConfigType forcedType;
+
+		private ConfigQueueEntry(IPlayerConfig config, PlayerConfigType forcedType) {
+			this.config = config;
+			this.forcedType = forcedType;
+		}
+
+		@Override
+		public boolean equals(Object o) {
+			if (o == null || getClass() != o.getClass()) return false;
+			ConfigQueueEntry that = (ConfigQueueEntry) o;
+			return config == that.config && forcedType == that.forcedType;
+		}
+
+		@Override
+		public int hashCode() {
+			return Objects.hash(config, forcedType);
 		}
 
 	}

@@ -1,6 +1,6 @@
 /*
  * Open Parties and Claims - adds chunk claims and player parties to Minecraft
- * Copyright (C) 2022-2025, Xaero <xaero1996@gmail.com> and contributors
+ * Copyright (C) 2022-2026, Xaero <xaero1996@gmail.com> and contributors
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of version 3 of the GNU Lesser General Public License
@@ -19,9 +19,11 @@
 package xaero.pac.common.server;
 
 import net.minecraft.server.MinecraftServer;
+import xaero.pac.OpenPartiesAndClaims;
 import xaero.pac.common.claims.player.IPlayerChunkClaim;
 import xaero.pac.common.claims.player.IPlayerClaimPosList;
 import xaero.pac.common.claims.player.IPlayerDimensionClaims;
+import xaero.pac.common.event.api.OPACServerAddonRegisterEventContext;
 import xaero.pac.common.parties.party.IPartyPlayerInfo;
 import xaero.pac.common.parties.party.ally.IPartyAlly;
 import xaero.pac.common.parties.party.member.IPartyMember;
@@ -32,6 +34,7 @@ import xaero.pac.common.server.claims.player.IServerPlayerClaimInfo;
 import xaero.pac.common.server.claims.player.io.PlayerClaimInfoManagerIO;
 import xaero.pac.common.server.config.ServerConfig;
 import xaero.pac.common.server.parties.party.IServerParty;
+import xaero.pac.common.server.parties.system.impl.DefaultPlayerPartySystem;
 
 public class ServerStartingCallback {
 	
@@ -43,10 +46,34 @@ public class ServerStartingCallback {
 	}
 
 	public void onLoad(MinecraftServer server) {
-		playerClaimInfoManagerIO.load();
-		IServerData<IServerClaimsManager<IPlayerChunkClaim, IServerPlayerClaimInfo<IPlayerDimensionClaims<IPlayerClaimPosList>>, IServerDimensionClaimsManager<IServerRegionClaims>>, IServerParty<IPartyMember, IPartyPlayerInfo, IPartyAlly>> serverData = ServerData.from(server);
-		serverData.getPlayerPermissionSystemManager().updateUsedSystem(ServerConfig.CONFIG.permissionSystem.get());
+		IServerData<
+			IServerClaimsManager<
+				IPlayerChunkClaim,
+				IServerPlayerClaimInfo<IPlayerDimensionClaims<IPlayerClaimPosList>>,
+				IServerDimensionClaimsManager<IServerRegionClaims>
+			>,
+			IServerParty<IPartyMember, IPartyPlayerInfo, IPartyAlly>
+		> serverData = ServerData.from(server);
+		try {
+			serverData.getPlayerPermissionSystemManager().preRegister();
+			serverData.getPlayerPartySystemManager().preRegister();
+			DefaultPlayerPartySystem defaultPartySystem = serverData.getPartyManager().getPartySystem();
+			serverData.getPlayerPartySystemManager().register("default", defaultPartySystem);
+			OPACServerAddonRegisterEventContext serverAddonEventContext = new OPACServerAddonRegisterEventContext(
+					serverData.getServer(), serverData.getPlayerPermissionSystemManager(),
+					serverData.getPlayerPartySystemManager(), serverData.getServerClaimsManager().getTracker(),
+					serverData.getServerClaimsManager().getActionListenerManager(),
+					serverData.getServerClaimsManager().getChunkAccessOverriderManager()
+			);
+			OpenPartiesAndClaims.INSTANCE.getCommonEvents().fireAddonRegisterEvent(serverAddonEventContext, serverData);
+		} finally {
+			serverData.getPlayerPermissionSystemManager().postRegister();
+			serverData.getPlayerPartySystemManager().postRegister();
+		}
 		serverData.getPlayerPartySystemManager().updatePrimarySystem(ServerConfig.CONFIG.primaryPartySystem.get());
+		playerClaimInfoManagerIO.load();
+		serverData.getForceLoadManager().setLoaded();
+		serverData.getPlayerPermissionSystemManager().updateUsedSystem(ServerConfig.CONFIG.permissionSystem.get());
 	}
 	
 }

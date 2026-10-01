@@ -1,6 +1,6 @@
 /*
  * Open Parties and Claims - adds chunk claims and player parties to Minecraft
- * Copyright (C) 2023-2025, Xaero <xaero1996@gmail.com> and contributors
+ * Copyright (C) 2023-2026, Xaero <xaero1996@gmail.com> and contributors
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of version 3 of the GNU Lesser General Public License
@@ -18,10 +18,8 @@
 
 package xaero.pac.common.mods;
 
-import xaero.pac.common.server.parties.system.api.IPlayerPartySystemAPI;
+import xaero.pac.common.server.parties.system.api.v2.IPlayerPartySystemAPI;
 import xaero.pac.common.server.parties.system.impl.PlayerFTBPartySystem;
-import xaero.pac.common.server.player.permission.api.IPlayerPermissionSystemAPI;
-import xaero.pac.common.server.player.permission.impl.PlayerFTBPermissionSystem;
 
 public class FTBTeams {
 

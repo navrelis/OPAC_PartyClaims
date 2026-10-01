@@ -1,6 +1,6 @@
 /*
  * Open Parties and Claims - adds chunk claims and player parties to Minecraft
- * Copyright (C) 2022-2025, Xaero <xaero1996@gmail.com> and contributors
+ * Copyright (C) 2022-2026, Xaero <xaero1996@gmail.com> and contributors
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of version 3 of the GNU Lesser General Public License
@@ -24,7 +24,7 @@ import net.minecraft.commands.Commands;
 
 public class CommonCommandRegister {
 
-	public static final String COMMAND_PREFIX = "openpac";
+	public static final String COMMAND_PREFIX = "opac";
 	
 	public void register(CommandDispatcher<CommandSourceStack> dispatcher, Commands.CommandSelection environment) {
 		new ConfigGetOrHelpCommand().register(dispatcher, environment);
@@ -32,6 +32,13 @@ public class CommonCommandRegister {
 		new ConfigSubCreateCommand().register(dispatcher, environment);
 		new ConfigSubDeleteCommand().register(dispatcher, environment);
 		new ConfigSubListCommand().register(dispatcher, environment);
+		new ConfigGroupCreateCommand().register(dispatcher, environment);
+		new ConfigGroupDeleteCommand().register(dispatcher, environment);
+		new ConfigGroupDeleteConfirmCommand().register(dispatcher, environment);
+		new ConfigGroupIncludeGroupCommand().register(dispatcher, environment);
+		new ConfigGroupIncludePlayerCommand().register(dispatcher, environment);
+		new ConfigGroupExcludeGroupCommand().register(dispatcher, environment);
+		new ConfigGroupExcludePlayerCommand().register(dispatcher, environment);
 	}
 
 }

@@ -1,6 +1,6 @@
 /*
  * Open Parties and Claims - adds chunk claims and player parties to Minecraft
- * Copyright (C) 2022-2025, Xaero <xaero1996@gmail.com> and contributors
+ * Copyright (C) 2022-2026, Xaero <xaero1996@gmail.com> and contributors
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of version 3 of the GNU Lesser General Public License
@@ -23,6 +23,7 @@ import com.mojang.brigadier.Command;
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.arguments.IntegerArgumentType;
 import com.mojang.brigadier.builder.LiteralArgumentBuilder;
+import com.mojang.brigadier.exceptions.CommandSyntaxException;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
 import net.minecraft.commands.arguments.GameProfileArgument;
@@ -41,11 +42,11 @@ import xaero.pac.common.server.ServerData;
 import xaero.pac.common.server.claims.IServerClaimsManager;
 import xaero.pac.common.server.claims.IServerDimensionClaimsManager;
 import xaero.pac.common.server.claims.IServerRegionClaims;
-import xaero.pac.common.server.claims.command.ClaimsClaimCommands;
 import xaero.pac.common.server.claims.player.IServerPlayerClaimInfo;
 import xaero.pac.common.server.parties.party.IServerParty;
 import xaero.pac.common.server.player.config.PlayerConfig;
 import xaero.pac.common.server.player.config.api.PlayerConfigType;
+import xaero.pac.common.server.player.config.util.ServerPlayerConfigUtils;
 import xaero.pac.common.server.player.localization.AdaptiveLocalizer;
 
 import java.util.List;
@@ -57,26 +58,25 @@ import static xaero.pac.common.server.command.ConfigCommandUtil.getConfigInputPl
 public class ConfigSubListCommand {
 
 	public void register(CommandDispatcher<CommandSourceStack> dispatcher, Commands.CommandSelection environment) {
+		for (PlayerConfigType configType : PlayerConfigType.values()) {
+			if(!configType.supportsSubConfigs())
+				continue;
+			Predicate<CommandSourceStack> requirement = configType.getReadCommandRequirement();
+			Command<CommandSourceStack> executor = getExecutor(configType);
+			LiteralArgumentBuilder<CommandSourceStack> command = Commands.literal(CommonCommandRegister.COMMAND_PREFIX)
+					.then(Commands.literal(configType.getCommandPrefix())
+					.requires(requirement)
+					.then(getMainCommandPart(executor)));
+			dispatcher.register(command);
+		}
+
 		Command<CommandSourceStack> regularExecutor = getExecutor(PlayerConfigType.PLAYER);
-		Command<CommandSourceStack> serverExecutor = getExecutor(PlayerConfigType.SERVER);
-
-		Predicate<CommandSourceStack> serverRequirement = ClaimsClaimCommands.getServerClaimCommandRequirement();
-
 		LiteralArgumentBuilder<CommandSourceStack> command = Commands.literal(CommonCommandRegister.COMMAND_PREFIX)
-				.then(Commands.literal("player-config")
-				.then(getMainCommandPart(regularExecutor)));
-		dispatcher.register(command);
-
-		command = Commands.literal(CommonCommandRegister.COMMAND_PREFIX).then(Commands.literal("player-config")
+				.then(Commands.literal(PlayerConfigType.PLAYER.getCommandPrefix())
 				.then(Commands.literal("for")
 				.requires(sourceStack -> sourceStack.hasPermission(2))
 				.then(Commands.argument("player", GameProfileArgument.gameProfile())
 				.then(getMainCommandPart(regularExecutor)))));
-		dispatcher.register(command);
-
-		command = Commands.literal(CommonCommandRegister.COMMAND_PREFIX).then(Commands.literal("server-claims-config")
-				.requires(serverRequirement)
-				.then(getMainCommandPart(serverExecutor)));
 		dispatcher.register(command);
 	}
 
@@ -89,13 +89,17 @@ public class ConfigSubListCommand {
 
 	private static Command<CommandSourceStack> getExecutor(PlayerConfigType type){
 		return context -> {
-			ServerPlayer sourcePlayer = context.getSource().getPlayerOrException();
+			ServerPlayer sourcePlayer = null;
+			try {
+				sourcePlayer = context.getSource().getPlayerOrException();
+			} catch(CommandSyntaxException cse){
+			}
 			MinecraftServer server = context.getSource().getServer();
 			IServerData<IServerClaimsManager<IPlayerChunkClaim, IServerPlayerClaimInfo<IPlayerDimensionClaims<IPlayerClaimPosList>>, IServerDimensionClaimsManager<IServerRegionClaims>>, IServerParty<IPartyMember, IPartyPlayerInfo, IPartyAlly>> serverData = ServerData.from(server);
 			AdaptiveLocalizer adaptiveLocalizer = serverData.getAdaptiveLocalizer();
 
 			GameProfile inputPlayer;
-			UUID configPlayerUUID;
+			UUID configPlayerUUID = null;
 			if(type == PlayerConfigType.PLAYER) {
 				inputPlayer = getConfigInputPlayer(context, sourcePlayer,
 						"gui.xaero_pac_config_sub_list_too_many_targets",
@@ -103,11 +107,17 @@ public class ConfigSubListCommand {
 				if(inputPlayer == null)
 					return 0;
 				configPlayerUUID = inputPlayer.getId();
-			} else
-				configPlayerUUID = PlayerConfig.SERVER_CLAIM_UUID;
+			}
 
-
-			PlayerConfig<?> playerConfig = (PlayerConfig<?>) serverData.getPlayerConfigs().getLoadedConfig(configPlayerUUID);
+			UUID callerId = sourcePlayer == null ? PlayerConfig.SERVER_CLAIM_UUID : sourcePlayer.getUUID();
+			PlayerConfig<?> playerConfig = (PlayerConfig<?>) ServerPlayerConfigUtils.getTargetConfig(
+					configPlayerUUID, callerId, type, serverData.getPlayerConfigManager()
+			);
+			if(playerConfig == null) {
+				context.getSource().sendFailure(adaptiveLocalizer.getFor(sourcePlayer, "gui.xaero_pac_config_option_invalid_config"));
+				return 0;
+			}
+			configPlayerUUID = playerConfig.getPlayerId();
 
 			List<String> subConfigIds =  playerConfig.getSubConfigIds();
 			int startAt = IntegerArgumentType.getInteger(context, "start-at");
@@ -126,7 +136,7 @@ public class ConfigSubListCommand {
 			}
 			if(endAt < subConfigIds.size())
 				listMessage.getSiblings().add(adaptiveLocalizer.getFor(sourcePlayer, "gui.xaero_pac_config_sub_list_there_is_more"));
-			sourcePlayer.sendSystemMessage(listMessage);
+			context.getSource().sendSuccess(() -> listMessage, true);
 			return 1;
 		};
 	}

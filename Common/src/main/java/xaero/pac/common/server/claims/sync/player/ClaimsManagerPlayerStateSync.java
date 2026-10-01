@@ -1,6 +1,6 @@
 /*
  * Open Parties and Claims - adds chunk claims and player parties to Minecraft
- * Copyright (C) 2022-2025, Xaero <xaero1996@gmail.com> and contributors
+ * Copyright (C) 2022-2026, Xaero <xaero1996@gmail.com> and contributors
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of version 3 of the GNU Lesser General Public License
@@ -65,9 +65,17 @@ public final class ClaimsManagerPlayerStateSync extends ClaimsManagerPlayerLazyP
 		if(packetBuilder == null)
 			packetBuilder = startClaimStateSync();
 		int canSync = limit;
+		UUID partyOwner = null;
+		if(ServerConfig.CONFIG.partyOwnedClaims.get())
+			partyOwner = serverData.getPlayerPartySystemManager().getPrimaryPartyOwnerByMember(player.getUUID());
 		while(iterator != null && iterator.hasNext() && canSync > 0){
 			PlayerChunkClaim state = iterator.next().getState();
-			if(!ownedOnly || state.getPlayerId().equals(playerId) || state.getPlayerId().equals(PlayerConfig.SERVER_CLAIM_UUID)) {
+			if(
+					!ownedOnly ||
+					state.getPlayerId().equals(playerId) ||
+					state.getPlayerId().equals(partyOwner) ||
+					state.getPlayerId().equals(PlayerConfig.SERVER_CLAIM_UUID)
+			) {
 				continueClaimStateSync(packetBuilder, state, player);
 				canSync -= 2;
 			}

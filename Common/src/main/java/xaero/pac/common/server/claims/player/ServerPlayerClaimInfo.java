@@ -1,6 +1,6 @@
 /*
  * Open Parties and Claims - adds chunk claims and player parties to Minecraft
- * Copyright (C) 2022-2025, Xaero <xaero1996@gmail.com> and contributors
+ * Copyright (C) 2022-2026, Xaero <xaero1996@gmail.com> and contributors
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of version 3 of the GNU Lesser General Public License
@@ -18,32 +18,29 @@
 
 package xaero.pac.common.server.claims.player;
 
+import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
-import xaero.pac.common.claims.player.*;
-import xaero.pac.common.parties.party.IPartyPlayerInfo;
-import xaero.pac.common.parties.party.ally.IPartyAlly;
-import xaero.pac.common.parties.party.member.IPartyMember;
+import xaero.pac.common.claims.ClaimLocation;
+import xaero.pac.common.claims.player.PlayerChunkClaim;
+import xaero.pac.common.claims.player.PlayerClaimInfo;
+import xaero.pac.common.claims.player.PlayerDimensionClaims;
 import xaero.pac.common.server.IServerData;
-import xaero.pac.common.server.claims.IServerClaimsManager;
-import xaero.pac.common.server.claims.IServerDimensionClaimsManager;
-import xaero.pac.common.server.claims.IServerRegionClaims;
+import xaero.pac.common.server.claims.player.task.PlayerAreaClaimActionSpreadoutTask;
 import xaero.pac.common.server.claims.player.task.PlayerClaimReplaceSpreadoutTask;
 import xaero.pac.common.server.config.ServerConfig;
 import xaero.pac.common.server.expiration.ObjectManagerIOExpirableObject;
 import xaero.pac.common.server.info.ServerInfo;
-import xaero.pac.common.server.parties.party.IServerParty;
+import xaero.pac.common.server.parties.system.api.v2.IPlayerPartySystemAPI;
 import xaero.pac.common.server.player.config.IPlayerConfig;
 import xaero.pac.common.server.player.config.IPlayerConfigManager;
 import xaero.pac.common.server.player.config.PlayerConfig;
-import xaero.pac.common.server.player.config.api.PlayerConfigOptions;
+import xaero.pac.common.server.player.config.api.PlayerConfigType;
+import xaero.pac.common.server.player.config.api.v2.PlayerConfigOptions;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
-import java.util.Deque;
-import java.util.Map;
+import java.util.*;
 import java.util.Map.Entry;
-import java.util.Objects;
-import java.util.UUID;
 import java.util.stream.Stream;
 
 public final class ServerPlayerClaimInfo extends PlayerClaimInfo<ServerPlayerClaimInfo, ServerPlayerClaimInfoManager> implements IServerPlayerClaimInfo<PlayerDimensionClaims>, ObjectManagerIOExpirableObject {
@@ -53,12 +50,23 @@ public final class ServerPlayerClaimInfo extends PlayerClaimInfo<ServerPlayerCla
 	protected boolean beenUsed;
 	private long registeredActivity;
 	private boolean replacementInProgress;
+	private final Deque<PlayerAreaClaimActionSpreadoutTask> areaClaimActionTaskQueue;
 	private final Deque<PlayerClaimReplaceSpreadoutTask> replaceTaskQueue;
+	private boolean transferInProgress;
+	private PlayerAreaClaimActionSpreadoutTask areaClaimTaskInProgress;
+
+	private Component lastPartyNameSynced;
+	private boolean lastPartyOwnedSynced;
+	private long partyNameSyncedTime;
+	private long lastAllowedClaimAccessOverLimitTime;
 
 	public ServerPlayerClaimInfo(IPlayerConfig playerConfig, String username, UUID playerId, Map<ResourceLocation, PlayerDimensionClaims> claims,
-								 ServerPlayerClaimInfoManager manager, Deque<PlayerClaimReplaceSpreadoutTask> replaceSpreadoutTasks) {
+	                             ServerPlayerClaimInfoManager manager, Deque<PlayerAreaClaimActionSpreadoutTask> areaClaimActionTaskQueue,
+								 Deque<PlayerClaimReplaceSpreadoutTask> replaceSpreadoutTasks
+	) {
 		super(username, playerId, claims, manager);
 		this.playerConfig = playerConfig;
+		this.areaClaimActionTaskQueue = areaClaimActionTaskQueue;
 		this.replaceTaskQueue = replaceSpreadoutTasks;
 		if(manager.getExpirationHandler() != null)
 			this.registeredActivity = manager.getExpirationHandler().getServerInfo().getTotalUseTime();
@@ -68,7 +76,7 @@ public final class ServerPlayerClaimInfo extends PlayerClaimInfo<ServerPlayerCla
 	public void onClaim(IPlayerConfigManager configManager, ResourceLocation dimension, PlayerChunkClaim claim, int x, int z) {
 		super.onClaim(configManager, dimension, claim, x, z);
 		if(claim.isForceloadable())
-			manager.getTicketManager().addTicket(configManager, dimension, playerId, x, z);
+			manager.getTicketManager().addTicket(dimension, playerId, x, z);
 		setDirty(true);
 		beenUsed = true;
 		if(manager.isLoaded())
@@ -79,7 +87,7 @@ public final class ServerPlayerClaimInfo extends PlayerClaimInfo<ServerPlayerCla
 	public void onUnclaim(IPlayerConfigManager configManager, ResourceLocation dimension, PlayerChunkClaim claim, int x, int z) {
 		super.onUnclaim(configManager, dimension, claim, x, z);
 		if(claim.isForceloadable())
-			manager.getTicketManager().removeTicket(configManager, dimension, playerId, x, z);
+			manager.getTicketManager().removeTicket(dimension, playerId, x, z);
 		setDirty(true);
 		beenUsed = true;
 		if(manager.isLoaded())
@@ -96,7 +104,7 @@ public final class ServerPlayerClaimInfo extends PlayerClaimInfo<ServerPlayerCla
 		if(dirty && !manager.isLoaded())
 			return;
 		if(!this.dirty && dirty)
-			manager.addToSave(this);
+			manager.getToSave().add(this);
 		this.dirty = dirty;
 		
 	}
@@ -105,16 +113,54 @@ public final class ServerPlayerClaimInfo extends PlayerClaimInfo<ServerPlayerCla
 	public String getFileName() {
 		return playerId.toString();
 	}
+
+	public Component fetchPartyName(){
+		if(playerConfig.getType() != PlayerConfigType.PLAYER || !ServerConfig.CONFIG.partyOwnedClaims.get())
+			return null;
+		return manager.getClaimsManager().getPartySystemManager().getPrimaryPartyNameByOwner(playerId);
+	}
+
+	public Component getPartyNameForSync(){
+		if(partyNameSyncedTime == 0){
+			partyNameSyncedTime = System.currentTimeMillis();
+			lastPartyNameSynced = fetchPartyName();
+			lastPartyOwnedSynced = isPartyOwned();
+		}
+		return lastPartyNameSynced;
+	}
 	
 	@Override
 	public void setPlayerUsername(String playerUsername) {
 		boolean changed = !Objects.equals(getPlayerUsername(), playerUsername);
 		super.setPlayerUsername(playerUsername);
-		if(changed) {
-			if(beenUsed)
-				setDirty(true);
-			manager.getClaimsManager().getClaimsManagerSynchronizer().syncToPlayersClaimOwnerPropertiesUpdate(this);
-		}
+		if(!changed)
+			return;
+		if(beenUsed)
+			setDirty(true);
+		if(!manager.isLoaded())
+			return;
+		partyNameSyncedTime = System.currentTimeMillis();
+		lastPartyNameSynced = fetchPartyName();
+		lastPartyOwnedSynced = isPartyOwned();
+		manager.getClaimsManager().getClaimsManagerSynchronizer().syncToPlayersClaimOwnerPropertiesUpdate(
+				this, lastPartyNameSynced, lastPartyOwnedSynced
+		);
+	}
+
+	@Override
+	public void resyncPartyName(IPlayerPartySystemAPI<?> partySystem) {
+		if(partySystem != manager.getClaimsManager().getPartySystemManager().getPrimarySystem())
+			return;
+		partyNameSyncedTime = System.currentTimeMillis();
+		Component partyName = fetchPartyName();
+		boolean partyOwned = isPartyOwned();
+		if(Objects.equals(partyName, lastPartyNameSynced) && partyOwned == lastPartyOwnedSynced)
+			return;
+		manager.getClaimsManager().getClaimsManagerSynchronizer().syncToPlayersClaimOwnerPropertiesUpdate(
+				this, partyName, partyOwned
+		);
+		lastPartyNameSynced = partyName;
+		lastPartyOwnedSynced = partyOwned;
 	}
 
 	@Override
@@ -182,7 +228,10 @@ public final class ServerPlayerClaimInfo extends PlayerClaimInfo<ServerPlayerCla
 		IPlayerConfig subConfig = playerConfig.getEffectiveSubConfig(subConfigIndex);
 		if(subConfig.getSubIndex() != subConfigIndex)
 			return null;
-		return subConfig.getRaw(PlayerConfigOptions.CLAIMS_COLOR);
+		return playerConfig.applyDefaultReplacer(
+				PlayerConfigOptions.CLAIMS_COLOR,
+				subConfig.getRaw(PlayerConfigOptions.CLAIMS_COLOR)
+		);
 	}
 
 	@Nullable
@@ -199,7 +248,10 @@ public final class ServerPlayerClaimInfo extends PlayerClaimInfo<ServerPlayerCla
 		IPlayerConfig subConfig = playerConfig.getSubConfig(subId);
 		if(subConfig == null)
 			return null;
-		return subConfig.getRaw(PlayerConfigOptions.CLAIMS_COLOR);
+		return playerConfig.applyDefaultReplacer(
+				PlayerConfigOptions.CLAIMS_COLOR,
+				subConfig.getRaw(PlayerConfigOptions.CLAIMS_COLOR)
+		);
 	}
 
 	@Override
@@ -218,7 +270,7 @@ public final class ServerPlayerClaimInfo extends PlayerClaimInfo<ServerPlayerCla
 	}
 
 	@Override
-	public void addReplacementTask(PlayerClaimReplaceSpreadoutTask task, IServerData<IServerClaimsManager<IPlayerChunkClaim, IServerPlayerClaimInfo<IPlayerDimensionClaims<IPlayerClaimPosList>>, IServerDimensionClaimsManager<IServerRegionClaims>>, IServerParty<IPartyMember, IPartyPlayerInfo, IPartyAlly>> serverData){
+	public void addReplacementTask(PlayerClaimReplaceSpreadoutTask task, IServerData<?, ?> serverData){
 		if(!replacementInProgress)
 			manager.getClaimsManager().getClaimReplaceTaskHandler().addTask(task, serverData);
 		else
@@ -231,8 +283,99 @@ public final class ServerPlayerClaimInfo extends PlayerClaimInfo<ServerPlayerCla
 	}
 
 	@Override
+	public boolean hasAreaClaimActionTasks() {
+		return areaClaimTaskInProgress != null || !areaClaimActionTaskQueue.isEmpty();
+	}
+
+	@Override
+	public void addAreaClaimActionTask(PlayerAreaClaimActionSpreadoutTask task, IServerData<?, ?> serverData) {
+		if(areaClaimTaskInProgress == null)
+			manager.getClaimsManager().getAreaClaimActionTaskHandler().addTask(task, serverData);
+		else
+			areaClaimActionTaskQueue.add(task);
+	}
+
+	@Override
+	public PlayerAreaClaimActionSpreadoutTask removeNextAreaClaimActionTask() {
+		return areaClaimActionTaskQueue.removeFirst();
+	}
+
+	@Override
+	public void stopAllAreaClaimActionTasks(IServerData<?, ?> serverData) {
+		if(areaClaimTaskInProgress != null)
+			areaClaimTaskInProgress.interrupt(serverData);
+		areaClaimActionTaskQueue.forEach(task -> task.interrupt(serverData));
+		areaClaimActionTaskQueue.clear();
+	}
+
+	@Override
 	public IPlayerConfig getConfig() {
 		return playerConfig;
+	}
+
+	public Component getLastPartyNameSynced() {
+		return lastPartyNameSynced;
+	}
+
+	@Override
+	public long getPartyNameSyncedTime() {
+		return partyNameSyncedTime;
+	}
+
+	@Override
+	public boolean isPartyOwned() {
+		if(playerConfig.getType() != PlayerConfigType.PLAYER || !ServerConfig.CONFIG.partyOwnedClaims.get())
+			return false;
+		return manager.getClaimsManager().getPartySystemManager().isPrimaryPartyOwner(playerId);
+	}
+
+	@Override
+	public void setLastAllowedClaimAccessOverLimitTime(long lastAllowedClaimAccessOverLimitTime) {
+		this.lastAllowedClaimAccessOverLimitTime = lastAllowedClaimAccessOverLimitTime;
+	}
+
+	@Override
+	public long getLastAllowedClaimAccessOverLimitTime() {
+		return lastAllowedClaimAccessOverLimitTime;
+	}
+
+	@Override
+	public boolean isTransferInProgress() {
+		return transferInProgress;
+	}
+
+	@Override
+	public void setTransferInProgress(boolean transferInProgress) {
+		this.transferInProgress = transferInProgress;
+	}
+
+	@Override
+	public boolean isAreaClaimTaskInProgress() {
+		return areaClaimTaskInProgress != null;
+	}
+
+	@Override
+	public void setAreaClaimTaskInProgress(PlayerAreaClaimActionSpreadoutTask task) {
+		this.areaClaimTaskInProgress = task;
+	}
+
+	@Override
+	public ClaimLocation getRandomClaimPos(boolean firstPosIfTooMany) {
+		int totalCount = getClaimCount();
+		if(totalCount == 0)
+			return null;
+		int randomClaimIndex = (int) (Math.random() * totalCount);
+		int offset = 0;
+		List<Entry<ResourceLocation, PlayerDimensionClaims>> dimensions = getTypedStream().toList();
+		for (Entry<ResourceLocation, PlayerDimensionClaims> entry : dimensions) {
+			PlayerDimensionClaims dimension = entry.getValue();
+			if(randomClaimIndex >= offset + dimension.getCount()){
+				offset += dimension.getCount();
+				continue;
+			}
+			return dimension.getRandomClaimPos(firstPosIfTooMany);
+		}
+		return null;
 	}
 
 }

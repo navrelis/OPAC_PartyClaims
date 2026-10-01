@@ -1,6 +1,6 @@
 /*
  * Open Parties and Claims - adds chunk claims and player parties to Minecraft
- * Copyright (C) 2022-2025, Xaero <xaero1996@gmail.com> and contributors
+ * Copyright (C) 2022-2026, Xaero <xaero1996@gmail.com> and contributors
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of version 3 of the GNU Lesser General Public License
@@ -40,15 +40,19 @@ import xaero.pac.common.server.claims.IServerClaimsManager;
 import xaero.pac.common.server.claims.IServerDimensionClaimsManager;
 import xaero.pac.common.server.claims.IServerRegionClaims;
 import xaero.pac.common.server.claims.player.IServerPlayerClaimInfo;
+import xaero.pac.common.server.config.ServerConfig;
 import xaero.pac.common.server.parties.party.IServerParty;
 import xaero.pac.common.server.player.config.IPlayerConfig;
 import xaero.pac.common.server.player.config.PlayerConfig;
 import xaero.pac.common.server.player.config.api.PlayerConfigType;
+import xaero.pac.common.server.player.config.util.ServerPlayerConfigUtils;
 import xaero.pac.common.server.player.localization.AdaptiveLocalizer;
 
 import java.util.Collection;
 import java.util.List;
 import java.util.UUID;
+import java.util.function.BiFunction;
+import java.util.function.Predicate;
 import java.util.stream.Stream;
 
 public class ConfigCommandUtil {
@@ -63,48 +67,107 @@ public class ConfigCommandUtil {
 		return effectivePlayerConfig;
 	}
 
-	public static GameProfile getConfigInputPlayer(CommandContext<CommandSourceStack> context, ServerPlayer sourcePlayer, String tooManyTargetMessage, String invalidTargetMessage, AdaptiveLocalizer adaptiveLocalizer) throws CommandSyntaxException {
+	public static GameProfile getConfigInputPlayer(
+			CommandContext<CommandSourceStack> context,
+			ServerPlayer sourcePlayer,
+			String tooManyTargetMessage,
+			String invalidTargetMessage,
+			AdaptiveLocalizer adaptiveLocalizer
+	) throws CommandSyntaxException {
 		GameProfile inputPlayer;
 		try {
 			Collection<GameProfile> profiles = GameProfileArgument.getGameProfiles(context, "player");
 			if(profiles.size() > 1) {
-				if(tooManyTargetMessage != null)
+				if(adaptiveLocalizer != null && tooManyTargetMessage != null)
 					context.getSource().sendFailure(adaptiveLocalizer.getFor(sourcePlayer, tooManyTargetMessage));
 				return null;
 			} else if(profiles.isEmpty()) {
-				if(invalidTargetMessage != null)
+				if(adaptiveLocalizer != null && invalidTargetMessage != null)
 					context.getSource().sendFailure(adaptiveLocalizer.getFor(sourcePlayer, invalidTargetMessage));
 				return null;
 			}
 			inputPlayer = profiles.iterator().next();
 		} catch(IllegalArgumentException e) {
+			if(sourcePlayer == null)
+				return PlayerConfig.SERVER_CLAIM_PROFILE;
 			inputPlayer = sourcePlayer.getGameProfile();
 		}
 		return inputPlayer;
 	}
 
-	public static SuggestionProvider<CommandSourceStack> getSubConfigSuggestionProvider(PlayerConfigType type){
+	public static SuggestionProvider<CommandSourceStack> getSubConfigSuggestionProvider(PlayerConfigType type, BiFunction<CommandContext<CommandSourceStack>, IServerData<?,?>, UUID> inputPlayerSupplier, boolean wordSubId){
 		return (context, builder) -> {
-			ServerPlayer sourcePlayer = context.getSource().getPlayerOrException();
-			MinecraftServer server = sourcePlayer.getServer();
+			ServerPlayer sourcePlayer = null;
+			try {
+				sourcePlayer = context.getSource().getPlayerOrException();
+			} catch (CommandSyntaxException e) {
+			}
+			MinecraftServer server = context.getSource().getServer();
 			IServerData<IServerClaimsManager<IPlayerChunkClaim, IServerPlayerClaimInfo<IPlayerDimensionClaims<IPlayerClaimPosList>>, IServerDimensionClaimsManager<IServerRegionClaims>>, IServerParty<IPartyMember, IPartyPlayerInfo, IPartyAlly>> serverData = ServerData.from(server);
 			AdaptiveLocalizer adaptiveLocalizer = serverData.getAdaptiveLocalizer();
-			UUID configOwnerId;
-			if(type != PlayerConfigType.SERVER) {
-				GameProfile gameProfile = getConfigInputPlayer(context, sourcePlayer, null, null, adaptiveLocalizer);
-				if (gameProfile == null)
+			UUID configOwnerId = sourcePlayer == null ? PlayerConfig.SERVER_CLAIM_UUID : sourcePlayer.getUUID();
+			if(!type.isGlobal()) {
+				if(inputPlayerSupplier != null)
+					configOwnerId = inputPlayerSupplier.apply(context, serverData);
+				else {
+					GameProfile gameProfile = getConfigInputPlayer(context, sourcePlayer, null, null, adaptiveLocalizer);
+					configOwnerId = gameProfile != null ? gameProfile.getId() : null;
+				}
+				if(configOwnerId == null)
 					return SharedSuggestionProvider.suggest(Stream.empty(), builder);
-				configOwnerId = gameProfile.getId();
-			} else
-				configOwnerId = PlayerConfig.SERVER_CLAIM_UUID;
+			}
 			String lowerCaseInput = builder.getRemainingLowerCase();
-			IPlayerConfig playerConfig = serverData.getPlayerConfigs().getLoadedConfig(configOwnerId);
+			IPlayerConfig playerConfig = ServerPlayerConfigUtils.getTargetConfig(
+					configOwnerId, configOwnerId, type, serverData.getPlayerConfigManager()
+			);
+			if(playerConfig == null)
+				return SharedSuggestionProvider.suggest(Stream.empty(), builder);
 			List<String> subConfigIds = playerConfig.getSubConfigIds();
 			Stream<String> baseStream = subConfigIds.stream();
+			if(!wordSubId)
+				baseStream = baseStream.map(s -> "\"" + s + "\"");
 			if(!lowerCaseInput.isEmpty())
 				baseStream = baseStream.filter(s -> s.toLowerCase().startsWith(lowerCaseInput));
 			return SharedSuggestionProvider.suggest(baseStream.limit(64), builder);
 		};
+	}
+
+	public static SuggestionProvider<CommandSourceStack> getSubConfigSuggestionProvider(PlayerConfigType type){
+		return getSubConfigSuggestionProvider(type, null, !type.hasDimensionSubConfigs());
+	}
+
+	public static Predicate<CommandSourceStack> getPartyClaimsRequirement(boolean edit){
+		return CommandRequirementHelper.onServerThread(sourceStack -> {
+			if(!ServerConfig.CONFIG.claimsEnabled.get())
+				return false;
+			if(!ServerConfig.CONFIG.partyOwnedClaims.get())
+				return false;
+			ServerPlayer sourcePlayer = null;
+			try {
+				sourcePlayer = sourceStack.getPlayerOrException();
+			} catch (CommandSyntaxException e) {
+			}
+			UUID sourcePlayerId = sourcePlayer == null ? PlayerConfig.SERVER_CLAIM_UUID : sourcePlayer.getUUID();
+			MinecraftServer server = sourceStack.getServer();
+			IServerData<
+					IServerClaimsManager<
+							IPlayerChunkClaim,
+							IServerPlayerClaimInfo<IPlayerDimensionClaims<IPlayerClaimPosList>>,
+							IServerDimensionClaimsManager<IServerRegionClaims>
+							>,
+					IServerParty<IPartyMember, IPartyPlayerInfo, IPartyAlly>
+					> serverData = ServerData.from(server);
+			UUID partyConfigOwner = serverData.getPlayerPartySystemManager().getPrimaryPartyOwnerByMember(sourcePlayerId);
+			if(partyConfigOwner == null)//not in a party
+				return false;
+			if(!edit)
+				return true;
+			if(sourceStack.hasPermission(2))
+				return true;
+			if(sourcePlayerId.equals(partyConfigOwner))
+				return true;
+			return serverData.getPlayerPartySystemManager().canEditPartyConfig(sourcePlayerId);
+		});
 	}
 
 }

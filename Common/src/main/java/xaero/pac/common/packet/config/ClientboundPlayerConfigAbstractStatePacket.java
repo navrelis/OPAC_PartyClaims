@@ -1,6 +1,6 @@
 /*
  * Open Parties and Claims - adds chunk claims and player parties to Minecraft
- * Copyright (C) 2022-2025, Xaero <xaero1996@gmail.com> and contributors
+ * Copyright (C) 2022-2026, Xaero <xaero1996@gmail.com> and contributors
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of version 3 of the GNU Lesser General Public License
@@ -26,6 +26,7 @@ import xaero.pac.OpenPartiesAndClaims;
 import xaero.pac.client.player.config.IPlayerConfigClientStorage;
 import xaero.pac.client.player.config.IPlayerConfigClientStorageManager;
 import xaero.pac.client.player.config.IPlayerConfigStringableOptionClientStorage;
+import xaero.pac.client.player.config.util.ClientPlayerConfigUtils;
 import xaero.pac.common.server.player.config.PlayerConfig;
 import xaero.pac.common.server.player.config.api.PlayerConfigType;
 
@@ -125,15 +126,17 @@ public abstract class ClientboundPlayerConfigAbstractStatePacket extends PlayerC
 
 		@Override
 		public void accept(P t) {
+			if(t == null)
+				return;
 			IPlayerConfigClientStorageManager<IPlayerConfigClientStorage<IPlayerConfigStringableOptionClientStorage<?>>>
 					playerConfigStorageManager = OpenPartiesAndClaims.INSTANCE.getClientDataInternal().getPlayerConfigStorageManager();
-			IPlayerConfigClientStorage<IPlayerConfigStringableOptionClientStorage<?>> storage = PlayerConfigPacketUtil.getTargetConfig(t.isOtherPlayer(), t.getType(), playerConfigStorageManager);
-			if(storage == null)
+			IPlayerConfigClientStorage<IPlayerConfigStringableOptionClientStorage<?>> storage = ClientPlayerConfigUtils.getTargetConfig(t.isOtherPlayer(), t.getType(), playerConfigStorageManager);
+			if(!t.isOtherPlayer() && storage == null)
 				return;
 			String subId = t.getSubId();
 			if(subId.isEmpty() || !subId.equals(PlayerConfig.MAIN_SUB_ID) && !storage.subConfigExists(subId))
 				return;
-			storage = storage.getEffectiveSubConfig(subId);
+			storage = storage == null ? null : storage.getEffectiveSubConfig(subId);
 			accept(t, playerConfigStorageManager, storage);
 		}
 

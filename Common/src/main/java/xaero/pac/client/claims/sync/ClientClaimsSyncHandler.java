@@ -1,6 +1,6 @@
 /*
  * Open Parties and Claims - adds chunk claims and player parties to Minecraft
- * Copyright (C) 2022-2025, Xaero <xaero1996@gmail.com> and contributors
+ * Copyright (C) 2022-2026, Xaero <xaero1996@gmail.com> and contributors
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of version 3 of the GNU Lesser General Public License
@@ -21,16 +21,29 @@ package xaero.pac.client.claims.sync;
 import com.google.common.collect.Lists;
 import it.unimi.dsi.fastutil.objects.Object2IntMap;
 import it.unimi.dsi.fastutil.objects.Object2IntOpenHashMap;
+import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.util.BitStorage;
+import net.minecraft.world.level.ChunkPos;
 import xaero.pac.client.claims.ClientClaimsManager;
+import xaero.pac.client.claims.player.ClientPlayerClaimInfo;
+import xaero.pac.client.player.config.PlayerConfigClientStorage;
 import xaero.pac.common.claims.PlayerChunkClaimHolder;
 import xaero.pac.common.claims.player.PlayerChunkClaim;
+import xaero.pac.common.claims.player.impersonation.SimplePlayerClaimImpersonationInfo;
+import xaero.pac.common.claims.player.mode.ClaimingMode;
+import xaero.pac.common.claims.player.mode.ClaimingModeLimits;
+import xaero.pac.common.claims.player.mode.ClaimingModeSubInfo;
 import xaero.pac.common.claims.result.api.AreaClaimResult;
 import xaero.pac.common.claims.storage.RegionClaimsPaletteStorage;
+import xaero.pac.common.claims.tracker.ClaimsManagerTracker;
+import xaero.pac.common.server.player.config.PlayerConfigOptionSpec;
 
 import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Map;
 import java.util.UUID;
+import java.util.function.BiConsumer;
 
 public class ClientClaimsSyncHandler {
 	
@@ -47,12 +60,12 @@ public class ClientClaimsSyncHandler {
 		this.claimsManager = claimsManager;
 	}
 	
-	public void onPlayerInfo(UUID playerId, String username) {
-		claimsManager.getPlayerClaimInfoManager().updatePlayerInfo(playerId, username, claimsManager);
+	public void onPlayerInfo(UUID playerId, String username, Component partyName, boolean partyOwned) {
+		claimsManager.getPlayerClaimInfoManager().updatePlayerInfo(playerId, username, partyName, partyOwned);
 	}
 
 	public void onSubClaimInfo(UUID playerId, int subConfigIndex, String claimsName, Integer claimsColor) {
-		claimsManager.getPlayerClaimInfoManager().updateSubClaimInfo(playerId, subConfigIndex, claimsName, claimsColor, claimsManager);
+		claimsManager.getPlayerClaimInfoManager().updateSubClaimInfo(playerId, subConfigIndex, claimsName, claimsColor);
 	}
 	
 	public void onClaimState(PlayerChunkClaim claim) {
@@ -63,21 +76,20 @@ public class ClientClaimsSyncHandler {
 		claimsManager.setLoading(start);
 	}
 	
-	public void onClaimLimits(int loadingClaimCount, int loadingForceloadCount, int claimLimit,
-			int forceloadLimit, int maxClaimDistance, boolean alwaysUseLoadingValues) {
-		claimsManager.setLoadingClaimCount(loadingClaimCount);
-		claimsManager.setLoadingForceloadCount(loadingForceloadCount);
-		claimsManager.setClaimLimit(claimLimit);
-		claimsManager.setForceloadLimit(forceloadLimit);
+	public void onClaimLimits(
+			Collection<ClaimingModeLimits> limits,
+			int maxClaimDistance,
+			boolean alwaysUseLoadingValues
+	) {
+		for (ClaimingModeLimits modeLimit : limits)
+			claimsManager.updateLimits(modeLimit);
 		claimsManager.setMaxClaimDistance(maxClaimDistance);
 		claimsManager.setAlwaysUseLoadingValues(alwaysUseLoadingValues);
 	}
 
-	public void onSubConfigIndices(int currentSubConfigIndex, int currentServerSubConfigIndex, String currentSubConfigId, String currentServerSubConfigId){
-		claimsManager.setCurrentSubConfigIndex(currentSubConfigIndex);
-		claimsManager.setCurrentServerSubConfigIndex(currentServerSubConfigIndex);
-		claimsManager.setCurrentSubConfigId(currentSubConfigId);
-		claimsManager.setCurrentServerSubConfigId(currentServerSubConfigId);
+	public void onSubConfigIndices(Collection<ClaimingModeSubInfo> subInfoCollection){
+		for (ClaimingModeSubInfo subInfo : subInfoCollection)
+			claimsManager.updateSubInfo(subInfo);
 	}
 
 	public void onDimension(ResourceLocation dim) {
@@ -135,9 +147,16 @@ public class ClientClaimsSyncHandler {
 		claimsManager.getClaimResultTracker().onClaimResult(result);
 	}
 
-	public void onClaimModes(boolean adminMode, boolean serverMode) {
+	public void onClaimModes(
+			boolean moderatorMode,
+			boolean adminMode,
+			ClaimingMode claimingMode,
+			SimplePlayerClaimImpersonationInfo playerImpersonation
+	) {
+		claimsManager.setModeratorMode(moderatorMode);
 		claimsManager.setAdminMode(adminMode);
-		claimsManager.setServerMode(serverMode);
+		claimsManager.setClaimingMode(claimingMode);
+		claimsManager.setPlayerImpersonationInfo(playerImpersonation);
 	}
 
 	public void onClaimStateRemoved(int syncIndex) {
@@ -150,10 +169,49 @@ public class ClientClaimsSyncHandler {
 		claimsManager.removeSubClaim(playerId, subConfigIndex);
 	}
 
+	public void onPartyGeneral(boolean partyOwnedClaims, UUID partyOwnerId) {
+		claimsManager.setPartyOwnedClaims(partyOwnedClaims);
+		claimsManager.setCurrentPartyOwner(partyOwnerId);
+	}
+
 	public void reset(){
 		dimensionSyncing = null;
 		lastClaimUpdateState = null;
 		lastClaimUpdateDimension = null;
+	}
+
+	public void onClaimsReset(boolean notifyTracker) {
+		claimsManager.reset(notifyTracker);
+	}
+
+	public void onDimensionSubConfigVisualChange(
+			PlayerConfigClientStorage updatedSubConfig,
+			PlayerConfigOptionSpec<?> option
+	) {
+		if(updatedSubConfig.getOwner() == null)//wilderness is not "visible" anyway
+			return;
+		PlayerConfigClientStorage rootConfig = updatedSubConfig.getMain();
+		ClientPlayerClaimInfo playerClaimInfo = claimsManager.getPlayerInfo(updatedSubConfig.getOwner());
+		boolean notManyClaims = playerClaimInfo.getClaimCount() < 1024;
+		ClaimsManagerTracker tracker = claimsManager.getTracker();
+		playerClaimInfo.getTypedStream().map(Map.Entry::getValue).forEach(dim -> {
+			ResourceLocation dimensionId = dim.getDimension();
+			String dimensionIdString = dimensionId.toString();
+			PlayerConfigClientStorage dimSubConfig = dimensionIdString.equals(updatedSubConfig.getSubId()) ? updatedSubConfig ://for when it's already been deleted
+					rootConfig.getEffectiveSubConfig(dimensionIdString);
+			if(dimSubConfig != updatedSubConfig &&
+					(updatedSubConfig != rootConfig || option != null && dimSubConfig.getOption(option).getValue() != null))
+				return;
+			if(notManyClaims) {
+				BiConsumer<PlayerChunkClaim, ChunkPos> claimConsumer = (state, pos) ->
+						tracker.onChunkChange(dimensionId, pos.x, pos.z, state);
+				dim.getTypedStream().forEach(posList -> {
+					PlayerChunkClaim state = posList.getClaimState();
+					posList.getStream().forEach(pos -> claimConsumer.accept(state, pos));
+				});
+			} else
+				tracker.onDimensionChange(dimensionId);
+		});
 	}
 
 }

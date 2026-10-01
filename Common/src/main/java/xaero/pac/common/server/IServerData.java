@@ -1,6 +1,6 @@
 /*
  * Open Parties and Claims - adds chunk claims and player parties to Minecraft
- * Copyright (C) 2022-2025, Xaero <xaero1996@gmail.com> and contributors
+ * Copyright (C) 2022-2026, Xaero <xaero1996@gmail.com> and contributors
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of version 3 of the GNU Lesser General Public License
@@ -22,6 +22,7 @@ import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.packs.resources.ResourceManager;
 import xaero.pac.common.server.claims.IServerClaimsManager;
 import xaero.pac.common.server.claims.forceload.ForceLoadTicketManager;
+import xaero.pac.common.server.claims.player.ServerPlayerClaimPartyUpdater;
 import xaero.pac.common.server.claims.player.expiration.ServerPlayerClaimsExpirationHandler;
 import xaero.pac.common.server.claims.protection.ChunkProtection;
 import xaero.pac.common.server.expiration.task.ObjectExpirationCheckSpreadoutTask;
@@ -42,7 +43,9 @@ import xaero.pac.common.server.player.PlayerTickHandler;
 import xaero.pac.common.server.player.PlayerWorldJoinHandler;
 import xaero.pac.common.server.player.config.IPlayerConfigManager;
 import xaero.pac.common.server.player.config.io.PlayerConfigIO;
+import xaero.pac.common.server.player.config.permission.PlayerConfigPermissionUpdater;
 import xaero.pac.common.server.player.localization.AdaptiveLocalizer;
+import xaero.pac.common.server.player.party.PrimaryPartyOnlineCounter;
 import xaero.pac.common.server.player.permission.IPlayerPermissionSystemManager;
 import xaero.pac.common.server.player.permission.PlayerPermissionChangeHandler;
 import xaero.pac.common.server.task.ServerSpreadoutQueuedTaskHandler;
@@ -61,7 +64,7 @@ extends IServerDataAPI {
 	@Override
 	public CM getServerClaimsManager();
 	@Override
-	public IPlayerConfigManager getPlayerConfigs();
+	public IPlayerConfigManager getPlayerConfigManager();
 	@Override
 	public AdaptiveLocalizer getAdaptiveLocalizer();
 	@Override
@@ -78,6 +81,7 @@ extends IServerDataAPI {
 	public PartyExpirationHandler getPartyExpirationHandler();
 	public PartyManagerIO<?> getPartyManagerIO();
 	public PlayerConfigIO<P, CM> getPlayerConfigsIO();
+	public PlayerConfigPermissionUpdater getPlayerConfigPermissionUpdater();
 	public ObjectManagerLiveSaver getPartyLiveSaver();
 	public ObjectManagerLiveSaver getPlayerConfigLiveSaver();
 	public ObjectManagerLiveSaver getPlayerClaimInfoLiveSaver();
@@ -93,5 +97,7 @@ extends IServerDataAPI {
 	public IPlayerPartySystemManager getPlayerPartySystemManager();
 	public void onStop();
 	public void onServerResourcesReload(ResourceManager resourceManager);
+	public PrimaryPartyOnlineCounter getPrimaryPartyOnlineCounter();
+	public ServerPlayerClaimPartyUpdater getPlayerClaimPartyUpdater();
 
 }

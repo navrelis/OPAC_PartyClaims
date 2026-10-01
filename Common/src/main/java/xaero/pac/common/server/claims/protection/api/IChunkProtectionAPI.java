@@ -1,6 +1,6 @@
 /*
  * Open Parties and Claims - adds chunk claims and player parties to Minecraft
- * Copyright (C) 2022-2025, Xaero <xaero1996@gmail.com> and contributors
+ * Copyright (C) 2022-2026, Xaero <xaero1996@gmail.com> and contributors
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of version 3 of the GNU Lesser General Public License
@@ -20,21 +20,19 @@ package xaero.pac.common.server.claims.protection.api;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.item.ItemEntity;
-import net.minecraft.world.entity.projectile.Projectile;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.ChunkPos;
+import net.minecraft.world.level.block.state.BlockState;
 import xaero.pac.common.claims.player.api.IPlayerChunkClaimAPI;
-import xaero.pac.common.parties.party.IPartyPlayerInfo;
-import xaero.pac.common.parties.party.ally.IPartyAlly;
-import xaero.pac.common.parties.party.member.IPartyMember;
-import xaero.pac.common.server.IServerData;
-import xaero.pac.common.server.parties.party.IServerParty;
-import xaero.pac.common.server.player.config.api.IPlayerConfigAPI;
-import xaero.pac.common.server.player.config.api.IPlayerConfigOptionSpecAPI;
+import xaero.pac.common.server.player.config.api.v2.IPlayerConfigAPI;
+import xaero.pac.common.server.player.config.api.v2.IPlayerConfigOptionSpecAPI;
+import xaero.pac.common.server.player.config.backwards.v1.CompatPlayerConfig;
+import xaero.pac.common.server.player.config.backwards.v1.CompatPlayerConfigOptionSpec;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
@@ -98,6 +96,9 @@ public interface IChunkProtectionAPI {
 	/**
 	 * Checks whether a specified block placement should be protected against.
 	 * <p>
+	 * This version of the method is the equivalent of calling {@link #onEntityPlaceBlock(BlockState, Entity, ServerLevel, BlockPos)}
+	 * with null as the block state.
+	 * <p>
 	 * Whenever possible, use the built-in block placement event provided by Forge instead of this method,
 	 * unless it isn't specific enough, you're on Fabric, or the entity has a full protection pass
 	 * ({@link #giveFullPass(UUID)}).
@@ -108,6 +109,23 @@ public interface IChunkProtectionAPI {
 	 * @return true if the block placement should be protected against, otherwise false
 	 */
 	boolean onEntityPlaceBlock(@Nullable Entity entity, @Nonnull ServerLevel world, @Nonnull BlockPos pos);
+
+	/**
+	 * Checks whether a specified block placement should be protected against
+	 * <p>
+	 * This version of the method lets you specify the block state being placed.
+	 * <p>
+	 * Whenever possible, use the built-in block placement event provided by Forge instead of this method,
+	 * unless it isn't specific enough, you're on Fabric, or the entity has a full protection pass
+	 * ({@link #giveFullPass(UUID)}).
+	 *
+	 * @param blockState  the block state being placed, can be null to ignore block-state-specific behavior
+	 * @param entity  the entity to place the block, can be null
+	 * @param world  the world to place the block in, not null
+	 * @param pos  the block position to place the block at, not null
+	 * @return true if the block placement should be protected against, otherwise false
+	 */
+	boolean onEntityPlaceBlock(@Nullable BlockState blockState, @Nullable Entity entity, @Nonnull ServerLevel world, @Nonnull BlockPos pos);
 
 	/**
 	 * @deprecated Use {@link #onEntityInteraction(Entity, Entity, Entity, ItemStack, InteractionHand, boolean, boolean, boolean)} instead.
@@ -218,19 +236,39 @@ public interface IChunkProtectionAPI {
 	/**
 	 * Gets the player/claim config used for a specified claim state.
 	 * <p>
+	 * This method does not return dimension-based wilderness/expired sub-configs. Use {@link #getConfig(IPlayerChunkClaimAPI, ResourceLocation)}
+	 * instead for that.
+	 * <p>
 	 * You can fetch claim states of chunks from the {@link xaero.pac.common.server.claims.api.IServerClaimsManagerAPI}.
 	 *
 	 * @param claim  the claim state to get the used config of, null for wilderness
 	 * @return the player config used by the claim
 	 */
 	@Nonnull
-	IPlayerConfigAPI getClaimConfig(@Nullable IPlayerChunkClaimAPI claim);
+	IPlayerConfigAPI getConfig(@Nullable IPlayerChunkClaimAPI claim);
+
+	/**
+	 * Gets the player/claim config used for a specified claim state and dimension.
+	 * <p>
+	 * The dimension only matters if claim is null (wilderness) or an expired claim.
+	 * <p>
+	 * You can fetch claim states of chunks from the {@link xaero.pac.common.server.claims.api.IServerClaimsManagerAPI}.
+	 *
+	 * @param claim  the claim state to get the used config of, null for wilderness
+	 * @param dimension  the dimension the claim is in, null if it doesn't matter
+	 * @return the player config used by the claim
+	 */
+	@Nonnull
+	IPlayerConfigAPI getConfig(@Nullable IPlayerChunkClaimAPI claim, @Nullable ResourceLocation dimension);
 
 	/**
 	 * Directly checks whether a specified entity has full access to a claim with the specified config.
 	 * <p>
 	 * You most likely don't have to use this method at all. The action-specific protection check methods already do it.
 	 * This is meant for things that are not covered by the rest of the API.
+	 * <p>
+	 * This method ignores addon-applied access overrides if they are based on chunk coordinates. If this is a problem,
+	 * please use {@link #hasChunkAccess(IPlayerConfigAPI, Entity, ResourceLocation, int, int)} instead.
 	 *
 	 * @param claimConfig  the claim config to check access for, not null
 	 * @param accessor  the entity to check access for, not null
@@ -246,6 +284,9 @@ public interface IChunkProtectionAPI {
 	 * <p>
 	 * You most likely don't have to use this method at all. The action-specific protection check methods already do it.
 	 * This is meant for things that are not covered by the rest of the API.
+	 * <p>
+	 * This method ignores addon-applied access overrides if they are based on chunk coordinates. If this is a problem,
+	 * please use {@link #hasChunkAccess(IPlayerConfigAPI, UUID, ResourceLocation, int, int)} instead.
 	 *
 	 * @param claimConfig  the claim config to check access for, not null
 	 * @param accessorId  the entity UUID to check access for, not null
@@ -254,6 +295,114 @@ public interface IChunkProtectionAPI {
 	boolean hasChunkAccess(@Nonnull IPlayerConfigAPI claimConfig, @Nonnull UUID accessorId);
 
 	/**
+	 * Directly checks whether a specified entity has full access to a claim with the specified config at
+	 * specified coordinates.
+	 * <p>
+	 * You most likely don't have to use this method at all. The action-specific protection check methods already do it.
+	 * This is meant for things that are not covered by the rest of the API.
+	 *
+	 * @param claimConfig the claim config to check access for, not null
+	 * @param accessor  the entity to check access for, not null
+	 * @param dim  the dimension ID of the claim, not null
+	 * @param chunkX  the X chunk coordinate of the claim
+	 * @param chunkZ  the X chunk coordinate of the claim
+	 * @return true if accessor has full access to the claim, otherwise false
+	 */
+	boolean hasChunkAccess(@Nonnull IPlayerConfigAPI claimConfig, @Nonnull Entity accessor, @Nonnull ResourceLocation dim, int chunkX, int chunkZ);
+
+	/**
+	 * Directly checks whether the entity with a specified UUID has full access to a claim with the specified config at
+	 * specified coordinates.
+	 * <p>
+	 * Please use {@link #hasChunkAccess(IPlayerConfigAPI, Entity)} when you have an actual
+	 * entity reference.
+	 * <p>
+	 * You most likely don't have to use this method at all. The action-specific protection check methods already do it.
+	 * This is meant for things that are not covered by the rest of the API.
+	 *
+	 * @param claimConfig  the claim config to check access for, not null
+	 * @param accessorId  the entity UUID to check access for, not null
+	 * @param dim  the dimension ID of the claim, not null
+	 * @param chunkX  the X chunk coordinate of the claim
+	 * @param chunkZ  the X chunk coordinate of the claim
+	 * @return true if accessor has full access to the claim, otherwise false
+	 */
+	boolean hasChunkAccess(@Nonnull IPlayerConfigAPI claimConfig, @Nonnull UUID accessorId, @Nonnull ResourceLocation dim, int chunkX, int chunkZ);
+
+	/**
+	 * Directly checks whether a specified entity has full access to a claim at specified coordinates.
+	 * <p>
+	 * You most likely don't have to use this method at all. The action-specific protection check methods already do it.
+	 * This is meant for things that are not covered by the rest of the API.
+	 *
+	 * @param accessor  the entity to check access for, not null
+	 * @param dim  the dimension ID of the claim, not null
+	 * @param chunkX  the X chunk coordinate of the claim
+	 * @param chunkZ  the X chunk coordinate of the claim
+	 * @return true if accessor has full access to the claim, otherwise false
+	 */
+	boolean hasChunkAccess(@Nonnull Entity accessor, @Nonnull ResourceLocation dim, int chunkX, int chunkZ);
+
+	/**
+	 * Directly checks whether the entity with a specified UUID has full access to a claim at specified coordinates.
+	 * <p>
+	 * Please use {@link #hasChunkAccess(Entity, ResourceLocation, int, int)} when you have an actual
+	 * entity reference.
+	 * <p>
+	 * You most likely don't have to use this method at all. The action-specific protection check methods already do it.
+	 * This is meant for things that are not covered by the rest of the API.
+	 *
+	 * @param accessorId  the entity UUID to check access for, not null
+	 * @param dim  the dimension ID of the claim, not null
+	 * @param chunkX  the X chunk coordinate of the claim
+	 * @param chunkZ  the X chunk coordinate of the claim
+	 * @return true if accessor has full access to the claim, otherwise false
+	 */
+	boolean hasChunkAccess(@Nonnull UUID accessorId, @Nonnull ResourceLocation dim, int chunkX, int chunkZ);
+
+	/**
+	 * Checks whether the group that a player group exception option is set to includes a specified player/entity.
+	 * <p>
+	 * The specified entity is supposed to be a player, but because of the existence of entities that take on a real
+	 * player's UUID, the method accepts any type of entity.
+	 * <p>
+	 * You most likely don't have to use this method at all. The action-specific protection check methods already
+	 * use option values.
+	 * This is meant for things that are not covered by the rest of the API.
+	 *
+	 * @param option  the option to check, not null
+	 * @param claimConfig  the claim config to check the option value for, not null
+	 * @param accessor  the entity to check against the current value of the option, not null
+	 * @return true if the specified player/entity is in the group the option is set to, otherwise false
+	 */
+	boolean checkPlayerGroupExceptionOption(
+			@Nonnull IPlayerConfigOptionSpecAPI<String> option,
+			@Nonnull IPlayerConfigAPI claimConfig,
+			@Nonnull Entity accessor
+	);
+
+	/**
+	 * Checks whether the group that a player group exception option is set to includes the player with a specified UUID.
+	 * <p>
+	 * The specified UUID is supposed to correspond to a player, even if you get it from another type of entity.
+	 * <p>
+	 * You most likely don't have to use this method at all. The action-specific protection check methods already
+	 * use option values.
+	 * This is meant for things that are not covered by the rest of the API.
+	 *
+	 * @param option  the option to check, not null
+	 * @param claimConfig  the claim config to check the option value for, not null
+	 * @param accessorId  the UUID of the player to check against the current value of the option, not null
+	 * @return true if the player with the specified UUID is in the group the option is set to, otherwise false
+	 */
+	boolean checkPlayerGroupExceptionOption(
+			@Nonnull IPlayerConfigOptionSpecAPI<String> option,
+			@Nonnull IPlayerConfigAPI claimConfig,
+			@Nonnull UUID accessorId
+	);
+
+	/**
+	 * @deprecated use negated {@link #checkPlayerGroupExceptionOption(IPlayerConfigOptionSpecAPI, IPlayerConfigAPI, Entity)} instead
 	 * Checks whether a player/claim config option with multiple protection levels protects from a specified entity.
 	 * <p>
 	 * You most likely don't have to use this method at all. The action-specific protection check methods already
@@ -265,13 +414,27 @@ public interface IChunkProtectionAPI {
 	 * @param accessor  the entity to check against the current value of the option, not null
 	 * @return true if the option is set to protect from the specified entity, false otherwise
 	 */
-	boolean checkProtectionLeveledOption(@Nonnull IPlayerConfigOptionSpecAPI<Integer> option, @Nonnull IPlayerConfigAPI claimConfig, @Nonnull Entity accessor);
+	@Deprecated
+	default boolean checkProtectionLeveledOption(
+			@Nonnull xaero.pac.common.server.player.config.api.IPlayerConfigOptionSpecAPI<Integer> option,
+			@Nonnull xaero.pac.common.server.player.config.api.IPlayerConfigAPI claimConfig,
+			@Nonnull Entity accessor
+	){
+		CompatPlayerConfigOptionSpec<Integer, String> compatOption = (CompatPlayerConfigOptionSpec<Integer, String>) option;
+		CompatPlayerConfig compatConfig = (CompatPlayerConfig) claimConfig;
+		return !checkPlayerGroupExceptionOption(
+				compatOption.realOption,
+				compatConfig.realConfig,
+				accessor
+		);
+	}
 
 	/**
+	 * @deprecated use negated {@link #checkPlayerGroupExceptionOption(IPlayerConfigOptionSpecAPI, IPlayerConfigAPI, UUID)} instead
 	 * Checks whether a player/claim config option with multiple protection levels protects from the entity with a
 	 * specified UUID.
 	 * <p>
-	 * Please use {@link #checkProtectionLeveledOption(IPlayerConfigOptionSpecAPI, IPlayerConfigAPI, Entity)}
+	 * Please use {@link #checkProtectionLeveledOption(xaero.pac.common.server.player.config.api.IPlayerConfigOptionSpecAPI, xaero.pac.common.server.player.config.api.IPlayerConfigAPI, Entity)}
 	 * when you have an actual entity reference.
 	 * <p>
 	 * You most likely don't have to use this method at all. The action-specific protection check methods already
@@ -283,9 +446,23 @@ public interface IChunkProtectionAPI {
 	 * @param accessorId  the UUID of the entity to check against the current value of the option, not null
 	 * @return true if the option is set to protect from the specified entity, false otherwise
 	 */
-	boolean checkProtectionLeveledOption(@Nonnull IPlayerConfigOptionSpecAPI<Integer> option, @Nonnull IPlayerConfigAPI claimConfig, @Nonnull UUID accessorId);
+	@Deprecated
+	default boolean checkProtectionLeveledOption(
+			@Nonnull xaero.pac.common.server.player.config.api.IPlayerConfigOptionSpecAPI<Integer> option,
+			@Nonnull xaero.pac.common.server.player.config.api.IPlayerConfigAPI claimConfig,
+			@Nonnull UUID accessorId
+	) {
+		CompatPlayerConfigOptionSpec<Integer, String> compatOption = (CompatPlayerConfigOptionSpec<Integer, String>) option;
+		CompatPlayerConfig compatConfig = (CompatPlayerConfig) claimConfig;
+		return !checkPlayerGroupExceptionOption(
+				compatOption.realOption,
+				compatConfig.realConfig,
+				accessorId
+		);
+	}
 
 	/**
+	 * @deprecated use {@link #checkPlayerGroupExceptionOption(IPlayerConfigOptionSpecAPI, IPlayerConfigAPI, Entity)} instead
 	 * Checks whether a player/claim config option with multiple exception levels includes a specified entity.
 	 * <p>
 	 * You most likely don't have to use this method at all. The action-specific protection check methods already
@@ -297,13 +474,27 @@ public interface IChunkProtectionAPI {
 	 * @param accessor  the entity to check against the current value of the option, not null
 	 * @return true if the option is set to include the specified entity, false otherwise
 	 */
-	boolean checkExceptionLeveledOption(@Nonnull IPlayerConfigOptionSpecAPI<Integer> option, @Nonnull IPlayerConfigAPI claimConfig, @Nonnull Entity accessor);
+	@Deprecated
+	default boolean checkExceptionLeveledOption(
+			@Nonnull xaero.pac.common.server.player.config.api.IPlayerConfigOptionSpecAPI<Integer> option,
+			@Nonnull xaero.pac.common.server.player.config.api.IPlayerConfigAPI claimConfig,
+			@Nonnull Entity accessor
+	){
+		CompatPlayerConfigOptionSpec<Integer, String> compatOption = (CompatPlayerConfigOptionSpec<Integer, String>) option;
+		CompatPlayerConfig compatConfig = (CompatPlayerConfig) claimConfig;
+		return checkPlayerGroupExceptionOption(
+				compatOption.realOption,
+				compatConfig.realConfig,
+				accessor
+		);
+	}
 
 	/**
+	 * @deprecated use {@link #checkPlayerGroupExceptionOption(IPlayerConfigOptionSpecAPI, IPlayerConfigAPI, UUID)} instead
 	 * Checks whether a player/claim config option with multiple exception levels includes the entity with a
 	 * specified UUID.
 	 * <p>
-	 * Please use {@link #checkExceptionLeveledOption(IPlayerConfigOptionSpecAPI, IPlayerConfigAPI, Entity)}
+	 * Please use {@link #checkExceptionLeveledOption(xaero.pac.common.server.player.config.api.IPlayerConfigOptionSpecAPI, xaero.pac.common.server.player.config.api.IPlayerConfigAPI, Entity)}
 	 * when you have an actual entity reference.
 	 * <p>
 	 * You most likely don't have to use this method at all. The action-specific protection check methods already
@@ -315,6 +506,34 @@ public interface IChunkProtectionAPI {
 	 * @param accessorId  the UUID of the entity to check against the current value of the option, not null
 	 * @return true if the option is set to include the specified entity, false otherwise
 	 */
-	boolean checkExceptionLeveledOption(@Nonnull IPlayerConfigOptionSpecAPI<Integer> option, @Nonnull IPlayerConfigAPI claimConfig, @Nonnull UUID accessorId);
+	@Deprecated
+	default boolean checkExceptionLeveledOption(
+			@Nonnull xaero.pac.common.server.player.config.api.IPlayerConfigOptionSpecAPI<Integer> option,
+			@Nonnull xaero.pac.common.server.player.config.api.IPlayerConfigAPI claimConfig,
+			@Nonnull UUID accessorId
+	){
+		CompatPlayerConfigOptionSpec<Integer, String> compatOption = (CompatPlayerConfigOptionSpec<Integer, String>) option;
+		CompatPlayerConfig compatConfig = (CompatPlayerConfig) claimConfig;
+		return checkPlayerGroupExceptionOption(
+				compatOption.realOption,
+				compatConfig.realConfig,
+				accessorId
+		);
+	}
+
+	/**
+	 * @deprecated use {@link #getConfig(IPlayerChunkClaimAPI)} instead<p>
+	 * Gets the player/claim config used for a specified claim state.
+	 * <p>
+	 * You can fetch claim states of chunks from the {@link xaero.pac.common.server.claims.api.IServerClaimsManagerAPI}.
+	 *
+	 * @param claim  the claim state to get the used config of, null for wilderness
+	 * @return the player config used by the claim
+	 */
+	@Deprecated
+	default xaero.pac.common.server.player.config.api.IPlayerConfigAPI getClaimConfig(@Nullable IPlayerChunkClaimAPI claim){
+		IPlayerConfigAPI actualConfig = getConfig(claim);
+		return new CompatPlayerConfig(actualConfig);
+	}
 
 }

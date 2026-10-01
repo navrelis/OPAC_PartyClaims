@@ -1,6 +1,6 @@
 /*
  * Open Parties and Claims - adds chunk claims and player parties to Minecraft
- * Copyright (C) 2022-2025, Xaero <xaero1996@gmail.com> and contributors
+ * Copyright (C) 2022-2026, Xaero <xaero1996@gmail.com> and contributors
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of version 3 of the GNU Lesser General Public License
@@ -28,11 +28,11 @@ public class ConfigUtil {
 	
 	public static Config deepCopy(UnmodifiableConfig toCopy, Supplier<Map<String,Object>> mapCreator) {
 		Config copy = Config.of(mapCreator, toCopy.configFormat());
-		toCopy.entrySet().forEach(entry -> {
-			Object valueCopy = entry.getValue();
-			if(valueCopy instanceof UnmodifiableConfig)
-				valueCopy = deepCopy((UnmodifiableConfig) valueCopy, mapCreator);
-			copy.set(entry.getKey(), valueCopy);
+		toCopy.valueMap().forEach((k,v) -> {
+			Object valueCopy = v;
+			if(v instanceof UnmodifiableConfig)
+				valueCopy = deepCopy((UnmodifiableConfig) v, mapCreator);
+			copy.set(k, valueCopy);
 		});
 		return copy;
 	}

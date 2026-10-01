@@ -1,6 +1,6 @@
 /*
  * Open Parties and Claims - adds chunk claims and player parties to Minecraft
- * Copyright (C) 2022-2025, Xaero <xaero1996@gmail.com> and contributors
+ * Copyright (C) 2022-2026, Xaero <xaero1996@gmail.com> and contributors
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of version 3 of the GNU Lesser General Public License
@@ -27,8 +27,9 @@ import xaero.pac.common.server.player.config.IPlayerConfig;
 import xaero.pac.common.server.player.config.PlayerConfig;
 import xaero.pac.common.server.player.config.PlayerConfigManager;
 import xaero.pac.common.server.player.config.PlayerConfigOptionSpec;
-import xaero.pac.common.server.player.config.api.IPlayerConfigOptionSpecAPI;
 import xaero.pac.common.server.player.config.api.PlayerConfigType;
+import xaero.pac.common.server.player.config.api.v2.IPlayerConfigOptionSpecAPI;
+import xaero.pac.common.server.player.permission.api.IPermissionNodeAPI;
 import xaero.pac.common.util.linked.ILinkedChainNode;
 import xaero.pac.common.util.linked.LinkedChain;
 
@@ -37,30 +38,10 @@ import javax.annotation.Nullable;
 import java.util.*;
 import java.util.stream.Stream;
 
-import static xaero.pac.common.server.player.config.api.PlayerConfigOptions.*;
-
 public class PlayerSubConfig
 <
 	P extends IServerParty<?, ?, ?>
 > extends PlayerConfig<P> implements ILinkedChainNode<PlayerSubConfig<P>>, IPlayerConfig {
-
-	public static final Set<IPlayerConfigOptionSpecAPI<?>> STATIC_OVERRIDABLE_OPTIONS;
-
-	static {
-		STATIC_OVERRIDABLE_OPTIONS = new HashSet<>();
-		STATIC_OVERRIDABLE_OPTIONS.addAll(OPTIONS.values());
-		STATIC_OVERRIDABLE_OPTIONS.remove(USED_SUBCLAIM);
-		STATIC_OVERRIDABLE_OPTIONS.remove(USED_SERVER_SUBCLAIM);
-		STATIC_OVERRIDABLE_OPTIONS.remove(PARTY_NAME);
-		STATIC_OVERRIDABLE_OPTIONS.remove(BONUS_CHUNK_CLAIMS);
-		STATIC_OVERRIDABLE_OPTIONS.remove(BONUS_CHUNK_FORCELOADS);
-		STATIC_OVERRIDABLE_OPTIONS.remove(SHARE_LOCATION_WITH_PARTY);
-		STATIC_OVERRIDABLE_OPTIONS.remove(SHARE_LOCATION_WITH_PARTY_MUTUAL_ALLIES);
-		STATIC_OVERRIDABLE_OPTIONS.remove(RECEIVE_LOCATIONS_FROM_PARTY);
-		STATIC_OVERRIDABLE_OPTIONS.remove(RECEIVE_LOCATIONS_FROM_PARTY_MUTUAL_ALLIES);
-		STATIC_OVERRIDABLE_OPTIONS.remove(FORCELOAD);
-		STATIC_OVERRIDABLE_OPTIONS.remove(OFFLINE_FORCELOAD);
-	}
 
 	private final PlayerConfig<P> mainConfig;
 	private final String subId;
@@ -69,8 +50,26 @@ public class PlayerSubConfig
 	private PlayerSubConfig<P> previousInChain;
 	private boolean destroyed;
 
-	private PlayerSubConfig(PlayerConfig<P> mainConfig, String subId, PlayerConfigType type, UUID playerId, PlayerConfigManager<P, ?> manager, Map<PlayerConfigOptionSpec<?>, Object> automaticDefaultValues, LinkedChain<PlayerSubConfig<P>> linkedSubConfigs, Map<String, PlayerSubConfig<P>> subByID, Int2ObjectMap<String> subIndexToID, SortedValueList<String> subConfigIds, List<String> subConfigIdsUnmodifiable, int subIndex) {
-		super(type, playerId, manager, automaticDefaultValues, linkedSubConfigs, subByID, subIndexToID, subConfigIds, subConfigIdsUnmodifiable);
+	private PlayerSubConfig(
+			PlayerConfig<P> mainConfig,
+			String subId,
+			PlayerConfigType type,
+			UUID playerId,
+			PlayerConfigManager<P, ?> manager,
+			Map<PlayerConfigOptionSpec<?>, Object> automaticDefaultValues,
+			LinkedChain<PlayerSubConfig<P>> linkedSubConfigs,
+			Map<String, PlayerSubConfig<P>> subByID,
+			Int2ObjectMap<String> subIndexToID,
+			SortedValueList<String> subConfigIds,
+			List<String> subConfigIdsUnmodifiable,
+			Map<IPermissionNodeAPI<?>, Object> lastPermissionValues,
+			int subIndex
+	) {
+		super(
+				type, playerId, manager, automaticDefaultValues,
+				linkedSubConfigs, subByID, subIndexToID, subConfigIds,
+				subConfigIdsUnmodifiable, lastPermissionValues
+		);
 		this.mainConfig = mainConfig;
 		this.subId = subId;
 		this.subIndex = subIndex;
@@ -87,26 +86,22 @@ public class PlayerSubConfig
 
 	@Override
 	public boolean isOptionAllowed(@Nonnull IPlayerConfigOptionSpecAPI<?> option) {
-		boolean baseAllowed = super.isOptionAllowed(option) && manager.getOverridableOptions().contains(option);
-		// [Team Claims] Allow all options on team sub-configs (admin restriction is enforced in PlayerConfig.tryToSet)
-		if (!baseAllowed) {
-			String subId = getSubId();
-			if (subId != null && subId.startsWith("team_") && super.isOptionAllowed(option)) {
-				return true;
-			}
-		}
-		return baseAllowed;
+		return super.isOptionAllowed(option) && (option.isOverridable() || isTeamSubConfig());
 	}
 
-	private <T extends Comparable<T>> T getInner(IPlayerConfigOptionSpecAPI<T> o, boolean inherit){
+	// [Team Claims] team sub-configs store every option, not just the overridable ones
+	// (the party admin restriction is enforced in PlayerConfig.tryToSet)
+	private boolean isTeamSubConfig(){
+		return getType() == PlayerConfigType.PLAYER
+				&& xaero.pac.common.server.claims.TeamClaimsIntegration.getHandlerForSubId(subId) != null;
+	}
+
+	private <T> T getInner(IPlayerConfigOptionSpecAPI<T> o, boolean inherit){
 		PlayerConfigOptionSpec<T> option = (PlayerConfigOptionSpec<T>) o;
-		if(!manager.getOverridableOptions().contains(option)) {
-			// [Team Claims] Team sub-configs store all options, not just overridable ones
-			String sid = getSubId();
-			if (sid == null || !sid.startsWith("team_")) {
-				return inherit ? mainConfig.getFromEffectiveConfig(option) : null;
-			}
-		}
+		// [Team Claims] a team sub-config stores non-overridable options too, so it must read them
+		// back from its own storage instead of always falling through to the main config
+		if(!option.isOverridable() && !isTeamSubConfig())
+			return inherit ? mainConfig.getFromEffectiveConfig(option) : null;
 		if(isOptionDefaulted(option))
 			return inherit ? manager.getDefaultConfig().getFromEffectiveConfig(option) : null;
 		Config storage = getStorage();
@@ -118,7 +113,7 @@ public class PlayerSubConfig
 
 	@Nonnull
 	@Override
-	public <T extends Comparable<T>> T getFromEffectiveConfig(@Nonnull IPlayerConfigOptionSpecAPI<T> o) {
+	public <T> T getFromEffectiveConfig(@Nonnull IPlayerConfigOptionSpecAPI<T> o) {
 		return getInner(o, true);
 	}
 
@@ -127,22 +122,23 @@ public class PlayerSubConfig
 	}
 
 	@Override
-	protected <T extends Comparable<T>> boolean isValidSetValue(@Nonnull PlayerConfigOptionSpec<T> option, @Nullable T value) {
+	protected <T> boolean isValidSetValue(@Nonnull PlayerConfigOptionSpec<T> option, @Nullable T value) {
 		return value == null || super.isValidSetValue(option, value);
 	}
 
 	@Override
-	protected <T extends Comparable<T>> T getValueForDefaultConfigMatch(T actualEffective, T value) {
+	protected <T> T getValueForDefaultConfigMatch(IPlayerConfigOptionSpecAPI<T> o, T value) {
 		return null;
 	}
 
 	@Nullable
 	@Override
-	public <T extends Comparable<T>> T getDefaultRawValue(@Nonnull IPlayerConfigOptionSpecAPI<T> option) {
+	public <T> T getDefaultRawValue(@Nonnull IPlayerConfigOptionSpecAPI<T> option) {
 		return null;
 	}
 
-	public PlayerConfig<P> getMainConfig() {
+	@Override
+	public PlayerConfig<P> getMain() {
 		return mainConfig;
 	}
 
@@ -202,7 +198,7 @@ public class PlayerSubConfig
 	}
 
 	@Override
-	public PlayerSubConfig<P> createSubConfig(String id, int index) {
+	public PlayerSubConfig<P> createSubConfig(String id, int index, boolean initStorage) {
 		throw new RuntimeException(new IllegalAccessException());
 	}
 
@@ -301,7 +297,11 @@ public class PlayerSubConfig
 
 		@Override
 		protected PlayerSubConfig<P> buildInternally() {
-			return new PlayerSubConfig<>(mainConfig, subId, type, playerId, manager, automaticDefaultValues, null, null, null, null, null, subIndex);
+			return new PlayerSubConfig<>(
+					mainConfig, subId, type, playerId, manager,
+					automaticDefaultValues, null, null, null,
+					null, null, null, subIndex
+			);
 		}
 
 		public static <P extends IServerParty<?, ?, ?>> Builder<P> begin(){

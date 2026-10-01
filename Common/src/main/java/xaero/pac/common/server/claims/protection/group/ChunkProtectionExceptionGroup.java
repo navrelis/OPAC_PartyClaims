@@ -1,6 +1,6 @@
 /*
  * Open Parties and Claims - adds chunk claims and player parties to Minecraft
- * Copyright (C) 2022-2025, Xaero <xaero1996@gmail.com> and contributors
+ * Copyright (C) 2022-2026, Xaero <xaero1996@gmail.com> and contributors
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of version 3 of the GNU Lesser General Public License
@@ -25,7 +25,7 @@ import xaero.pac.common.server.claims.protection.ChunkProtectionExceptionSet;
 import xaero.pac.common.server.claims.protection.ChunkProtectionExceptionType;
 import xaero.pac.common.server.claims.protection.ExceptionElementType;
 import xaero.pac.common.server.player.config.PlayerConfigOptionCategory;
-import xaero.pac.common.server.player.config.api.IPlayerConfigOptionSpecAPI;
+import xaero.pac.common.server.player.config.api.v2.IPlayerConfigOptionSpecAPI;
 
 import java.util.regex.Pattern;
 import java.util.stream.Stream;
@@ -36,7 +36,7 @@ public final class ChunkProtectionExceptionGroup<T> {
 	private final String name;
 	private final ChunkProtectionExceptionType type;
 	private final ChunkProtectionExceptionSet<T> exceptionSet;
-	private IPlayerConfigOptionSpecAPI<Integer> playerConfigOption;
+	private IPlayerConfigOptionSpecAPI<String> playerConfigOption;
 	private final String contentString;
 	private final PlayerConfigOptionCategory optionCategory;
 	private final boolean ofSubjects;//(usually true) the group contains objects that are being interacted with as opposed to actors that interact
@@ -68,11 +68,11 @@ public final class ChunkProtectionExceptionGroup<T> {
 		exceptionSet.updateTagExceptions(server);
 	}
 
-	public void setPlayerConfigOption(IPlayerConfigOptionSpecAPI<Integer> playerConfigOption) {
+	public void setPlayerConfigOption(IPlayerConfigOptionSpecAPI<String> playerConfigOption) {
 		this.playerConfigOption = playerConfigOption;
 	}
 
-	public IPlayerConfigOptionSpecAPI<Integer> getPlayerConfigOption() {
+	public IPlayerConfigOptionSpecAPI<String> getPlayerConfigOption() {
 		return playerConfigOption;
 	}
 

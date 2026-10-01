@@ -1,6 +1,6 @@
 /*
  * Open Parties and Claims - adds chunk claims and player parties to Minecraft
- * Copyright (C) 2022-2025, Xaero <xaero1996@gmail.com> and contributors
+ * Copyright (C) 2022-2026, Xaero <xaero1996@gmail.com> and contributors
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of version 3 of the GNU Lesser General Public License
@@ -22,6 +22,7 @@ import xaero.pac.OpenPartiesAndClaims;
 import xaero.pac.common.LoadCommon;
 import xaero.pac.common.packet.claims.*;
 import xaero.pac.common.packet.config.*;
+import xaero.pac.common.packet.config.group.*;
 import xaero.pac.common.packet.parties.ClientboundPartyAllyPacket;
 import xaero.pac.common.packet.parties.ClientboundPartyNamePacket;
 import xaero.pac.common.packet.parties.ClientboundPartyPacket;
@@ -81,8 +82,8 @@ public class PacketRegister {
 		ServerboundClaimActionRequestPacket.Codec claimActionRequestPacketCodec = new ServerboundClaimActionRequestPacket.Codec();
 		packetHandler.register(21, ServerboundClaimActionRequestPacket.class, claimActionRequestPacketCodec, claimActionRequestPacketCodec, new ServerboundClaimActionRequestPacket.ServerHandler(), null);
 
-		ClientboundModesPacket.Codec modesCodec = new ClientboundModesPacket.Codec();
-		packetHandler.register(22, ClientboundModesPacket.class, modesCodec, modesCodec, null, new ClientboundModesPacket.ClientHandler());
+		ClientboundClaimModesPacket.Codec modesCodec = new ClientboundClaimModesPacket.Codec();
+		packetHandler.register(22, ClientboundClaimModesPacket.class, modesCodec, modesCodec, null, new ClientboundClaimModesPacket.ClientHandler());
 
 		ClientboundPlayerConfigSyncStatePacket.Codec playerConfigSyncCodec = new ClientboundPlayerConfigSyncStatePacket.Codec();
 		packetHandler.register(23, ClientboundPlayerConfigSyncStatePacket.class, playerConfigSyncCodec, playerConfigSyncCodec, null, new ClientboundPlayerConfigSyncStatePacket.ClientHandler());
@@ -119,6 +120,80 @@ public class PacketRegister {
 
 		packetHandler.register(36, ClientboundClaimsClaimUpdateNextZPosPacket.class, ClientboundClaimsClaimUpdateNextZPosPacket.ENCODER, ClientboundClaimsClaimUpdateNextZPosPacket.DECODER, null, new ClientboundClaimsClaimUpdateNextZPosPacket.ClientHandler());
 
+		PlayerConfigGroupExistencePacket.Codec playerConfigGroupExistencePacketCodec = new PlayerConfigGroupExistencePacket.Codec();
+		packetHandler.register(37, PlayerConfigGroupExistencePacket.class,
+				playerConfigGroupExistencePacketCodec, playerConfigGroupExistencePacketCodec,
+				new PlayerConfigGroupExistencePacket.ServerHandler(), new PlayerConfigGroupExistencePacket.ClientHandler()
+		);
+
+		ClientboundPlayerConfigGroupsSyncStatePacket.Codec playerConfigGroupsSyncCodec = new ClientboundPlayerConfigGroupsSyncStatePacket.Codec();
+		packetHandler.register(38, ClientboundPlayerConfigGroupsSyncStatePacket.class, playerConfigGroupsSyncCodec, playerConfigGroupsSyncCodec, null, new ClientboundPlayerConfigGroupsSyncStatePacket.ClientHandler());
+
+		ClientboundGroupActionErrorPacket.Codec groupActionErrorPacketCodec = new ClientboundGroupActionErrorPacket.Codec();
+		packetHandler.register(39, ClientboundGroupActionErrorPacket.class, groupActionErrorPacketCodec, groupActionErrorPacketCodec, null, new ClientboundGroupActionErrorPacket.ClientHandler());
+
+		PlayerConfigGroupMemberPacket.Codec playerConfigGroupMemberPacketCodec = new PlayerConfigGroupMemberPacket.Codec();
+		packetHandler.register(40, PlayerConfigGroupMemberPacket.class,
+				playerConfigGroupMemberPacketCodec, playerConfigGroupMemberPacketCodec,
+				new PlayerConfigGroupMemberPacket.ServerHandler(), new PlayerConfigGroupMemberPacket.ClientHandler()
+		);
+
+		PlayerConfigGroupGroupPacket.Codec playerConfigGroupGroupPacketCodec = new PlayerConfigGroupGroupPacket.Codec();
+		packetHandler.register(41, PlayerConfigGroupGroupPacket.class,
+				playerConfigGroupGroupPacketCodec, playerConfigGroupGroupPacketCodec,
+				new PlayerConfigGroupGroupPacket.ServerHandler(), new PlayerConfigGroupGroupPacket.ClientHandler()
+		);
+
+		ClientboundPlayerConfigResetGroupsPacket.Codec resetGroupsPacketCodec =
+				new ClientboundPlayerConfigResetGroupsPacket.Codec();
+		packetHandler.register(42, ClientboundPlayerConfigResetGroupsPacket.class,
+				resetGroupsPacketCodec, resetGroupsPacketCodec,
+				null, new ClientboundPlayerConfigResetGroupsPacket.ClientHandler()
+		);
+
+		PlayerConfigGroupDesyncPacket.Codec groupsDesyncCodec =
+				new PlayerConfigGroupDesyncPacket.Codec();
+		packetHandler.register(43, PlayerConfigGroupDesyncPacket.class,
+				groupsDesyncCodec, groupsDesyncCodec,
+				new PlayerConfigGroupDesyncPacket.ServerHandler(), new PlayerConfigGroupDesyncPacket.ClientHandler()
+		);
+
+		ClientboundPlayerConfigGroupLimitsPacket.Codec groupLimitsCodec =
+				new ClientboundPlayerConfigGroupLimitsPacket.Codec();
+		packetHandler.register(44, ClientboundPlayerConfigGroupLimitsPacket.class,
+				groupLimitsCodec, groupLimitsCodec,
+				null, new ClientboundPlayerConfigGroupLimitsPacket.ClientHandler()
+		);
+
+		packetHandler.register(45, ClientboundClaimPartyGeneralPacket.class,
+				ClientboundClaimPartyGeneralPacket.ENCODER, ClientboundClaimPartyGeneralPacket.DECODER,
+				null, new ClientboundClaimPartyGeneralPacket.ClientHandler()
+		);
+
+		ClientboundPlayerConfigPermissionsPacket.Codec playerConfigPermissionsCodec =
+				new ClientboundPlayerConfigPermissionsPacket.Codec();
+		packetHandler.register(46, ClientboundPlayerConfigPermissionsPacket.class,
+				playerConfigPermissionsCodec, playerConfigPermissionsCodec,
+				null, new ClientboundPlayerConfigPermissionsPacket.ClientHandler()
+		);
+
+		ClientboundPlayerConfigAdminPacket.Codec playerConfigAdminCodec =
+				new ClientboundPlayerConfigAdminPacket.Codec();
+		packetHandler.register(47, ClientboundPlayerConfigAdminPacket.class,
+				playerConfigAdminCodec, playerConfigAdminCodec,
+				null, new ClientboundPlayerConfigAdminPacket.ClientHandler()
+		);
+
+		packetHandler.register(48, ClientboundClaimsResetPacket.class,
+				ClientboundClaimsResetPacket.ENCODER, ClientboundClaimsResetPacket.DECODER,
+				null, new ClientboundClaimsResetPacket.ClientHandler()
+		);
+
+		ClientboundPlayerConfigConfigurableOptionsPacket.Codec configurableOptionsCodec = new ClientboundPlayerConfigConfigurableOptionsPacket.Codec();
+		packetHandler.register(49, ClientboundPlayerConfigConfigurableOptionsPacket.class,
+				configurableOptionsCodec, configurableOptionsCodec,
+				null, new ClientboundPlayerConfigConfigurableOptionsPacket.ClientHandler()
+		);
 	}
 
 }

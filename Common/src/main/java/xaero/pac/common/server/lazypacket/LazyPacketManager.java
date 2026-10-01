@@ -1,6 +1,6 @@
 /*
  * Open Parties and Claims - adds chunk claims and player parties to Minecraft
- * Copyright (C) 2022-2025, Xaero <xaero1996@gmail.com> and contributors
+ * Copyright (C) 2022-2026, Xaero <xaero1996@gmail.com> and contributors
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of version 3 of the GNU Lesser General Public License
@@ -95,7 +95,11 @@ public class LazyPacketManager {
 	public boolean isClogged(ServerPlayer player){
 		return getForPlayer(player.getUUID()).isClogged();
 	}
-	
+
+	public boolean isDropped(ServerPlayer player) {
+		return getForPlayer(player.getUUID()).isDropped();
+	}
+
 	public static final class Builder {
 
 		private MinecraftServer server;

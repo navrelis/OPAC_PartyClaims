@@ -1,6 +1,6 @@
 /*
  * Open Parties and Claims - adds chunk claims and player parties to Minecraft
- * Copyright (C) 2022-2025, Xaero <xaero1996@gmail.com> and contributors
+ * Copyright (C) 2022-2026, Xaero <xaero1996@gmail.com> and contributors
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of version 3 of the GNU Lesser General Public License
@@ -240,7 +240,7 @@ public class ServerCore {
 	}
 
 	public static Map<BlockPos, BlockState> CAPTURED_POS_STATE_MAP;
-	public static void onCreateModSymmetryProcessed(Level level, Player player){
+	public static void onCreateModSymmetryProcessed(Level level, Player player, boolean placing){
 		ServerLevel serverLevel = ServerLevelHelper.getServerLevel(level);
 		if(serverLevel == null)
 			return;
@@ -253,7 +253,13 @@ public class ServerCore {
 		Iterator<BlockPos> posIterator = CAPTURED_POS_STATE_MAP.keySet().iterator();
 		while(posIterator.hasNext()){
 			BlockPos pos = posIterator.next();
-			if(serverData.getChunkProtection().onEntityPlaceBlock(serverData, player, serverLevel, pos, null))
+			BlockState blockState = CAPTURED_POS_STATE_MAP.get(pos);
+			boolean protect;
+			if(placing)
+				protect = serverData.getChunkProtection().onEntityPlaceBlock(serverData, blockState, player, serverLevel, pos, null);
+			else
+				protect = serverData.getChunkProtection().onEntityDestroyBlock(serverData, blockState, player, serverLevel, pos, false);
+			if(protect)
 				posIterator.remove();
 		}
 	}
@@ -526,6 +532,8 @@ public class ServerCore {
 	}
 
 	public static BlockPos getEffectiveAnchor(ICreateContraption contraption){
+		if(contraption == null)
+			return null;
 		if(contraption.getXaero_OPAC_placementPos() == null)
 			return contraption.getXaero_OPAC_anchor();
 		return contraption.getXaero_OPAC_placementPos();

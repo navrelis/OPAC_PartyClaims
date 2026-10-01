@@ -1,6 +1,6 @@
 /*
  * Open Parties and Claims - adds chunk claims and player parties to Minecraft
- * Copyright (C) 2022-2025, Xaero <xaero1996@gmail.com> and contributors
+ * Copyright (C) 2022-2026, Xaero <xaero1996@gmail.com> and contributors
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of version 3 of the GNU Lesser General Public License
@@ -18,17 +18,33 @@
 
 package xaero.pac.common.server.player.config;
 
+import xaero.pac.common.server.config.ServerConfig;
+
 public enum PlayerConfigOptionCategory {
-	GENERAL_CLAIMS,
-	BLOCK_PROTECTION,
-	BLOCK_TRIGGERS,
-	ENTITY_PROTECTION,
-	PLAYER_PROTECTION,
-	MOVEMENT,
-	PROTECTION_FROM_ITEMS,
-	PICKUP_PROTECTION,
-	SPAWN_PROTECTION,
-	MIXED_PROTECTION,
-	GENERAL_PARTY;
+	GENERAL(false, false),
+	GENERAL_CLAIMS(true, false),
+	BLOCK_PROTECTION(true, false),
+	BLOCK_TRIGGERS(true, false),
+	ENTITY_PROTECTION(true, false),
+	PLAYER_PROTECTION(true, false),
+	MOVEMENT(true, false),
+	PROTECTION_FROM_ITEMS(true, false),
+	PICKUP_PROTECTION(true, false),
+	SPAWN_PROTECTION(true, false),
+	MIXED_PROTECTION(true, false),
+	GENERAL_PARTY(false, true);
+
+	public final boolean requiresClaims;
+	public final boolean requiresParties;
+
+	PlayerConfigOptionCategory(boolean requiresClaims, boolean requiresParties) {
+		this.requiresClaims = requiresClaims;
+		this.requiresParties = requiresParties;
+	}
+
+	public boolean requiredFeaturesAreEnabled(){
+		return (!requiresClaims || ServerConfig.CONFIG.claimsEnabled.get()) &&
+				(!requiresParties || ServerConfig.CONFIG.partiesEnabled.get());
+	}
 
 }

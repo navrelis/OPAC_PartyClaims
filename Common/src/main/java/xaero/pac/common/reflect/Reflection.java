@@ -1,6 +1,6 @@
 /*
  * Open Parties and Claims - adds chunk claims and player parties to Minecraft
- * Copyright (C) 2022-2025, Xaero <xaero1996@gmail.com> and contributors
+ * Copyright (C) 2022-2026, Xaero <xaero1996@gmail.com> and contributors
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of version 3 of the GNU Lesser General Public License
@@ -40,7 +40,7 @@ public class Reflection {
 	
 	@SuppressWarnings("unchecked")
 	public static <A, B> B getReflectFieldValue(A parentObject, Field field) {
-		boolean accessibleBU = field.canAccess(parentObject);
+		boolean accessibleBU = field.isAccessible();
 		field.setAccessible(true);
 		B result = null;
 		try {
@@ -53,7 +53,7 @@ public class Reflection {
 	}
 
 	public static <A, B> void setReflectFieldValue(A parentObject, Field field, B value) {
-		boolean accessibleBU = field.canAccess(parentObject);
+		boolean accessibleBU = field.isAccessible();
 		field.setAccessible(true);
 		try {
 			field.set(parentObject, value);
@@ -78,7 +78,7 @@ public class Reflection {
 	
 	@SuppressWarnings("unchecked")
 	public static <A, B> B getReflectMethodValue(A parentObject, Method method, Object... arguments) {
-		boolean accessibleBU = method.canAccess(parentObject);
+		boolean accessibleBU = method.isAccessible();
 		method.setAccessible(true);
 		B result = null;
 		try {

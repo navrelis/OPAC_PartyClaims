@@ -1,6 +1,6 @@
 /*
  * Open Parties and Claims - adds chunk claims and player parties to Minecraft
- * Copyright (C) 2022-2025, Xaero <xaero1996@gmail.com> and contributors
+ * Copyright (C) 2022-2026, Xaero <xaero1996@gmail.com> and contributors
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of version 3 of the GNU Lesser General Public License
@@ -18,8 +18,11 @@
 
 package xaero.pac.common.server.player.config;
 
-import xaero.pac.common.server.player.config.api.IPlayerConfigAPI;
-import xaero.pac.common.server.player.config.api.IPlayerConfigOptionSpecAPI;
+import xaero.pac.common.claims.player.mode.api.IClaimingModeAPI;
+import xaero.pac.common.server.player.config.api.v2.IPlayerConfigAPI;
+import xaero.pac.common.server.player.config.api.v2.IPlayerConfigOptionSpecAPI;
+import xaero.pac.common.server.player.config.group.IServerPlayerConfigGroupManager;
+import xaero.pac.common.server.player.permission.api.IPermissionNodeAPI;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
@@ -30,7 +33,7 @@ import java.util.stream.Stream;
 public interface IPlayerConfig extends IPlayerConfigAPI {
 	//internal API
 
-	public <T extends Comparable<T>> T applyDefaultReplacer(IPlayerConfigOptionSpecAPI<T> o, T value);
+	public <T> T applyDefaultReplacer(IPlayerConfigOptionSpecAPI<T> o, T value);
 
 	@Nullable
 	@Override
@@ -54,13 +57,20 @@ public interface IPlayerConfig extends IPlayerConfigAPI {
 	@Nonnull
 	public IPlayerConfig getUsedSubConfig();
 
+	@Deprecated
 	@Nonnull
 	@Override
 	IPlayerConfig getUsedServerSubConfig();
 
+	@Nonnull
+	public IPlayerConfig getUsedSubConfig(@Nonnull IClaimingModeAPI claimingMode);
+
 	@Nullable
 	@Override
 	public IPlayerConfig createSubConfig(@Nonnull String id);
+
+	@Nullable
+	public IPlayerConfig createSubConfig(@Nonnull String id, boolean initStorage);
 
 	@Nullable
 	@Override
@@ -82,7 +92,7 @@ public interface IPlayerConfig extends IPlayerConfigAPI {
 
 	@Nullable
 	@Override
-	public <T extends Comparable<T>> T getDefaultRawValue(@Nonnull IPlayerConfigOptionSpecAPI<T> option);
+	public <T> T getDefaultRawValue(@Nonnull IPlayerConfigOptionSpecAPI<T> option);
 
 	@Override
 	public boolean isOptionAllowed(@Nonnull IPlayerConfigOptionSpecAPI<?> option);
@@ -98,5 +108,19 @@ public interface IPlayerConfig extends IPlayerConfigAPI {
 
 	public Iterator<IPlayerConfig> getSubConfigIterator();
 
-	
+	@Override
+	IServerPlayerConfigGroupManager getPlayerGroups();
+
+	IPlayerConfigManager getManager();
+
+	boolean isOptionDefaulted(IPlayerConfigOptionSpecAPI<?> option);
+
+	<T> void resetAutomaticDefaultValue(@Nonnull IPlayerConfigOptionSpecAPI<T> o);
+
+	IPlayerConfig getMain();
+
+	public <T> T getLastPermissionValue(IPermissionNodeAPI<T> node);
+
+	public <T> void setLastPermissionValue(IPermissionNodeAPI<T> node, T value);
+
 }

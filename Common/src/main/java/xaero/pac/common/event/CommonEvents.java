@@ -1,6 +1,6 @@
 /*
  * Open Parties and Claims - adds chunk claims and player parties to Minecraft
- * Copyright (C) 2022-2025, Xaero <xaero1996@gmail.com> and contributors
+ * Copyright (C) 2022-2026, Xaero <xaero1996@gmail.com> and contributors
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of version 3 of the GNU Lesser General Public License
@@ -47,13 +47,13 @@ import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.HitResult;
 import net.minecraft.world.phys.Vec3;
-import org.apache.commons.lang3.tuple.Pair;
+import org.apache.commons.lang3.tuple.Triple;
 import xaero.pac.OpenPartiesAndClaims;
 import xaero.pac.common.claims.player.IPlayerChunkClaim;
 import xaero.pac.common.claims.player.IPlayerClaimPosList;
 import xaero.pac.common.claims.player.IPlayerDimensionClaims;
-import xaero.pac.common.claims.tracker.api.IClaimsManagerTrackerRegisterAPI;
 import xaero.pac.common.entity.EntityData;
+import xaero.pac.common.event.api.OPACServerAddonRegisterEventContext;
 import xaero.pac.common.mods.create.CreateContraptionHelper;
 import xaero.pac.common.parties.party.IPartyPlayerInfo;
 import xaero.pac.common.parties.party.ally.IPartyAlly;
@@ -72,9 +72,9 @@ import xaero.pac.common.server.core.ServerCore;
 import xaero.pac.common.server.core.accessor.ICreateContraptionEntity;
 import xaero.pac.common.server.parties.command.PartyCommandRegister;
 import xaero.pac.common.server.parties.party.IServerParty;
-import xaero.pac.common.server.parties.system.api.IPlayerPartySystemRegisterAPI;
-import xaero.pac.common.server.parties.system.impl.DefaultPlayerPartySystem;
+import xaero.pac.common.server.parties.system.api.v2.IPlayerPartySystemRegisterAPI;
 import xaero.pac.common.server.player.data.IOpenPACServerPlayer;
+import xaero.pac.common.server.player.data.ServerPlayerData;
 import xaero.pac.common.server.player.data.api.ServerPlayerDataAPI;
 import xaero.pac.common.server.player.permission.api.IPlayerPermissionSystemRegisterAPI;
 import xaero.pac.common.server.world.ServerLevelHelper;
@@ -110,24 +110,15 @@ public abstract class CommonEvents {
 
 		IServerData<IServerClaimsManager<IPlayerChunkClaim, IServerPlayerClaimInfo<IPlayerDimensionClaims<IPlayerClaimPosList>>, IServerDimensionClaimsManager<IServerRegionClaims>>, IServerParty<IPartyMember, IPartyPlayerInfo, IPartyAlly>>
 				serverData = ServerData.from(server);
-		if(serverData != null) {
-			try {
-				serverData.getPlayerPermissionSystemManager().preRegister();
-				serverData.getPlayerPartySystemManager().preRegister();
-				serverData.getPlayerPartySystemManager().register("default", new DefaultPlayerPartySystem(serverData.getPartyManager()));
-				fireAddonRegisterEvent(serverData);
-			} finally {
-				serverData.getPlayerPermissionSystemManager().postRegister();
-				serverData.getPlayerPartySystemManager().postRegister();
-			}
-		}
+		if(serverData == null)
+			return;
+		serverData.getServerLoadCallback().onLoad(server);
 	}
 
-	protected abstract void fireAddonRegisterEvent(IServerData<IServerClaimsManager<IPlayerChunkClaim, IServerPlayerClaimInfo<IPlayerDimensionClaims<IPlayerClaimPosList>>, IServerDimensionClaimsManager<IServerRegionClaims>>, IServerParty<IPartyMember, IPartyPlayerInfo, IPartyAlly>> serverData);
+	public abstract void fireAddonRegisterEvent(OPACServerAddonRegisterEventContext context, IServerData<IServerClaimsManager<IPlayerChunkClaim, IServerPlayerClaimInfo<IPlayerDimensionClaims<IPlayerClaimPosList>>, IServerDimensionClaimsManager<IServerRegionClaims>>, IServerParty<IPartyMember, IPartyPlayerInfo, IPartyAlly>> serverData);
 
 	public void onServerStarting(MinecraftServer server) {
 		modMain.startupCrashHandler.check();
-		ServerData.from(server).getServerLoadCallback().onLoad(server);
 //		IServerData<IServerClaimsManager<IPlayerChunkClaim, IServerPlayerClaimInfo<IPlayerDimensionClaims<IPlayerClaimPosList>>, IServerDimensionClaimsManager<IServerRegionClaims>>, IServerParty<IPartyMember, IPartyPlayerInfo, IPartyAlly>>
 //			serverData = ServerData.from(lastServerStarted);
 //		IServerClaimsManager<IPlayerChunkClaim, IServerPlayerClaimInfo<IPlayerDimensionClaims<IPlayerClaimPosList>>, IServerDimensionClaimsManager<IServerRegionClaims>>
@@ -177,9 +168,11 @@ public abstract class CommonEvents {
 	}
 
 	public void onPlayerClone(Player original, Player player) {
-		if(original instanceof ServerPlayer) {
+		if(original instanceof ServerPlayer && player instanceof ServerPlayer) {
 			//copy player data on respawn/clone
-			((IOpenPACServerPlayer)player).setXaero_OPAC_PlayerData(ServerPlayerDataAPI.from((ServerPlayer)original));
+			ServerPlayerData playerData = (ServerPlayerData) ServerPlayerDataAPI.from((ServerPlayer)original);
+			playerData.setPlayer((ServerPlayer) player);
+			((IOpenPACServerPlayer) player).setXaero_OPAC_PlayerData(playerData);
 		}
 	}
 
@@ -208,7 +201,7 @@ public abstract class CommonEvents {
 		}
 	}
 
-	public void onServerStopped(MinecraftServer server) {
+	public void onServerStopping(MinecraftServer server) {
 		IServerData<IServerClaimsManager<IPlayerChunkClaim, IServerPlayerClaimInfo<IPlayerDimensionClaims<IPlayerClaimPosList>>, IServerDimensionClaimsManager<IServerRegionClaims>>, IServerParty<IPartyMember, IPartyPlayerInfo, IPartyAlly>>
 				serverData = ServerData.from(server);
 		if(serverData != null)
@@ -302,14 +295,14 @@ public abstract class CommonEvents {
 		return serverData.getChunkProtection().onItemRightClick(serverData, hand, itemStack, entityLiving.blockPosition(), entityLiving, true);
 	}
 
-	public boolean onMobGrief(Entity entity) {
+	public boolean onMobGrief(Entity entity, boolean items) {
 		if(entity == null /*anonymous fireballs on Forge*/)
 			return false;
 		IServerData<IServerClaimsManager<IPlayerChunkClaim, IServerPlayerClaimInfo<IPlayerDimensionClaims<IPlayerClaimPosList>>, IServerDimensionClaimsManager<IServerRegionClaims>>, IServerParty<IPartyMember, IPartyPlayerInfo, IPartyAlly>>
 				serverData = ServerData.from(entity.getServer());
 		if(serverData == null)
 			return false;
-		return serverData.getChunkProtection().onMobGrief(serverData, entity);
+		return serverData.getChunkProtection().onMobGrief(serverData, entity, items);
 	}
 
 	public boolean onLivingHurt(DamageSource source, Entity target) {
@@ -411,7 +404,7 @@ public abstract class CommonEvents {
 				if (oldSection.x() != newSection.x() || oldSection.z() != newSection.z()) {
 					IServerData<IServerClaimsManager<IPlayerChunkClaim, IServerPlayerClaimInfo<IPlayerDimensionClaims<IPlayerClaimPosList>>, IServerDimensionClaimsManager<IServerRegionClaims>>, IServerParty<IPartyMember, IPartyPlayerInfo, IPartyAlly>>
 							serverData = ServerData.from(entity.getServer());
-					serverData.getChunkProtection().onEntityEnterChunk(serverData, entity, projectile.getOwner().getX(), projectile.getOwner().getZ(), newSection, oldSection);
+					serverData.getChunkProtection().onEntityEnterChunk(serverData, entity, projectile.getOwner().getX(), projectile.getOwner().getZ(), newSection.chunk(), oldSection.chunk());
 				}
 				return false;
 			} else if (!fromDisk && !isMobLoot && entity instanceof ItemEntity itemEntity) {
@@ -455,7 +448,7 @@ public abstract class CommonEvents {
 			if(serverData == null)
 				return;
 			if(entity.level().dimension().equals(EntityData.from(entity).getLastChunkEntryDimension()))
-				serverData.getChunkProtection().onEntityEnterChunk(serverData, entity, entity.xOld, entity.zOld, newSection, oldSection);
+				serverData.getChunkProtection().onEntityEnterChunk(serverData, entity, entity.xOld, entity.zOld, newSection.chunk(), oldSection.chunk());
 			EntityData.from(entity).setLastChunkEntryDimension(entity.level().dimension());
 			EntityData.from(entity).setShouldCheckItemUseTick(true);
 		}
@@ -500,13 +493,14 @@ public abstract class CommonEvents {
 				serverData = ServerData.from(serverLevel.getServer());
 		if(serverData == null)
 			return false;
-		//not protecting destroyed blocks here because it causes dupes with mods like create
-//		if(replacedBlock != null && !replacedBlock.isAir() && serverData.getChunkProtection().onEntityDestroyBlock(serverData, replacedBlock, entity, serverLevel, pos, false))
-//			return true;
-	 	return placedBlock != null && !placedBlock.isAir() && serverData.getChunkProtection().onEntityPlaceBlock(serverData, entity, serverLevel, pos, null);
+		if(placedBlock == null || placedBlock.isAir())//not protecting destroyed blocks here because it causes dupes with mods like create
+			return false;
+		if(replacedBlock != null && !replacedBlock.isAir())//not protecting block replacement (non-air -> non-air) because it prevents certain item-block interactions, e.g. using discs on a jukebox or stripping logs, which can even lead to dupes if there's a block entity
+			return false;
+	 	return serverData.getChunkProtection().onEntityPlaceBlock(serverData, placedBlock, entity, serverLevel, pos, null);
 	}
 
-	protected boolean onEntityMultiPlaceBlock(LevelAccessor levelAccessor, Stream<Pair<BlockPos, BlockState>> blocks, Entity entity) {
+	protected boolean onEntityMultiPlaceBlock(LevelAccessor levelAccessor, Stream<Triple<BlockPos, BlockState, BlockState>> blocks, Entity entity) {
 		//only supported by Forge atm
 		if(!(levelAccessor instanceof Level level))
 			return false;
@@ -520,17 +514,20 @@ public abstract class CommonEvents {
 		if(ServerCore.isHandlingEnchantmentOnBlocks(serverLevel))
 			return false;
 		Set<ChunkPos> chunkPositions = new HashSet<>();
-		Iterator<Pair<BlockPos, BlockState>> iterator = blocks.iterator();
+		Iterator<Triple<BlockPos, BlockState, BlockState>> iterator = blocks.iterator();
 		boolean result = false;
 		while(iterator.hasNext()){
-			Pair<BlockPos, BlockState> blockEntry = iterator.next();
+			Triple<BlockPos, BlockState, BlockState> blockEntry = iterator.next();
 			BlockPos pos = blockEntry.getLeft();
 			if(chunkPositions.add(new ChunkPos(pos))) {
 				//not protecting destroyed blocks here because it causes dupes with mods like create
 				BlockState placedBlock = blockEntry.getRight();
 				if(placedBlock == null || placedBlock.isAir())//even 1 instance of a block break can create a dupe
 					return false;
-				result = result || serverData.getChunkProtection().onEntityPlaceBlock(serverData, entity, serverLevel, pos, null);
+				BlockState replacedBlock = blockEntry.getMiddle();
+				if(replacedBlock != null && !replacedBlock.isAir() && serverLevel.getBlockEntity(pos) != null)//not protecting block replacement (non-air -> non-air) over block entity because it can lead to dupes
+					return false;
+				result = result || serverData.getChunkProtection().onEntityPlaceBlock(serverData, placedBlock, entity, serverLevel, pos, null);
 			}
 		}
 		return result;
@@ -594,7 +591,9 @@ public abstract class CommonEvents {
 		}
 	}
 
-	public void onAddonRegister(MinecraftServer server, IPlayerPermissionSystemRegisterAPI permissionSystemManagerAPI, IPlayerPartySystemRegisterAPI partySystemManagerAPI, IClaimsManagerTrackerRegisterAPI claimsManagerTrackerAPI){
+	public void onAddonRegister(OPACServerAddonRegisterEventContext context){
+		IPlayerPermissionSystemRegisterAPI permissionSystemManagerAPI = context.getPermissionSystemManagerAPI();
+		IPlayerPartySystemRegisterAPI partySystemManagerAPI = context.getPartySystemManagerAPI();
 		//built-in "addons"
 		if(modMain.getModSupport().LUCK_PERMS)
 			permissionSystemManagerAPI.register("luck_perms", modMain.getModSupport().getLuckPerms().getPermissionSystem());
@@ -607,7 +606,7 @@ public abstract class CommonEvents {
 			partySystemManagerAPI.register("ftb_teams", modMain.getModSupport().getFTBTeamsSupport().getPartySystem());
 		if(modMain.getModSupport().ARGONAUTS) {
 			partySystemManagerAPI.register("argonauts", modMain.getModSupport().getArgonautsSupport().getPartySystem());
-			partySystemManagerAPI.register("argonauts_guilds", modMain.getModSupport().getArgonautsSupport().createGuildSystem(server));
+			partySystemManagerAPI.register("argonauts_guilds", modMain.getModSupport().getArgonautsSupport().createGuildSystem(context.getServer()));
 		}
 	}
 

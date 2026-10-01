@@ -1,6 +1,6 @@
 /*
  * Open Parties and Claims - adds chunk claims and player parties to Minecraft
- * Copyright (C) 2022-2025, Xaero <xaero1996@gmail.com> and contributors
+ * Copyright (C) 2022-2026, Xaero <xaero1996@gmail.com> and contributors
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of version 3 of the GNU Lesser General Public License
@@ -29,7 +29,7 @@ import xaero.pac.OpenPartiesAndClaims;
 import xaero.pac.common.claims.player.IPlayerChunkClaim;
 import xaero.pac.common.claims.player.IPlayerClaimPosList;
 import xaero.pac.common.claims.player.IPlayerDimensionClaims;
-import xaero.pac.common.packet.ClientboundModesPacket;
+import xaero.pac.common.packet.claims.ClientboundClaimModesPacket;
 import xaero.pac.common.parties.party.IPartyPlayerInfo;
 import xaero.pac.common.parties.party.ally.IPartyAlly;
 import xaero.pac.common.parties.party.member.IPartyMember;
@@ -70,12 +70,13 @@ public class ClaimsAdminModeCommand {
 					MinecraftServer server = player.getServer();
 					IServerData<IServerClaimsManager<IPlayerChunkClaim, IServerPlayerClaimInfo<IPlayerDimensionClaims<IPlayerClaimPosList>>, IServerDimensionClaimsManager<IServerRegionClaims>>, IServerParty<IPartyMember, IPartyPlayerInfo, IPartyAlly>>
 							serverData = ServerData.from(server);
-					ServerPlayerData mainCapability = (ServerPlayerData) ServerPlayerDataAPI.from(player);
-					mainCapability.setClaimsAdminMode(!mainCapability.isClaimsAdminMode());
-					mainCapability.setClaimsNonallyMode(false);
+					ServerPlayerData playerData = (ServerPlayerData) ServerPlayerDataAPI.from(player);
+					playerData.setClaimsModeratorMode(false);
+					playerData.setClaimsNonallyMode(false);
+					playerData.setClaimsAdminMode(!playerData.isClaimsAdminMode());
 					AdaptiveLocalizer adaptiveLocalizer = serverData.getAdaptiveLocalizer();
-					player.sendSystemMessage(adaptiveLocalizer.getFor(player, mainCapability.isClaimsAdminMode() ? "gui.xaero_claims_admin_mode_enabled" : "gui.xaero_claims_admin_mode_disabled"));
-					OpenPartiesAndClaims.INSTANCE.getPacketHandler().sendToPlayer(player, new ClientboundModesPacket(mainCapability.isClaimsAdminMode(), mainCapability.isClaimsServerMode()));
+					player.sendSystemMessage(adaptiveLocalizer.getFor(player, playerData.isClaimsAdminMode() ? "gui.xaero_claims_admin_mode_enabled" : "gui.xaero_claims_admin_mode_disabled"));
+					OpenPartiesAndClaims.INSTANCE.getPacketHandler().sendToPlayer(player, ClientboundClaimModesPacket.get(playerData));
 					return 1;
 				}));
 		dispatcher.register(command);

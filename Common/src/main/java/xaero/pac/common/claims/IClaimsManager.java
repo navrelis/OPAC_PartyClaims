@@ -1,6 +1,6 @@
 /*
  * Open Parties and Claims - adds chunk claims and player parties to Minecraft
- * Copyright (C) 2022-2025, Xaero <xaero1996@gmail.com> and contributors
+ * Copyright (C) 2022-2026, Xaero <xaero1996@gmail.com> and contributors
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of version 3 of the GNU Lesser General Public License
@@ -19,11 +19,13 @@
 package xaero.pac.common.claims;
 
 import net.minecraft.core.BlockPos;
+import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.level.ChunkPos;
 import xaero.pac.common.claims.api.IClaimsManagerAPI;
 import xaero.pac.common.claims.player.IPlayerChunkClaim;
 import xaero.pac.common.claims.player.IPlayerClaimInfo;
+import xaero.pac.common.claims.player.api.IPlayerChunkClaimAPI;
 import xaero.pac.common.claims.tracker.IClaimsManagerTracker;
 
 import javax.annotation.Nonnull;
@@ -41,6 +43,14 @@ public interface IClaimsManager
 	@Nonnull
 	@Override
 	public PCI getPlayerInfo(@Nonnull UUID playerId);
+
+	@Nonnull
+	@Override
+	public Component getDefaultName(IPlayerChunkClaimAPI claimState);
+
+	@Nonnull
+	@Override
+	public Component getFullName(IPlayerChunkClaimAPI claimState);
 
 	@Nullable
 	public IPlayerChunkClaim get(@Nonnull ResourceLocation dimension, int x, int z);

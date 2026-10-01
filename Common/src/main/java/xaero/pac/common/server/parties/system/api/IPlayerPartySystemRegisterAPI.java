@@ -1,6 +1,6 @@
 /*
  * Open Parties and Claims - adds chunk claims and player parties to Minecraft
- * Copyright (C) 2023-2025, Xaero <xaero1996@gmail.com> and contributors
+ * Copyright (C) 2023-2026, Xaero <xaero1996@gmail.com> and contributors
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of version 3 of the GNU Lesser General Public License
@@ -19,14 +19,19 @@
 package xaero.pac.common.server.parties.system.api;
 
 /**
+ * @deprecated use {@link xaero.pac.common.server.parties.system.api.v2.IPlayerPartySystemRegisterAPI} instead
+ * <p>
  * The API for registering party system implementations.
  * <p>
  * Party system implementations must be registered during the
  * xaero.pac.common.event.api.OPACServerAddonRegister.EVENT on Fabric or OPACServerAddonRegisterEvent on Forge.
  */
-public interface IPlayerPartySystemRegisterAPI {
+@Deprecated
+public interface IPlayerPartySystemRegisterAPI extends xaero.pac.common.server.parties.system.api.v2.IPlayerPartySystemRegisterAPI {
 
 	/**
+	 * @deprecated use {@link xaero.pac.common.server.parties.system.api.v2.IPlayerPartySystemRegisterAPI} instead
+	 * <p>
 	 * Registers a party system implementation to be available to OPAC
 	 * under a specified name.
 	 * <p>
@@ -36,6 +41,9 @@ public interface IPlayerPartySystemRegisterAPI {
 	 * @param name  the name to register the party system under, not null
 	 * @param system  the party system implementation, not null
 	 */
-	void register(String name, IPlayerPartySystemAPI<?> system);
+	@Deprecated
+	default void register(String name, IPlayerPartySystemAPI<?> system){
+		register(name, (xaero.pac.common.server.parties.system.api.v2.IPlayerPartySystemAPI)system);
+	}
 
 }

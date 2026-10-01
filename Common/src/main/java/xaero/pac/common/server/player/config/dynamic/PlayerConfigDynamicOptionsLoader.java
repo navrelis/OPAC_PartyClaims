@@ -1,6 +1,6 @@
 /*
  * Open Parties and Claims - adds chunk claims and player parties to Minecraft
- * Copyright (C) 2022-2025, Xaero <xaero1996@gmail.com> and contributors
+ * Copyright (C) 2022-2026, Xaero <xaero1996@gmail.com> and contributors
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of version 3 of the GNU Lesser General Public License
@@ -28,15 +28,26 @@ import java.util.Map;
 
 public class PlayerConfigDynamicOptionsLoader {
 
-	public void load(PlayerConfigDynamicOptions.Builder builder, Map<String, ChunkProtectionExceptionGroup<Block>> blockExceptionGroups, Map<String, ChunkProtectionExceptionGroup<EntityType<?>>> entityExceptionGroups, Map<String, ChunkProtectionExceptionGroup<Item>> itemExceptionGroups, Map<String, ChunkProtectionExceptionGroup<EntityType<?>>> entityBarrierGroups, Map<String, ChunkProtectionExceptionGroup<EntityType<?>>> blockProtectionExceptionEntityGroups, Map<String, ChunkProtectionExceptionGroup<EntityType<?>>> entityProtectionExceptionEntityGroups, Map<String, ChunkProtectionExceptionGroup<EntityType<?>>> droppedItemProtectionExceptionEntityGroups){
+	public void load(
+			PlayerConfigDynamicOptions.Builder builder,
+			Map<String, ChunkProtectionExceptionGroup<Block>> blockExceptionGroups,
+			Map<String, ChunkProtectionExceptionGroup<EntityType<?>>> entityExceptionGroups,
+			Map<String, ChunkProtectionExceptionGroup<Item>> itemExceptionGroups,
+			Map<String, ChunkProtectionExceptionGroup<EntityType<?>>> entityBarrierGroups,
+			Map<String, ChunkProtectionExceptionGroup<EntityType<?>>> blockAccessEntityGroups,
+			Map<String, ChunkProtectionExceptionGroup<EntityType<?>>> entityAccessEntityGroups,
+			Map<String, ChunkProtectionExceptionGroup<EntityType<?>>> playerAccessEntityGroups,
+			Map<String, ChunkProtectionExceptionGroup<EntityType<?>>> droppedItemAccessEntityGroups
+	){
 		PlayerConfigExceptionDynamicOptionsLoader exceptionDynamicOptionsLoader = new PlayerConfigExceptionDynamicOptionsLoader();
 		entityBarrierGroups.values().forEach(group -> exceptionDynamicOptionsLoader.handleGroup(group, builder, "entity", "entities"));
 		blockExceptionGroups.values().forEach(group -> exceptionDynamicOptionsLoader.handleGroup(group, builder, "block", "blocks"));
 		entityExceptionGroups.values().forEach(group -> exceptionDynamicOptionsLoader.handleGroup(group, builder, "entity", "entities"));
 		itemExceptionGroups.values().forEach(group -> exceptionDynamicOptionsLoader.handleGroup(group, builder, "item", "items"));
-		blockProtectionExceptionEntityGroups.values().forEach(group -> exceptionDynamicOptionsLoader.handleGroup(group, builder, "entity", "entities"));
-		entityProtectionExceptionEntityGroups.values().forEach(group -> exceptionDynamicOptionsLoader.handleGroup(group, builder, "entity", "entities"));
-		droppedItemProtectionExceptionEntityGroups.values().forEach(group -> exceptionDynamicOptionsLoader.handleGroup(group, builder, "entity", "entities"));
+		blockAccessEntityGroups.values().forEach(group -> exceptionDynamicOptionsLoader.handleGroup(group, builder, "entity", "entities"));
+		entityAccessEntityGroups.values().forEach(group -> exceptionDynamicOptionsLoader.handleGroup(group, builder, "entity", "entities"));
+		playerAccessEntityGroups.values().forEach(group -> exceptionDynamicOptionsLoader.handleGroup(group, builder, "entity", "entities"));
+		droppedItemAccessEntityGroups.values().forEach(group -> exceptionDynamicOptionsLoader.handleGroup(group, builder, "entity", "entities"));
 	}
 
 }

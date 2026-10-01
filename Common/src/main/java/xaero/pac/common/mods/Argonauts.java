@@ -1,6 +1,6 @@
 /*
  * Open Parties and Claims - adds chunk claims and player parties to Minecraft
- * Copyright (C) 2023-2025, Xaero <xaero1996@gmail.com> and contributors
+ * Copyright (C) 2023-2026, Xaero <xaero1996@gmail.com> and contributors
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of version 3 of the GNU Lesser General Public License
@@ -19,7 +19,7 @@
 package xaero.pac.common.mods;
 
 import net.minecraft.server.MinecraftServer;
-import xaero.pac.common.server.parties.system.api.IPlayerPartySystemAPI;
+import xaero.pac.common.server.parties.system.api.v2.IPlayerPartySystemAPI;
 import xaero.pac.common.server.parties.system.impl.PlayerArgonautsGuildSystem;
 import xaero.pac.common.server.parties.system.impl.PlayerArgonautsPartySystem;
 
@@ -38,4 +38,5 @@ public class Argonauts {
 	public IPlayerPartySystemAPI<?> createGuildSystem(MinecraftServer server) {
 		return new PlayerArgonautsGuildSystem(server);
 	}
+
 }

@@ -1,6 +1,6 @@
 /*
  * Open Parties and Claims - adds chunk claims and player parties to Minecraft
- * Copyright (C) 2022-2025, Xaero <xaero1996@gmail.com> and contributors
+ * Copyright (C) 2022-2026, Xaero <xaero1996@gmail.com> and contributors
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of version 3 of the GNU Lesser General Public License
@@ -77,6 +77,8 @@ public class ClientboundPacDimensionHandshakePacket {
 		
 		@Override
 		public void accept(ClientboundPacDimensionHandshakePacket t) {
+			if(t == null)
+				return;
 			//OpenPartiesAndClaims.LOGGER.info("Received handshake for Open Parties and Claims!");
 			ClientLevel world = Minecraft.getInstance().level;
 			ClientWorldMainCapability mainCap = (ClientWorldMainCapability) OpenPartiesAndClaims.INSTANCE.getCapabilityHelper().getCapability(world, ClientWorldCapabilityTypes.MAIN_CAP);

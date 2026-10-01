@@ -1,6 +1,6 @@
 /*
  * Open Parties and Claims - adds chunk claims and player parties to Minecraft
- * Copyright (C) 2022-2025, Xaero <xaero1996@gmail.com> and contributors
+ * Copyright (C) 2022-2026, Xaero <xaero1996@gmail.com> and contributors
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of version 3 of the GNU Lesser General Public License
@@ -56,7 +56,7 @@ public final class PlayerClaimInfoNbtSerializer implements SimpleSerializer<Comp
 		String username = nbt.getString("username");
 		Map<ResourceLocation, PlayerDimensionClaims> claims = new HashMap<>();
 		dimensionsTag.getAllKeys().forEach(key -> claims.put(ResourceLocation.parse(key), playerDimensionClaimsNbtSerializer.deserialize(id, key, dimensionsTag.getCompound(key))));
-		ServerPlayerClaimInfo result = new ServerPlayerClaimInfo(manager.getConfig(id), username, id, claims, manager, new ArrayDeque<>());
+		ServerPlayerClaimInfo result = new ServerPlayerClaimInfo(manager.getConfig(id), username, id, claims, manager, new ArrayDeque<>(), new ArrayDeque<>());
 		result.setRegisteredActivity(nbt.getLong("confirmedActivity"));
 		return result;
 	}

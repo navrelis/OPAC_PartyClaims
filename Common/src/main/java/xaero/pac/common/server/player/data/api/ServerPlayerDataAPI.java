@@ -1,6 +1,6 @@
 /*
  * Open Parties and Claims - adds chunk claims and player parties to Minecraft
- * Copyright (C) 2022-2025, Xaero <xaero1996@gmail.com> and contributors
+ * Copyright (C) 2022-2026, Xaero <xaero1996@gmail.com> and contributors
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of version 3 of the GNU Lesser General Public License
@@ -22,6 +22,8 @@ import net.minecraft.server.level.ServerPlayer;
 import xaero.pac.common.claims.player.IPlayerChunkClaim;
 import xaero.pac.common.claims.player.IPlayerClaimPosList;
 import xaero.pac.common.claims.player.IPlayerDimensionClaims;
+import xaero.pac.common.claims.player.impersonation.api.IPlayerClaimImpersonationInfoAPI;
+import xaero.pac.common.claims.player.mode.api.IClaimingModeAPI;
 import xaero.pac.common.parties.party.IPartyPlayerInfo;
 import xaero.pac.common.parties.party.ally.IPartyAlly;
 import xaero.pac.common.parties.party.member.IPartyMember;
@@ -37,11 +39,19 @@ import xaero.pac.common.server.player.data.IOpenPACServerPlayer;
 import xaero.pac.common.server.player.data.ServerPlayerData;
 
 import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
 
 /**
  * API for data attached to a server player
  */
 public abstract class ServerPlayerDataAPI {
+
+	/**
+	 * Checks if the player is using either the claims moderator mode or claims admin mode.
+	 *
+	 * @return true if the player is effectively in the claims moderator mode, otherwise false
+	 */
+	public abstract boolean isClaimsModeratorMode();
 
 	/**
 	 * Checks if the player is using the claims admin mode.
@@ -58,11 +68,49 @@ public abstract class ServerPlayerDataAPI {
 	public abstract boolean isClaimsNonallyMode();
 
 	/**
+	 * @deprecated Use {@link #getClaimingMode()} instead
+	 * <p>
 	 * Checks if the player is using the server claim mode.
 	 *
 	 * @return true if the player is in the server claim mode, otherwise false
 	 */
+	@Deprecated
 	public abstract boolean isClaimsServerMode();
+
+	/**
+	 * Gets the current effective claiming mode.
+	 * <p>
+	 * All claiming modes can be accessed through {@link xaero.pac.common.claims.player.mode.api.ClaimingModes}
+	 *
+	 * @return the current claiming mode, not null
+	 */
+	@Nonnull
+	public abstract IClaimingModeAPI getClaimingMode();
+
+	/**
+	 * Gets the current claiming mode without automatically determining the effective one if none is set.
+	 * <p>
+	 * All claiming modes can be accessed through {@link xaero.pac.common.claims.player.mode.api.ClaimingModes}
+	 *
+	 * @return the current claiming mode, null if none is set
+	 */
+	@Nullable
+	public abstract IClaimingModeAPI getRawClaimingMode();
+
+	/**
+	 * Checks if this player is using the parties admin mode.
+	 *
+	 * @return true if the player is in parties admin mode, otherwise false
+	 */
+	public abstract boolean isPartiesAdminMode();
+
+	/**
+	 * Gets the API for the player claim impersonation info for this player.
+	 *
+	 * @return API for getting info about player claim impersonation by this player, not null
+	 */
+	@Nonnull
+	public abstract IPlayerClaimImpersonationInfoAPI getClaimsImpersonationInfo();
 
 	/**
 	 * Gets the player data for a specified logged in player.
@@ -73,8 +121,11 @@ public abstract class ServerPlayerDataAPI {
 	@Nonnull
 	public static ServerPlayerDataAPI from(@Nonnull ServerPlayer player) {
 		ServerPlayerDataAPI result = ((IOpenPACServerPlayer)player).getXaero_OPAC_PlayerData();
-		if(result == null)
-			((IOpenPACServerPlayer) player).setXaero_OPAC_PlayerData(result = new ServerPlayerData());
+		if(result == null) {
+			IServerData<IServerClaimsManager<IPlayerChunkClaim, IServerPlayerClaimInfo<IPlayerDimensionClaims<IPlayerClaimPosList>>, IServerDimensionClaimsManager<IServerRegionClaims>>, IServerParty<IPartyMember, IPartyPlayerInfo, IPartyAlly>>
+					serverData = ServerData.from(player.getServer());
+			((IOpenPACServerPlayer) player).setXaero_OPAC_PlayerData(result = new ServerPlayerData(serverData, player));
+		}
 		ServerPlayerData data = (ServerPlayerData)result;
 		if(!data.hasHandledLogin() && player.connection != null && ServerCore.getServerGamePacketListenerConnection(player.connection) != null && !ServerCore.getServerGamePacketListenerConnection(player.connection).isConnecting()){//isConnecting() = the channel is null
 			ServerPlayer placedPlayer = player.getServer().getPlayerList().getPlayer(player.getUUID());

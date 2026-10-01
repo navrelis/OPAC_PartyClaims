@@ -1,6 +1,6 @@
 /*
  * Open Parties and Claims - adds chunk claims and player parties to Minecraft
- * Copyright (C) 2022-2025, Xaero <xaero1996@gmail.com> and contributors
+ * Copyright (C) 2022-2026, Xaero <xaero1996@gmail.com> and contributors
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of version 3 of the GNU Lesser General Public License
@@ -141,13 +141,13 @@ public final class PlayerSubClaimDeletionSpreadoutTask extends PlayerClaimReplac
 				ServerPlayer onlinePlayer = callerUUID == null ? null : server.getPlayerList().getPlayer(callerUUID);
 				AdaptiveLocalizer adaptiveLocalizer = serverData.getAdaptiveLocalizer();
 				if (resultType.isSuccess()) {
-					IPlayerConfig config = serverData.getPlayerConfigs().getLoadedConfig(playerInfo.getPlayerId());
+					IPlayerConfig config = serverData.getPlayerConfigManager().getLoadedConfig(playerInfo.getPlayerId());
 					IPlayerConfig removedSub = config.removeSubConfig(subConfigIndex);
 					if (onlinePlayer != null && removedSub != null) {
 						if(removedSub.getType() != PlayerConfigType.SERVER && !removedSub.getPlayerId().equals(callerUUID)) {
 							ServerPlayerData playerData = (ServerPlayerData) ServerPlayerData.from(onlinePlayer);
 							if(Objects.equals(playerData.getLastOtherConfigRequest(), removedSub.getPlayerId()))
-								serverData.getPlayerConfigs().getSynchronizer().syncSubExistence(onlinePlayer, removedSub, false);//notify the "other player" config
+								serverData.getPlayerConfigManager().getSynchronizer().syncSubExistence(onlinePlayer, removedSub, false);//notify the "other player" config
 						}
 						onlinePlayer.sendSystemMessage(adaptiveLocalizer.getFor(onlinePlayer, "gui.xaero_pac_config_delete_sub_complete", removedSub.getSubId()));
 					}

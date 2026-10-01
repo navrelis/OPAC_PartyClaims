@@ -1,6 +1,6 @@
 /*
  * Open Parties and Claims - adds chunk claims and player parties to Minecraft
- * Copyright (C) 2022-2025, Xaero <xaero1996@gmail.com> and contributors
+ * Copyright (C) 2022-2026, Xaero <xaero1996@gmail.com> and contributors
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of version 3 of the GNU Lesser General Public License
@@ -18,6 +18,7 @@
 
 package xaero.pac.common.claims.player;
 
+import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import xaero.pac.common.server.player.config.IPlayerConfigManager;
 import xaero.pac.common.util.linked.ILinkedChainNode;
@@ -27,13 +28,14 @@ import javax.annotation.Nullable;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Map.Entry;
+import java.util.Objects;
 import java.util.UUID;
 import java.util.stream.Stream;
 
 public abstract class PlayerClaimInfo
 <
 	PCI extends PlayerClaimInfo<PCI, M>,
-	M extends PlayerClaimInfoManager<PCI, M>
+	M extends PlayerClaimInfoManager<PCI, M, ?>
 > implements IPlayerClaimInfo<PlayerDimensionClaims>, ILinkedChainNode<PCI> {
 
 	protected final PCI self;
@@ -41,6 +43,8 @@ public abstract class PlayerClaimInfo
 	private String playerUsername;
 	protected final UUID playerId;
 	protected final Map<ResourceLocation, PlayerDimensionClaims> claims;
+	private Component defaultPartyNameCache;
+	private String defaultPartyNameCachedFor;
 
 	private boolean destroyed;
 	private PCI nextInChain;
@@ -89,12 +93,12 @@ public abstract class PlayerClaimInfo
 	@Override
 	public int getClaimCount() {
 		int base = getDimensionClaimCountStream().mapToInt(e -> e.getValue().getCount()).sum();
-		// [Team Claims] Add team claim overhead (claims by other party members)
+		// [Team Claims] Add team claim overhead (team claims by other party members)
 		xaero.pac.common.server.claims.TeamClaimsIntegration.TeamClaimsHandler tcHandler =
 				xaero.pac.common.server.claims.TeamClaimsIntegration.getHandler();
-		if (tcHandler != null && !tcHandler.isComputingOverhead()) {
+		if(tcHandler != null && !tcHandler.isComputingOverhead()) {
 			int overhead = tcHandler.getTeamClaimOverheadForPlayer(this.playerId);
-			if (overhead > 0) base += overhead;
+			if(overhead > 0) base += overhead;
 		}
 		return base;
 	}
@@ -102,12 +106,12 @@ public abstract class PlayerClaimInfo
 	@Override
 	public int getForceloadCount() {
 		int base = getDimensionForceloadCountStream().mapToInt(e -> e.getValue().getForceloadableCount()).sum();
-		// [Team Claims] Add team forceload overhead
+		// [Team Claims] Add team forceload overhead (team forceloads by other party members)
 		xaero.pac.common.server.claims.TeamClaimsIntegration.TeamClaimsHandler tcHandler =
 				xaero.pac.common.server.claims.TeamClaimsIntegration.getHandler();
-		if (tcHandler != null && !tcHandler.isComputingOverhead()) {
+		if(tcHandler != null && !tcHandler.isComputingOverhead()) {
 			int overhead = tcHandler.getTeamForceloadOverheadForPlayer(this.playerId);
-			if (overhead > 0) base += overhead;
+			if(overhead > 0) base += overhead;
 		}
 		return base;
 	}
@@ -179,5 +183,12 @@ public abstract class PlayerClaimInfo
 		destroyed = true;
 	}
 
+	public Component getDefaultPartyName() {
+		if(defaultPartyNameCachedFor == null || !Objects.equals(defaultPartyNameCachedFor, getPlayerUsername())){
+			defaultPartyNameCache = Component.translatable("gui.xaero_pac_default_party_name", getPlayerUsername());
+			defaultPartyNameCachedFor = getPlayerUsername();
+		}
+		return defaultPartyNameCache;
+	}
 	
 }

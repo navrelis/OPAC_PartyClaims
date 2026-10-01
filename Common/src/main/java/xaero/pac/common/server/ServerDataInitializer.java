@@ -1,6 +1,6 @@
 /*
  * Open Parties and Claims - adds chunk claims and player parties to Minecraft
- * Copyright (C) 2022-2025, Xaero <xaero1996@gmail.com> and contributors
+ * Copyright (C) 2022-2026, Xaero <xaero1996@gmail.com> and contributors
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of version 3 of the GNU Lesser General Public License
@@ -21,6 +21,7 @@ package xaero.pac.common.server;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.chunk.LevelChunk;
@@ -28,9 +29,11 @@ import xaero.pac.OpenPartiesAndClaims;
 import xaero.pac.common.server.claims.ServerClaimsManager;
 import xaero.pac.common.server.claims.ServerClaimsPermissionHandler;
 import xaero.pac.common.server.claims.forceload.ForceLoadTicketManager;
+import xaero.pac.common.server.claims.player.ServerPlayerClaimPartyUpdater;
 import xaero.pac.common.server.claims.player.expiration.ServerPlayerClaimsExpirationHandler;
 import xaero.pac.common.server.claims.player.io.PlayerClaimInfoManagerIO;
 import xaero.pac.common.server.claims.player.io.serialization.nbt.PlayerClaimInfoNbtSerializer;
+import xaero.pac.common.server.claims.player.task.PlayerAreaClaimActionSpreadoutTask;
 import xaero.pac.common.server.claims.player.task.PlayerClaimReplaceSpreadoutTask;
 import xaero.pac.common.server.claims.protection.ChunkProtection;
 import xaero.pac.common.server.claims.protection.ChunkProtectionExceptionType;
@@ -66,8 +69,11 @@ import xaero.pac.common.server.player.PlayerWorldJoinHandler;
 import xaero.pac.common.server.player.config.PlayerConfigManager;
 import xaero.pac.common.server.player.config.PlayerConfigOptionCategory;
 import xaero.pac.common.server.player.config.io.PlayerConfigIO;
+import xaero.pac.common.server.player.config.permission.PlayerConfigPermissionUpdater;
 import xaero.pac.common.server.player.config.sync.task.PlayerConfigSyncSpreadoutTask;
 import xaero.pac.common.server.player.data.ServerPlayerData;
+import xaero.pac.common.server.player.party.PrimaryPartyOnlineCounter;
+import xaero.pac.common.server.player.party.ServerPlayerPartyOnlineCounterUpdater;
 import xaero.pac.common.server.player.permission.PlayerPermissionChangeHandler;
 import xaero.pac.common.server.player.permission.PlayerPermissionSystemManager;
 import xaero.pac.common.server.task.ServerSpreadoutQueuedTaskHandler;
@@ -92,18 +98,28 @@ public class ServerDataInitializer {
 					.setManager(serverInfoHolder)
 					.build();
 			serverInfoIO.load();
+			ServerConfigUpdater serverConfigUpdater = new ServerConfigUpdater();
 			ServerInfo serverInfo;
 			if(serverInfoHolder.getServerInfo() == null) {
-				serverInfoHolder.setObject(serverInfo = new ServerInfo(0, ServerInfo.CURRENT_VERSION));
+				int targetPlayerConfigVersion = serverConfigUpdater.getTargetPlayerConfigVersion();//yes, weird place to get it from
+				serverInfoHolder.setObject(serverInfo =
+						new ServerInfo(0, ServerInfo.CURRENT_VERSION, targetPlayerConfigVersion)
+				);
 				serverInfo.setDirty(true);
 				serverInfoIO.save();
 			} else
 				serverInfo = serverInfoHolder.getServerInfo();
-			if(serverInfo.getLoadedVersion() < ServerInfo.CURRENT_VERSION)
-				new ServerConfigUpdater().update(serverInfo);
+			serverConfigUpdater.update(serverInfo);
 
 			ServerTickHandler serverTickHandler = ServerTickHandler.Builder.begin().setServer(server).build();
 
+			ServerSpreadoutQueuedTaskHandler<PlayerAreaClaimActionSpreadoutTask> areaClaimActionTaskHandler =
+					ServerSpreadoutQueuedTaskHandler.Builder
+					.<PlayerAreaClaimActionSpreadoutTask>begin()
+					.setPerTickLimit(512)
+					.setPerTickPerTaskLimit(64)
+					.build();
+			serverTickHandler.registerSpreadoutTaskHandler(areaClaimActionTaskHandler);
 			ServerSpreadoutQueuedTaskHandler<PlayerClaimReplaceSpreadoutTask> claimReplaceTaskHandler =
 					ServerSpreadoutQueuedTaskHandler.Builder
 					.<PlayerClaimReplaceSpreadoutTask>begin()
@@ -121,8 +137,8 @@ public class ServerDataInitializer {
 			ServerPlayerSpreadoutTaskHandler<PlayerConfigSyncSpreadoutTask> playerConfigSyncTaskHandler =
 					ServerPlayerSpreadoutTaskHandler.FinalBuilder
 					.<PlayerConfigSyncSpreadoutTask>begin()
-					.setPerTickLimit(128)
-					.setPerTickPerTaskLimit(1)
+					.setPerTickLimit(8192)
+					.setPerTickPerTaskLimit(64)
 					.setPlayerTaskGetter(ServerPlayerData::getConfigSyncSpreadoutTask)
 					.build();
 			serverTickHandler.registerSpreadoutTaskHandler(playerConfigSyncTaskHandler);
@@ -134,10 +150,13 @@ public class ServerDataInitializer {
 					.build();
 			serverTickHandler.registerSpreadoutTaskHandler(partyRemovalTaskHandler);
 
+			PlayerPartySystemManager playerPartySystemManager = PlayerPartySystemManager.Builder.begin(LinkedHashMap::new).build();
+			ServerPlayerPartyOnlineCounterUpdater playerPartyOnlineCounterUpdater = new ServerPlayerPartyOnlineCounterUpdater();
 			PartyPlayerInfoUpdater partyMemberInfoUpdater = new PartyPlayerInfoUpdater();
 			PartyManager partyManager = PartyManager.Builder.begin()
 					.setServer(server)
 					.setPartyRemovalTaskHandler(partyRemovalTaskHandler)
+					.setPlayerPartyOnlineCounterUpdater(playerPartyOnlineCounterUpdater)
 					.build();
 			PartyExpirationHandler partyExpirationHandler = PartyExpirationHandler.Builder.begin()
 					.setManager(partyManager)
@@ -158,10 +177,14 @@ public class ServerDataInitializer {
 					.setManager(partyManager)
 					.setFileIOHelper(fileIOHelper)
 					.build();
-			partyManager.setIo(partyManagerIO);
 			
 			PlayerLogInPartyAssigner playerPartyAssigner = new PlayerLogInPartyAssigner();
-			PlayerTickHandler playerTickHandler = PlayerTickHandler.Builder.begin().build();
+			PlayerConfigPermissionUpdater playerConfigPermissionUpdater = new PlayerConfigPermissionUpdater();
+			ServerPlayerClaimPartyUpdater playerClaimPartyUpdater = new ServerPlayerClaimPartyUpdater();
+			PlayerTickHandler playerTickHandler = PlayerTickHandler.Builder.begin()
+					.setPlayerClaimPartyForceloadUpdater(playerPartyOnlineCounterUpdater)
+					.setPlayerClaimPartyUpdater(playerClaimPartyUpdater)
+					.build();
 			PlayerLoginHandler playerLoginHandler = new PlayerLoginHandler();
 			PlayerLogoutHandler playerLogoutHandler = new PlayerLogoutHandler();
 			PlayerPermissionChangeHandler playerPermissionChangeHandler = new PlayerPermissionChangeHandler();
@@ -176,6 +199,7 @@ public class ServerDataInitializer {
 			Map<String, ChunkProtectionExceptionGroup<EntityType<?>>> entityBarrierGroups = new LinkedHashMap<>();
 			Map<String, ChunkProtectionExceptionGroup<EntityType<?>>> blockAccessEntityGroups = new LinkedHashMap<>();
 			Map<String, ChunkProtectionExceptionGroup<EntityType<?>>> entityAccessEntityGroups = new LinkedHashMap<>();
+			Map<String, ChunkProtectionExceptionGroup<EntityType<?>>> playerAccessEntityGroups = new LinkedHashMap<>();
 			Map<String, ChunkProtectionExceptionGroup<EntityType<?>>> droppedItemAccessEntityGroups = new LinkedHashMap<>();
 			ChunkProtectionExceptionGroupLoader exceptionGroupLoader = new ChunkProtectionExceptionGroupLoader();
 			ExceptionElementType.updateAllIterables(server);
@@ -185,19 +209,23 @@ public class ServerDataInitializer {
 			exceptionGroupLoader.load(server, ServerConfig.CONFIG.entityClaimBarrierOptionalGroups, ExceptionElementType.ENTITY_TYPE, LevelChunk.class, false, wildcardResolver, entityBarrierGroups, ChunkProtectionExceptionType.BARRIER, t -> t == ChunkProtectionExceptionType.BARRIER, PlayerConfigOptionCategory.MOVEMENT);
 			exceptionGroupLoader.load(server, ServerConfig.CONFIG.blockAccessEntityGroups, ExceptionElementType.ENTITY_TYPE, Block.class, false, wildcardResolver, blockAccessEntityGroups, ChunkProtectionExceptionType.FULL, t -> t != ChunkProtectionExceptionType.BARRIER, PlayerConfigOptionCategory.BLOCK_PROTECTION);
 			exceptionGroupLoader.load(server, ServerConfig.CONFIG.entityAccessEntityGroups, ExceptionElementType.ENTITY_TYPE, EntityType.class, false, wildcardResolver, entityAccessEntityGroups, ChunkProtectionExceptionType.FULL, t -> t != ChunkProtectionExceptionType.BARRIER, PlayerConfigOptionCategory.ENTITY_PROTECTION);
+			exceptionGroupLoader.load(server, ServerConfig.CONFIG.playerAccessEntityGroups, ExceptionElementType.ENTITY_TYPE, Player.class, false, wildcardResolver, playerAccessEntityGroups, ChunkProtectionExceptionType.FULL, t -> t != ChunkProtectionExceptionType.BARRIER, PlayerConfigOptionCategory.PLAYER_PROTECTION);
 			exceptionGroupLoader.load(server, ServerConfig.CONFIG.droppedItemAccessEntityGroups, ExceptionElementType.ENTITY_TYPE, Item.class, false, wildcardResolver, droppedItemAccessEntityGroups, ChunkProtectionExceptionType.FULL, t -> t == ChunkProtectionExceptionType.FULL, PlayerConfigOptionCategory.PICKUP_PROTECTION);
 
 			PlayerConfigManager<ServerParty, ServerClaimsManager> playerConfigs = PlayerConfigManager.Builder.<ServerParty, ServerClaimsManager>begin()
 					.setServer(server)
 					.setPartyManager(partyManager)
+					.setPartySystemManager(playerPartySystemManager)
 					.setBlockExceptionGroups(blockExceptionGroups)
 					.setEntityExceptionGroups(entityExceptionGroups)
 					.setItemExceptionGroups(itemExceptionGroups)
 					.setEntityBarrierGroups(entityBarrierGroups)
 					.setBlockAccessEntityGroups(blockAccessEntityGroups)
 					.setEntityAccessEntityGroups(entityAccessEntityGroups)
+					.setPlayerAccessEntityGroups(playerAccessEntityGroups)
 					.setDroppedItemAccessEntityGroups(droppedItemAccessEntityGroups)
 					.build();
+			playerPartySystemManager.setConfigManager(playerConfigs);
 			partyManager.setPlayerConfigs(playerConfigs);
 			PlayerConfigIO<ServerParty, ServerClaimsManager> playerConfigsIO = PlayerConfigIO.Builder.<ServerParty, ServerClaimsManager>begin()
 					.setServer(server)
@@ -215,6 +243,11 @@ public class ServerDataInitializer {
 			}
 
 			ForceLoadTicketManager forceLoadManager = playerConfigs.getForceLoadTicketManager();
+			PrimaryPartyOnlineCounter primaryPartyOnlineCounter = PrimaryPartyOnlineCounter.Builder.begin()
+					.setForceloadManager(forceLoadManager)
+					.build();
+			forceLoadManager.setPrimaryPartyOnlineCounter(primaryPartyOnlineCounter);
+			playerPartyOnlineCounterUpdater.setPrimaryPartyOnlineCounter(primaryPartyOnlineCounter);
 			ClaimsManagerSynchronizer claimsSynchronizer = ClaimsManagerSynchronizer.Builder.begin().setServer(server).build();
 			ServerClaimsPermissionHandler serverClaimsPermissionHandler = new ServerClaimsPermissionHandler();
 			ServerClaimsManager serverClaimsManager = ServerClaimsManager.Builder.begin()
@@ -222,8 +255,10 @@ public class ServerDataInitializer {
 					.setTicketManager(forceLoadManager)
 					.setConfigManager(playerConfigs)
 					.setClaimsManagerSynchronizer(claimsSynchronizer)
+					.setAreaClaimActionTaskHandler(areaClaimActionTaskHandler)
 					.setClaimReplaceTaskHandler(claimReplaceTaskHandler)
 					.setPermissionHandler(serverClaimsPermissionHandler)
+					.setPartySystemManager(playerPartySystemManager)
 					.build();
 			forceLoadManager.setClaimsManager(serverClaimsManager);
 			playerConfigs.setClaimsManager(serverClaimsManager);
@@ -238,7 +273,6 @@ public class ServerDataInitializer {
 					.setFileIOHelper(fileIOHelper)
 					.setServer(server)
 					.build();
-			serverClaimsManager.setIo(playerClaimInfoManagerIO);
 
 			ServerPlayerClaimsExpirationHandler claimsExpirationHandler = serverClaimsManager
 					.beginExpirationHandlerBuilder()
@@ -248,7 +282,6 @@ public class ServerDataInitializer {
 			serverClaimsManager.setExpirationHandler(claimsExpirationHandler);
 
 			PlayerPermissionSystemManager playerPermissionSystemManager = PlayerPermissionSystemManager.Builder.begin(LinkedHashMap::new).build();
-			PlayerPartySystemManager playerPartySystemManager = PlayerPartySystemManager.Builder.begin(LinkedHashMap::new).build();
 			ObjectManagerLiveSaver playerClaimInfoLiveSaver = new ObjectManagerLiveSaver(playerClaimInfoManagerIO, autosaveInterval, autosaveInterval / 3 * 2);
 			ChunkProtection<ServerClaimsManager> chunkProtection = ChunkProtection.Builder
 					.<ServerClaimsManager>begin()
@@ -261,16 +294,18 @@ public class ServerDataInitializer {
 					.setEntityBarrierGroups(entityBarrierGroups)
 					.setBlockAccessEntityGroups(blockAccessEntityGroups)
 					.setEntityAccessEntityGroups(entityAccessEntityGroups)
+					.setPlayerAccessEntityGroups(playerAccessEntityGroups)
 					.setDroppedItemAccessEntityGroups(droppedItemAccessEntityGroups)
 					.build();
 			chunkProtection.updateTagExceptions(server);
+			serverClaimsManager.setChunkProtection(chunkProtection);
 			ServerStartingCallback serverLoadCallback = new ServerStartingCallback(playerClaimInfoManagerIO);
 
 			ServerData serverData = new ServerData(server, partyManager, partyManagerIO, playerPartyAssigner, partyMemberInfoUpdater, 
 					partyExpirationHandler, serverTickHandler, playerTickHandler, playerLoginHandler, playerLogoutHandler, playerPermissionChangeHandler, partyLiveSaver,
-					ioThreadWorker, playerConfigs, playerConfigsIO, playerConfigLiveSaver, playerClaimInfoManagerIO, playerClaimInfoLiveSaver,
-					serverClaimsManager, chunkProtection, serverLoadCallback, forceLoadManager, playerWorldJoinHandler, serverInfo, serverInfoIO, 
-					claimsExpirationHandler, objectExpirationCheckTaskHandler, playerPermissionSystemManager, playerPartySystemManager);
+					ioThreadWorker, playerConfigs, playerConfigsIO, playerConfigLiveSaver, playerConfigPermissionUpdater, playerClaimInfoManagerIO, playerClaimInfoLiveSaver,
+					serverClaimsManager, chunkProtection, serverLoadCallback, forceLoadManager, primaryPartyOnlineCounter, playerWorldJoinHandler, serverInfo, serverInfoIO,
+					claimsExpirationHandler, objectExpirationCheckTaskHandler, playerPermissionSystemManager, playerPartySystemManager, playerClaimPartyUpdater);
 			partyManager.getPartySynchronizer().setServerData(serverData);
 			claimsSynchronizer.setServerData(serverData);
 			serverData.onServerResourcesReload(server.getResourceManager());

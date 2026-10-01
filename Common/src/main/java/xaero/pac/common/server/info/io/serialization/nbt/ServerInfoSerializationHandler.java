@@ -1,6 +1,6 @@
 /*
  * Open Parties and Claims - adds chunk claims and player parties to Minecraft
- * Copyright (C) 2022-2025, Xaero <xaero1996@gmail.com> and contributors
+ * Copyright (C) 2022-2026, Xaero <xaero1996@gmail.com> and contributors
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of version 3 of the GNU Lesser General Public License
@@ -30,6 +30,7 @@ public class ServerInfoSerializationHandler extends SerializationHandler<Compoun
 		CompoundTag tag = new CompoundTag();
 		tag.putLong("totalUseTime", object.getTotalUseTime());
 		tag.putInt("version", ServerInfo.CURRENT_VERSION);
+		tag.putInt("targetPlayerConfigVersion", object.getTargetPlayerConfigVersion());
 		return tag;
 	}
 
@@ -37,7 +38,8 @@ public class ServerInfoSerializationHandler extends SerializationHandler<Compoun
 	public ServerInfo deserialize(Object id, ServerInfoHolder manager, CompoundTag serializedData) {
 		long useTime = serializedData.getLong("totalUseTime");
 		int loadedVersion = serializedData.getInt("version");
-		return new ServerInfo(useTime, loadedVersion);
+		int targetPlayerConfigVersion = serializedData.getInt("targetPlayerConfigVersion");
+		return new ServerInfo(useTime, loadedVersion, targetPlayerConfigVersion);
 	}
 
 }

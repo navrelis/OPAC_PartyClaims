@@ -1,0 +1,20 @@
+{
+    "schemaVersion": 1,
+    "id": "opac_teamclaims_gametest",
+    "name": "OPAC Team Claims Gametest",
+    "version": "1.0.0",
+    "environment": "*",
+    "entrypoints": {
+        "fabric-gametest": [
+            "xaero.pac.teamclaims.gametest.TeamClaimsSmokeTest",
+            "xaero.pac.teamclaims.gametest.TeamClaimsLogicTest"
+        ]
+    },
+    "mixins": [
+        "opac_teamclaims_gametest.mixins.json"
+    ],
+    "depends": {
+        "openpartiesandclaims": "*",
+        "fabric-gametest-api-v1": "*"
+    }
+}

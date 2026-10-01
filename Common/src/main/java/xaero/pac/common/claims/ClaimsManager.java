@@ -1,6 +1,6 @@
 /*
  * Open Parties and Claims - adds chunk claims and player parties to Minecraft
- * Copyright (C) 2022-2025, Xaero <xaero1996@gmail.com> and contributors
+ * Copyright (C) 2022-2026, Xaero <xaero1996@gmail.com> and contributors
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of version 3 of the GNU Lesser General Public License
@@ -22,29 +22,35 @@ import it.unimi.dsi.fastutil.ints.Int2ObjectMap;
 import it.unimi.dsi.fastutil.ints.Int2ObjectOpenHashMap;
 import it.unimi.dsi.fastutil.longs.Long2ObjectMap;
 import it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap;
+import net.minecraft.Util;
 import net.minecraft.core.BlockPos;
+import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.level.ChunkPos;
 import xaero.pac.common.claims.player.PlayerChunkClaim;
 import xaero.pac.common.claims.player.PlayerClaimInfo;
 import xaero.pac.common.claims.player.PlayerClaimInfoManager;
+import xaero.pac.common.claims.player.api.IPlayerChunkClaimAPI;
 import xaero.pac.common.claims.tracker.ClaimsManagerTracker;
 import xaero.pac.common.server.player.config.IPlayerConfigManager;
+import xaero.pac.common.server.player.config.PlayerConfig;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import java.util.*;
+import java.util.function.Function;
 import java.util.stream.Stream;
 
 public abstract class ClaimsManager
 <
 	PCI extends PlayerClaimInfo<PCI, M>,
-	M extends PlayerClaimInfoManager<PCI, M>,
+	M extends PlayerClaimInfoManager<PCI, M, ?>,
 	WRC extends RegionClaims<M, WRC>,
 	WCM extends DimensionClaimsManager<M, WRC>,
 	CSH extends ClaimStateHolder
 > implements IClaimsManager<PCI, WCM> {
-	
+
 	protected final M playerClaimInfoManager;
 	protected final IPlayerConfigManager configManager;
 	private Map<ResourceLocation, WCM> dimensions;
@@ -52,6 +58,7 @@ public abstract class ClaimsManager
 	protected Map<PlayerChunkClaim, CSH> claimStateHolders;
 	private int nextClaimStateSyncIndex;
 	protected final ClaimsManagerTracker claimsManagerTracker;
+	protected final Function<ResourceLocation, String> id2String = Util.memoize(ResourceLocation::toString);
 	
 	protected ClaimsManager(M playerClaimInfoManager, IPlayerConfigManager configManager,
 							Map<ResourceLocation, WCM> dimensions, Int2ObjectMap<PlayerChunkClaim> indexToClaimState, Map<PlayerChunkClaim, CSH> claimStates, ClaimsManagerTracker claimsManagerTracker) {
@@ -75,7 +82,8 @@ public abstract class ClaimsManager
 
 	protected abstract void onClaimStateAdded(CSH stateHolder);
 
-	protected void reset() {
+	protected void reset(boolean notifyTracker) {
+		Set<ResourceLocation> dimensionIds = notifyTracker ? new HashSet<>(dimensions.keySet()) : null;
 		indexToClaimState.clear();
 		dimensions.clear();
 		claimStateHolders.clear();
@@ -83,6 +91,9 @@ public abstract class ClaimsManager
 		dimensions = new HashMap<>();
 		claimStateHolders = new HashMap<>();
 		playerClaimInfoManager.clear();
+		if(notifyTracker)
+			for (ResourceLocation dimensionId : dimensionIds)
+				claimsManagerTracker.onDimensionChange(dimensionId);
 	}
 
 	protected WCM ensureDimension(ResourceLocation dim) {
@@ -193,11 +204,120 @@ public abstract class ClaimsManager
 	public int getClaimStateCount() {
 		return claimStateHolders.size();
 	}
-	
+
+	@Nonnull
+	@Override
+	public Component getDefaultName(IPlayerChunkClaimAPI claimState) {
+		return getDefaultName(claimState, true);
+	}
+
+	@Nonnull
+	@Override
+	public Component getDefaultName(IPlayerChunkClaimAPI claimState, boolean allowPartyNames) {
+		return getDefaultName(
+				claimState == null ? null : claimState.getPlayerId(),
+				claimState != null && claimState.isForceloadable(),
+				allowPartyNames
+		);
+	}
+
+	@Nonnull
+	@Override
+	public Component getDefaultName(@Nullable UUID claimId, boolean forceloadable) {
+		return getDefaultName(claimId, forceloadable, true);
+	}
+
+	@Nonnull
+	@Override
+	public Component getDefaultName(UUID claimId, boolean forceloadable, boolean allowPartyNames) {
+		if(claimId == null)
+			return Component.translatable("gui.xaero_pac_title_wilderness");
+		MutableComponent result;
+		Component forceloadedComponent = forceloadable ?
+				Component.translatable("gui.xaero_pac_marked_for_forceload") : Component.literal("");
+		if (Objects.equals(claimId, PlayerConfig.SERVER_CLAIM_UUID))
+			result = Component.translatable("gui.xaero_pac_title_server_claim", forceloadedComponent);
+		else if (Objects.equals(claimId, PlayerConfig.EXPIRED_CLAIM_UUID))
+			result = Component.translatable("gui.xaero_pac_title_expired_claim", forceloadedComponent);
+		else {
+			PCI playerClaimInfo = getPlayerInfo(claimId);
+			result = constructPlayerClaimName(playerClaimInfo, forceloadedComponent, allowPartyNames);
+		}
+		return result;
+	}
+
+	@Nonnull
+	@Override
+	public Component getFullName(IPlayerChunkClaimAPI claimState) {
+		return getFullName(claimState, true);
+	}
+
+	@Nonnull
+	@Override
+	public Component getFullName(IPlayerChunkClaimAPI claimState, boolean allowPartyNames) {
+		return getFullName(claimState, null, allowPartyNames);
+	}
+
+	@Nonnull
+	@Override
+	public Component getFullName(@Nullable IPlayerChunkClaimAPI claimState, @Nullable ResourceLocation dimension, boolean allowPartyNames) {
+		String customName = getCustomName(claimState, dimension);
+		boolean hasCustom = customName != null && !customName.isEmpty();
+		if(claimState == null && hasCustom)
+			return Component.literal(customName);
+		Component defaultName = getDefaultName(claimState, allowPartyNames);
+		if(!hasCustom)
+			return defaultName;
+		return Component.translatable("gui.xaero_pac_full_title_format", customName, defaultName);
+	}
+
+	@Nullable
+	@Override
+	public String getCustomName(@Nullable IPlayerChunkClaimAPI claimState, @Nullable ResourceLocation dimension){
+		if(claimUsesDimensionSubConfigs(claimState))
+			return getDimensionName(claimState, dimension);
+		if(claimState == null)//shouldn't really happen because wilderness uses dimension sub-configs
+			return null;
+		int subConfigIndex = claimState.getSubConfigIndex();
+		PCI playerClaimInfo = getPlayerInfo(claimState.getPlayerId());
+		String customName = playerClaimInfo.getClaimsName(subConfigIndex);
+		if(subConfigIndex != -1 && (customName == null || customName.isEmpty()))
+			return playerClaimInfo.getClaimsName();
+		return customName;
+	}
+
+	@Override
+	public int getColor(@Nullable IPlayerChunkClaimAPI claimState, @Nullable ResourceLocation dimension) {
+		if(claimUsesDimensionSubConfigs(claimState))
+			return getDimensionColor(claimState, dimension);
+		if(claimState == null)//shouldn't really happen because wilderness uses dimension sub-configs
+			return 0;
+		PCI playerClaimInfo = getPlayerInfo(claimState.getPlayerId());
+		Integer subColor = playerClaimInfo.getClaimsColor(claimState.getSubConfigIndex());
+		if(subColor != null)
+			return subColor;
+		return playerClaimInfo.getClaimsColor();
+	}
+
+	public abstract boolean claimUsesDimensionSubConfigs(IPlayerChunkClaimAPI claimState);
+
+	@Nullable
+	public abstract String getDimensionName(IPlayerChunkClaimAPI claimState, ResourceLocation dimension);
+
+	public abstract int getDimensionColor(IPlayerChunkClaimAPI claimState, ResourceLocation dimension);
+
+	protected MutableComponent constructPlayerClaimName(PCI playerClaimInfo, Component forceloadedComponent, boolean allowPartyNames){
+		//overridden to apply party name instead if necessary
+		return Component.translatable(
+				"gui.xaero_pac_title_player_claim",
+				playerClaimInfo.getPlayerUsername(), forceloadedComponent
+		);
+	}
+
 	public abstract static class Builder
 	<
 		PCI extends PlayerClaimInfo<PCI, M>,
-		M extends PlayerClaimInfoManager<PCI, M>,
+		M extends PlayerClaimInfoManager<PCI, M, ?>,
 		WRC extends RegionClaims<M, WRC>,
 		WCM extends DimensionClaimsManager<M, WRC>,
 		CSH extends ClaimStateHolder,
@@ -249,12 +369,5 @@ public abstract class ClaimsManager
 		protected abstract ClaimsManager<PCI, M, WRC, WCM, CSH> buildInternally(Map<PlayerChunkClaim, CSH> claimStates, ClaimsManagerTracker claimsManagerTracker, Int2ObjectMap<PlayerChunkClaim> indexToClaimState);
 		
 	}
-	
-	public static enum Action {
-		CLAIM,
-		UNCLAIM,
-		FORCELOAD,
-		UNFORCELOAD
-	}
-	
+
 }

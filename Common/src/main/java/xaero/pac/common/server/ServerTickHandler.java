@@ -1,6 +1,6 @@
 /*
  * Open Parties and Claims - adds chunk claims and player parties to Minecraft
- * Copyright (C) 2022-2025, Xaero <xaero1996@gmail.com> and contributors
+ * Copyright (C) 2022-2026, Xaero <xaero1996@gmail.com> and contributors
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of version 3 of the GNU Lesser General Public License
@@ -51,6 +51,7 @@ public final class ServerTickHandler {
 	
 	public void onTick(IServerData<IServerClaimsManager<IPlayerChunkClaim, IServerPlayerClaimInfo<IPlayerDimensionClaims<IPlayerClaimPosList>>, IServerDimensionClaimsManager<IServerRegionClaims>>, IServerParty<IPartyMember, IPartyPlayerInfo, IPartyAlly>> serverData) throws Throwable {
 		serverData.getIoThreadWorker().checkCrashes();
+		serverData.getServerClaimsManager().onServerTick();
 		serverData.getChunkProtection().onServerTick();
 		serverData.getPartyManagerIO().onServerTick();
 		serverData.getPlayerConfigsIO().onServerTick();

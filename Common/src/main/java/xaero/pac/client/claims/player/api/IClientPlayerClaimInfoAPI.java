@@ -1,6 +1,6 @@
 /*
  * Open Parties and Claims - adds chunk claims and player parties to Minecraft
- * Copyright (C) 2022-2025, Xaero <xaero1996@gmail.com> and contributors
+ * Copyright (C) 2022-2026, Xaero <xaero1996@gmail.com> and contributors
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of version 3 of the GNU Lesser General Public License
@@ -18,6 +18,7 @@
 
 package xaero.pac.client.claims.player.api;
 
+import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import xaero.pac.common.claims.player.api.IPlayerClaimInfoAPI;
 import xaero.pac.common.claims.player.api.IPlayerDimensionClaimsAPI;
@@ -71,5 +72,15 @@ public interface IClientPlayerClaimInfoAPI extends IPlayerClaimInfoAPI {
 
 	@Nullable
 	public IPlayerDimensionClaimsAPI getDimension(@Nonnull ResourceLocation id);
+
+	/**
+	 * Gets the display name of the party that owns the claims stored in this player claim info.
+	 * <p>
+	 * The party that owns the claims is the party owned by this player.
+	 *
+	 * @return the Component display name of the party that owns the claims, null if not owned by a party
+	 */
+	@Nullable
+	Component getPartyName();
 
 }

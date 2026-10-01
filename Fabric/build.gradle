@@ -1,0 +1,208 @@
+plugins {
+    id 'idea'
+    // 1.8-SNAPSHOT (used by upstream) is no longer resolvable: its plugin marker
+    // has been pruned from maven.fabricmc.net. 1.11.8 is the minimum currently
+    // resolvable loom version that still supports Gradle 8.x (Gradle 8.14+) and
+    // matches our fixed Java 21 toolchain; see settings.gradle for how the
+    // 'fabric-loom' plugin id is resolved to this version's module coordinates.
+    id 'fabric-loom' version '1.11.8'
+}
+
+base {
+    archivesName = "${mod_name}-fabric-${minecraft_version}"
+}
+
+repositories{
+    maven {
+        url = "https://mvn.devos.one/snapshots"
+    }// Create and several dependencies
+    maven {
+        url = "https://mvn.devos.one/releases"
+    } // Porting Lib releases
+    maven {
+        url = "https://maven.jamieswhiteshirt.com/libs-release"
+    } // Reach Entity Attributes
+}
+
+dependencies {
+    minecraft "com.mojang:minecraft:${minecraft_version}"
+    mappings loom.officialMojangMappings()
+    modImplementation "net.fabricmc:fabric-loader:${fabric_loader_version}"
+    modImplementation "net.fabricmc.fabric-api:fabric-api:${fabric_version}"
+    compileOnly group: 'com.google.code.findbugs', name: 'jsr305', version: '3.0.1'
+    compileOnly project(":Common")
+    compileOnly project(":CreateSupportCommon")
+
+    modImplementation "fuzs.forgeconfigapiport:forgeconfigapiport-fabric:21.1.6"//source: https://github.com/Fuzss/forgeconfigapiport-fabric
+
+    // Dev/test only: fabric-gametest-api-v1 backs the ":Fabric:runBootTest" headless boot test
+    // (see loom.runs.bootTest and the "gametest" source set below). It is deliberately excluded
+    // from the "fabric-api" umbrella jar ("devOnlyModules" in fabric-api's own build.gradle) so
+    // it must be added explicitly. Version pinned to the module version shipped with
+    // fabric_version=0.116.17+1.21.1, per fabric-api's gradle.properties
+    // (fabric-gametest-api-v1-version=2.0.5, +<commit hash>).
+    // modImplementation (not modRuntimeOnly): the "gametest" source set below compiles against
+    // this too (it implements FabricGameTest), via its compileClasspath merge with main's.
+    // Still dev-only: never include()'d, so it never ends up in the shipped mod jar, and it is
+    // not declared in the production fabric.mod.json's "depends".
+    modImplementation "net.fabricmc.fabric-api:fabric-gametest-api-v1:2.0.5+6fc22b9919"
+
+    modCompileOnly "curse.maven:ftbranks-472659:6431745"//home: https://www.curseforge.com/minecraft/mc-mods/ftb-ranks-fabric
+    modCompileOnly "curse.maven:architectury-419699:5786326"//home: https://www.curseforge.com/minecraft/mc-mods/architectury-api
+    modCompileOnly "curse.maven:ftblibrary-438495:7746958"//home: https://www.curseforge.com/minecraft/mc-mods/ftb-library-fabric
+
+    modCompileOnly "net.luckperms:api:5.4"//source: https://github.com/LuckPerms/LuckPerms
+    modCompileOnly 'me.lucko:fabric-permissions-api:0.2-SNAPSHOT'//source: https://github.com/lucko/fabric-permissions-api
+
+    modCompileOnly "earth.terrarium.prometheus:prometheus-fabric-1.20.4:1.4.2"//source: https://github.com/terrarium-earth/Prometheus
+    modCompileOnly "earth.terrarium.argonauts:argonauts-fabric-1.20.4:1.2.4"//source: https://modrinth.com/mod/odyssey-allies
+
+    modCompileOnly "curse.maven:ftbteams-438497:7878280"//home: https://www.curseforge.com/minecraft/mc-mods/ftb-teams-fabric
+    modCompileOnly("com.simibubi.create:create-fabric-1.20.1:${fabric_create_version}"){
+        exclude(group: "com.jozufozu.flywheel")
+        exclude(group: "net.minecraftforge")
+    }
+}
+
+// Separate "gametest" source set (Fabric/src/gametest/...) for the ":Fabric:runBootTest" smoke
+// test: its own fabric.mod.json (mod id "opac_teamclaims_gametest") + a single @GameTest method,
+// kept OUT of the production jar (no jar/remapJar task ever reads from this source set, and it
+// is not added to processResources/jar/packageSources below).
+sourceSets {
+    gametest {
+        compileClasspath += sourceSets.main.compileClasspath + sourceSets.main.output
+        runtimeClasspath += sourceSets.main.runtimeClasspath + sourceSets.main.output
+    }
+}
+
+loom {
+    mixin {
+        defaultRefmapName.set("${mod_id}.refmap.json")
+        // Calling add(...) at all switches Loom's mixin AP out of its implicit "auto-register
+        // every non-test source set with defaultRefmapName" behaviour (see the original
+        // fabric-loom#423 proposal: "If the programmer does not configure mixin extension, then
+        // the current behaviour should [be] preserved"), so "main" must now be re-added
+        // explicitly, or compileJava's mixin AP silently loses its obfuscation-mapping/refmap
+        // setup (verified: omitting this line broke compileJava with a flood of "Unable to
+        // locate obfuscation mapping" errors on the project's existing main-source-set mixins).
+        add(sourceSets.main)
+        // The "gametest" source set has its own mixin config (opac_teamclaims_gametest.mixins.json,
+        // see Fabric/src/gametest/resources) and needs its own refmap registered, since it isn't
+        // covered by defaultRefmapName above (that only applies to source sets added without an
+        // explicit name). In a dev run everything is already Mojang-mapped so the refmap is never
+        // actually read at runtime, but Loom's mixin annotation processor still wants one
+        // configured per source set.
+        add(sourceSets.gametest, "opac_teamclaims_gametest.refmap.json")
+    }
+    // Registers "gametest" as its own dev-time mod (separate from the main "openpartiesandclaims"
+    // mod) so Fabric Loader's dev classpath scanning picks up its distinct
+    // Fabric/src/gametest/resources/fabric.mod.json as a second mod, the same pattern fabric-api
+    // itself uses for its own testmod source sets (see fabric-api's root build.gradle:
+    // `loom.mods.register(p.name + "-testmod") { sourceSet p.sourceSets.testmod; ... }`, backing
+    // its own `gametest` run that also sets `-Dfabric-api.gametest`).
+    mods {
+        register("opac_teamclaims_gametest") {
+            sourceSet(sourceSets.gametest)
+        }
+    }
+    runs {
+        // Two-client + server dev environment for manual multiplayer testing of party
+        // features (see start-all.bat / stop-all.bat in the repo root). runDir() is resolved
+        // relative to this subproject's project dir (Fabric/), so "../run-*" lands the run
+        // directories at the repository root, matching the "run-*" .gitignore pattern.
+        client {
+            client()
+            setConfigName("Fabric Client 1")
+            ideConfigGenerated(true)
+            runDir("../run-client1")
+            programArgs("--username", "Player1")
+        }
+        client2 {
+            client()
+            setConfigName("Fabric Client 2")
+            ideConfigGenerated(true)
+            runDir("../run-client2")
+            programArgs("--username", "Player2")
+        }
+        server {
+            server()
+            setConfigName("Fabric Server")
+            ideConfigGenerated(true)
+            runDir("../run-server")
+            programArgs("nogui")
+        }
+        // Headless boot-test smoke run (Fabric API gametest headless server). Setting
+        // -Dfabric-api.gametest starts a dedicated-server-like environment that bypasses the
+        // EULA check, loads the mod plus the "gametest" source set's own
+        // opac_teamclaims_gametest mod, then hands off to vanilla's GameTestServer, which runs
+        // TeamClaimsSmokeTest#teamClaimsBoots and shuts down.
+        // NOTE (verified against fabric-api 0.116.17+1.21.1 / vanilla 1.21.1 source): with ZERO
+        // registered @GameTest methods, vanilla net.minecraft.gametest.framework.GameTestServer
+        // #create throws "IllegalArgumentException: No test functions were given!" and
+        // fabric-gametest-api-v1's own MainMixin#exitOnError then calls System.exit(-1)
+        // deliberately (see net.fabricmc.fabric.mixin.gametest.server.MainMixin /
+        // net.fabricmc.fabric.impl.gametest.FabricGameTestHelper) -- which is why this run needs
+        // the one real test in Fabric/src/gametest to reach a clean exit 0.
+        bootTest {
+            server()
+            setConfigName("Fabric Boot Test")
+            ideConfigGenerated(false)
+            runDir("../run-boottest")
+            vmArg("-Dfabric-api.gametest")
+            source(sourceSets.gametest)
+        }
+    }
+}
+
+// TeamClaimsLogicTest's tests are independent (own random UUIDs/parties/coordinates) and clean
+// up after themselves, so a normal run doesn't need this. But their fixed, non-random chunk
+// coordinates (base offset per test) are reused across runs, so if a run ever gets interrupted
+// mid-test (crash, forced stop) before its cleanup runs, a stale claim left behind at one of
+// those coordinates could make the next run's claim attempt fail. Deleting the persisted world
+// before every ":Fabric:runBootTest" run keeps reruns green regardless.
+tasks.named('runBootTest') {
+    doFirst {
+        delete file("${projectDir}/../run-boottest/world")
+    }
+}
+
+
+processResources {
+    from project(":Common").sourceSets.main.resources
+    from project(":CreateSupportCommon").sourceSets.main.resources
+    inputs.property "version", project.version
+    exclude "META-INF/*_core.js"
+    exclude "META-INF/coremods.json"
+}
+
+
+// Scoped to compileJava (the "main" source set) only -- NOT tasks.withType(JavaCompile), which
+// would also reach compileGametestJava and recompile all of Common/CreateSupportCommon a second
+// time as part of the gametest source set (duplicate classes; gametest already gets those
+// already-compiled classes transitively via sourceSets.main.output above).
+compileJava {
+    source(project(":Common").sourceSets.main.allSource)
+    source(project(":CreateSupportCommon").sourceSets.main.allSource)
+}
+
+packageSources {
+    from(project(":CreateSupportCommon").sourceSets.main.allSource)//normal common project gets included by default but not this
+}
+
+jar {
+    from("LICENSE") {
+        rename { "${it}_${mod_name}" }
+    }
+}
+
+jar.finalizedBy('packageSources')
+
+publishing {
+    publications {
+        mavenJava(MavenPublication) {
+            artifactId base.archivesName.get()
+            from components.java
+            artifact packageSources
+        }
+    }
+}

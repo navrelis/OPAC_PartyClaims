@@ -1,6 +1,6 @@
 /*
  * Open Parties and Claims - adds chunk claims and player parties to Minecraft
- * Copyright (C) 2022-2025, Xaero <xaero1996@gmail.com> and contributors
+ * Copyright (C) 2022-2026, Xaero <xaero1996@gmail.com> and contributors
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of version 3 of the GNU Lesser General Public License
@@ -18,10 +18,12 @@
 
 package xaero.pac.common.server.parties.party;
 
+import com.mojang.authlib.GameProfile;
 import net.minecraft.world.entity.player.Player;
 import xaero.pac.common.server.parties.party.api.IPartyManagerAPI;
 import xaero.pac.common.server.parties.party.api.IServerPartyAPI;
 import xaero.pac.common.server.parties.party.sync.IPartySynchronizer;
+import xaero.pac.common.server.parties.system.impl.DefaultPlayerPartySystem;
 import xaero.pac.common.server.player.config.IPlayerConfigManager;
 
 import javax.annotation.Nonnull;
@@ -49,6 +51,10 @@ public interface IPartyManager<
 	@Nullable
 	@Override
 	P createPartyForOwner(@Nonnull Player owner);
+
+	@Nullable
+	@Override
+	P createPartyForOwner(@Nonnull GameProfile ownerProfile);
 
 	public IPartySynchronizer<P> getPartySynchronizer();
 	public IPlayerConfigManager getPlayerConfigs();
@@ -78,5 +84,7 @@ public interface IPartyManager<
 	default Stream<IServerPartyAPI> getPartiesThatAlly(@Nonnull UUID allyId) {
 		return (Stream<IServerPartyAPI>)(Object)getTypedPartiesThatAlly(allyId);
 	}
+
+	DefaultPlayerPartySystem getPartySystem();
 
 }

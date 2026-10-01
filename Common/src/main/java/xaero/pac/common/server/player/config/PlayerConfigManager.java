@@ -1,6 +1,6 @@
 /*
  * Open Parties and Claims - adds chunk claims and player parties to Minecraft
- * Copyright (C) 2022-2025, Xaero <xaero1996@gmail.com> and contributors
+ * Copyright (C) 2022-2026, Xaero <xaero1996@gmail.com> and contributors
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of version 3 of the GNU Lesser General Public License
@@ -23,15 +23,19 @@ import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.level.block.Block;
 import net.neoforged.neoforge.common.ModConfigSpec;
+import xaero.pac.common.packet.config.ClientboundPlayerConfigConfigurableOptionsPacket;
 import xaero.pac.common.player.config.dynamic.PlayerConfigDynamicOptions;
 import xaero.pac.common.server.claims.IServerClaimsManager;
 import xaero.pac.common.server.claims.forceload.ForceLoadTicketManager;
 import xaero.pac.common.server.claims.protection.group.ChunkProtectionExceptionGroup;
+import xaero.pac.common.server.io.ObjectManagerIO;
 import xaero.pac.common.server.io.ObjectManagerIOManager;
+import xaero.pac.common.server.io.ObjectManagerIOToSaveTracker;
 import xaero.pac.common.server.parties.party.IPartyManager;
 import xaero.pac.common.server.parties.party.IServerParty;
-import xaero.pac.common.server.player.config.api.IPlayerConfigOptionSpecAPI;
-import xaero.pac.common.server.player.config.api.PlayerConfigOptions;
+import xaero.pac.common.server.parties.system.PlayerPartySystemManager;
+import xaero.pac.common.server.player.config.api.v2.IPlayerConfigOptionSpecAPI;
+import xaero.pac.common.server.player.config.api.v2.PlayerConfigOptions;
 import xaero.pac.common.server.player.config.dynamic.PlayerConfigDynamicOptionsLoader;
 import xaero.pac.common.server.player.config.io.PlayerConfigIO;
 import xaero.pac.common.server.player.config.sub.PlayerSubConfig;
@@ -39,11 +43,14 @@ import xaero.pac.common.server.player.config.sync.PlayerConfigSynchronizer;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
-import java.util.*;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.Objects;
+import java.util.UUID;
 import java.util.function.Consumer;
 import java.util.stream.Stream;
 
-import static xaero.pac.common.server.player.config.api.PlayerConfigOptions.OPTIONS;
+import static xaero.pac.common.server.player.config.api.v2.PlayerConfigOptions.OPTIONS;
 
 public final class PlayerConfigManager
 <
@@ -60,28 +67,34 @@ implements IPlayerConfigManager, ObjectManagerIOManager<PlayerConfig<P>, PlayerC
 	private PlayerConfig<P> expiredClaimConfig;
 	private final ForceLoadTicketManager forceLoadTicketManager;
 	private final Map<UUID, PlayerConfig<P>> configs;
-	private final Set<PlayerConfig<P>> configsToSave;
+	private ObjectManagerIOToSaveTracker<PlayerConfig<P>> configsToSave;
 	private final PlayerConfigSynchronizer synchronizer;
 	private CM claimsManager;
 	private final IPartyManager<P> partyManager;
 	private PlayerConfigIO<P, CM> io;
 	private final PlayerConfigDynamicOptions dynamicOptions;
-	private final Set<IPlayerConfigOptionSpecAPI<?>> overridableOptions;
 	private final ModConfigSpec playerConfigSpec;
+	private final PlayerPartySystemManager partySystemManager;
 
-	private PlayerConfigManager(MinecraftServer server, ForceLoadTicketManager forceLoadTicketManager,
-								Map<UUID, PlayerConfig<P>> configs, Set<PlayerConfig<P>> configsToSave, PlayerConfigSynchronizer synchronizer,
-								IPartyManager<P> partyManager, PlayerConfigDynamicOptions dynamicOptions, Set<IPlayerConfigOptionSpecAPI<?>> overridableOptions, ModConfigSpec playerConfigSpec) {
+	private PlayerConfigManager(
+			MinecraftServer server,
+			ForceLoadTicketManager forceLoadTicketManager,
+			Map<UUID, PlayerConfig<P>> configs,
+			PlayerConfigSynchronizer synchronizer,
+			IPartyManager<P> partyManager,
+			PlayerConfigDynamicOptions dynamicOptions,
+			ModConfigSpec playerConfigSpec,
+			PlayerPartySystemManager partySystemManager
+	) {
 		super();
 		this.server = server;
 		this.forceLoadTicketManager = forceLoadTicketManager;
 		this.configs = configs;
-		this.configsToSave = configsToSave;
 		this.synchronizer = synchronizer;
 		this.partyManager = partyManager;
 		this.dynamicOptions = dynamicOptions;
-		this.overridableOptions = overridableOptions;
 		this.playerConfigSpec = playerConfigSpec;
+		this.partySystemManager = partySystemManager;
 	}
 	
 	public void setClaimsManager(CM claimsManager) {
@@ -97,7 +110,16 @@ implements IPlayerConfigManager, ObjectManagerIOManager<PlayerConfig<P>, PlayerC
 			throw new IllegalStateException();
 		return getConfig(id);
 	}
-	
+
+	@Nullable
+	@Override
+	public PlayerConfig<P> getPartyOwnerConfig(@Nonnull UUID memberId) {
+		UUID partyOwner = partySystemManager.getPrimaryPartyOwnerByMember(memberId);
+		if(partyOwner == null)
+			return null;
+		return getLoadedConfig(partyOwner);
+	}
+
 	public PlayerConfig<P> getConfig(UUID id) {
 		if(id == null)
 			return wildernessConfig;
@@ -105,9 +127,12 @@ implements IPlayerConfigManager, ObjectManagerIOManager<PlayerConfig<P>, PlayerC
 			return serverClaimConfig;
 		if(Objects.equals(id, PlayerConfig.EXPIRED_CLAIM_UUID))
 			return expiredClaimConfig;
-		return configs.computeIfAbsent(id, 
+		PlayerConfig<P> result = configs.computeIfAbsent(id,
 			i -> PlayerConfig.FinalBuilder.<P>begin().setPlayerId(i).setManager(this).build()
 		);
+		if(loaded && !result.getPlayerGroups().isLoaded())
+			result.getPlayerGroups().getIo().loadFromConfig();
+		return result;
 	}
 	
 	public void onLoad() {
@@ -115,7 +140,7 @@ implements IPlayerConfigManager, ObjectManagerIOManager<PlayerConfig<P>, PlayerC
 	}
 
 	@Override
-	public Iterable<PlayerConfig<P>> getToSave() {
+	public ObjectManagerIOToSaveTracker<PlayerConfig<P>> getToSave() {
 		return configsToSave;
 	}
 	
@@ -160,10 +185,6 @@ implements IPlayerConfigManager, ObjectManagerIOManager<PlayerConfig<P>, PlayerC
 	}
 
 	@Override
-	public void addToSave(PlayerConfig<P> object) {
-		configsToSave.add(object);
-	}
-	
 	public ForceLoadTicketManager getForceLoadTicketManager() {
 		return forceLoadTicketManager;
 	}
@@ -176,11 +197,13 @@ implements IPlayerConfigManager, ObjectManagerIOManager<PlayerConfig<P>, PlayerC
 	public IPartyManager<P> getPartyManager() {
 		return partyManager;
 	}
-	
+
+	@Override
 	public CM getClaimsManager() {
 		return claimsManager;
 	}
-	
+
+	@Override
 	public MinecraftServer getServer() {
 		return server;
 	}
@@ -192,10 +215,13 @@ implements IPlayerConfigManager, ObjectManagerIOManager<PlayerConfig<P>, PlayerC
 		}
 	}
 
-	public void setIO(PlayerConfigIO<P, CM> io) {
+	@SuppressWarnings("unchecked")
+	@Override
+	public void setIo(ObjectManagerIO<?, ?, PlayerConfig<P>, PlayerConfigManager<P, CM>> io) {
 		if(this.io != null)
 			throw new RuntimeException(new IllegalAccessException());
-		this.io = io;
+		this.io = (PlayerConfigIO<P, CM>) io;
+		this.configsToSave = ObjectManagerIOToSaveTracker.Builder.<PlayerConfig<P>>begin().setIo(io).build();
 	}
 
 	public boolean isLoaded() {
@@ -208,10 +234,6 @@ implements IPlayerConfigManager, ObjectManagerIOManager<PlayerConfig<P>, PlayerC
 
 	public PlayerConfigDynamicOptions getDynamicOptions() {
 		return dynamicOptions;
-	}
-
-	public Set<IPlayerConfigOptionSpecAPI<?>> getOverridableOptions() {
-		return overridableOptions;
 	}
 
 	@Nonnull
@@ -230,6 +252,11 @@ implements IPlayerConfigManager, ObjectManagerIOManager<PlayerConfig<P>, PlayerC
 		return result;
 	}
 
+	@Override
+	public PlayerPartySystemManager getPartySystemManager() {
+		return partySystemManager;
+	}
+
 	public static final class Builder
 	<
 		P extends IServerParty<?, ?, ?>,
@@ -237,12 +264,14 @@ implements IPlayerConfigManager, ObjectManagerIOManager<PlayerConfig<P>, PlayerC
 	> {
 		private MinecraftServer server;
 		private IPartyManager<P> partyManager;
+		private PlayerPartySystemManager partySystemManager;
 		private Map<String, ChunkProtectionExceptionGroup<Block>> blockExceptionGroups;
 		private Map<String, ChunkProtectionExceptionGroup<EntityType<?>>> entityExceptionGroups;
 		private Map<String, ChunkProtectionExceptionGroup<Item>> itemExceptionGroups;
 		private Map<String, ChunkProtectionExceptionGroup<EntityType<?>>> entityBarrierGroups;
 		private Map<String, ChunkProtectionExceptionGroup<EntityType<?>>> blockAccessEntityGroups;
 		private Map<String, ChunkProtectionExceptionGroup<EntityType<?>>> entityAccessEntityGroups;
+		private Map<String, ChunkProtectionExceptionGroup<EntityType<?>>> playerAccessEntityGroups;
 		private Map<String, ChunkProtectionExceptionGroup<EntityType<?>>> droppedItemAccessEntityGroups;
 
 		private Builder() {
@@ -251,6 +280,15 @@ implements IPlayerConfigManager, ObjectManagerIOManager<PlayerConfig<P>, PlayerC
 		private Builder<P, CM> setDefault() {
 			setServer(null);
 			setPartyManager(null);
+			setPartySystemManager(null);
+			setBlockExceptionGroups(null);
+			setEntityExceptionGroups(null);
+			setItemExceptionGroups(null);
+			setEntityBarrierGroups(null);
+			setBlockAccessEntityGroups(null);
+			setEntityAccessEntityGroups(null);
+			setPlayerAccessEntityGroups(null);
+			setDroppedItemAccessEntityGroups(null);
 			return this;
 		}
 
@@ -261,6 +299,11 @@ implements IPlayerConfigManager, ObjectManagerIOManager<PlayerConfig<P>, PlayerC
 		
 		public Builder<P, CM> setPartyManager(IPartyManager<P> partyManager) {
 			this.partyManager = partyManager;
+			return this;
+		}
+
+		public Builder<P, CM> setPartySystemManager(PlayerPartySystemManager partySystemManager) {
+			this.partySystemManager = partySystemManager;
 			return this;
 		}
 
@@ -294,6 +337,11 @@ implements IPlayerConfigManager, ObjectManagerIOManager<PlayerConfig<P>, PlayerC
 			return this;
 		}
 
+		public Builder<P, CM> setPlayerAccessEntityGroups(Map<String, ChunkProtectionExceptionGroup<EntityType<?>>> playerAccessEntityGroups) {
+			this.playerAccessEntityGroups = playerAccessEntityGroups;
+			return this;
+		}
+
 		public Builder<P, CM> setDroppedItemAccessEntityGroups(Map<String, ChunkProtectionExceptionGroup<EntityType<?>>> droppedItemAccessEntityGroups) {
 			this.droppedItemAccessEntityGroups = droppedItemAccessEntityGroups;
 			return this;
@@ -302,13 +350,23 @@ implements IPlayerConfigManager, ObjectManagerIOManager<PlayerConfig<P>, PlayerC
 		public PlayerConfigManager<P, CM> build() {
 			if (server == null || partyManager == null || blockExceptionGroups == null || entityExceptionGroups == null ||
 					itemExceptionGroups == null || entityBarrierGroups == null || blockAccessEntityGroups == null ||
-					entityAccessEntityGroups == null || droppedItemAccessEntityGroups == null)
+					entityAccessEntityGroups == null || playerAccessEntityGroups == null || droppedItemAccessEntityGroups == null ||
+					partySystemManager == null)
 				throw new IllegalStateException();
-			PlayerConfigSynchronizer playerConfigSynchronizer = new PlayerConfigSynchronizer(server);
-			ForceLoadTicketManager forceLoadTicketManager = ForceLoadTicketManager.Builder.begin().setServer(server).build();
+			ClientboundPlayerConfigConfigurableOptionsPacket configurableOptionsPacket = ClientboundPlayerConfigConfigurableOptionsPacket.fromServerConfig();
+			PlayerConfigSynchronizer playerConfigSynchronizer = new PlayerConfigSynchronizer(server, configurableOptionsPacket);
+			ForceLoadTicketManager forceLoadTicketManager = ForceLoadTicketManager.Builder.begin()
+					.setServer(server)
+					.setPartySystemManager(partySystemManager)
+					.build();
 
 			PlayerConfigDynamicOptions.Builder dynamicOptionsBuilder = PlayerConfigDynamicOptions.Builder.begin();
-			new PlayerConfigDynamicOptionsLoader().load(dynamicOptionsBuilder, blockExceptionGroups, entityExceptionGroups, itemExceptionGroups, entityBarrierGroups, blockAccessEntityGroups, entityAccessEntityGroups, droppedItemAccessEntityGroups);
+			new PlayerConfigDynamicOptionsLoader().load(
+					dynamicOptionsBuilder,
+					blockExceptionGroups, entityExceptionGroups, itemExceptionGroups,
+					entityBarrierGroups, blockAccessEntityGroups, entityAccessEntityGroups,
+					playerAccessEntityGroups, droppedItemAccessEntityGroups
+			);
 			PlayerConfigDynamicOptions dynamicOptions = dynamicOptionsBuilder.build();
 
 			ModConfigSpec.Builder configSpecBuilder = new ModConfigSpec.Builder();
@@ -316,12 +374,13 @@ implements IPlayerConfigManager, ObjectManagerIOManager<PlayerConfig<P>, PlayerC
 			OPTIONS.values().forEach(optionConsumer);
 			dynamicOptions.getOptions().values().forEach(optionConsumer);
 
-			Set<IPlayerConfigOptionSpecAPI<?>> overridableOptions = new HashSet<>();
-			overridableOptions.addAll(PlayerSubConfig.STATIC_OVERRIDABLE_OPTIONS);
-			overridableOptions.addAll(dynamicOptions.getOptions().values());
-
-			PlayerConfigManager<P, CM> result = new PlayerConfigManager<>(server, forceLoadTicketManager, new HashMap<>(), new HashSet<>(), playerConfigSynchronizer, partyManager, dynamicOptions, overridableOptions, configSpecBuilder.build());
+			PlayerConfigManager<P, CM> result = new PlayerConfigManager<>(
+					server, forceLoadTicketManager, new HashMap<>(),
+					playerConfigSynchronizer, partyManager, dynamicOptions,
+					configSpecBuilder.build(), partySystemManager
+			);
 			playerConfigSynchronizer.setConfigManager(result);
+			forceLoadTicketManager.setConfigManager(result);
 			return result;
 		}
 

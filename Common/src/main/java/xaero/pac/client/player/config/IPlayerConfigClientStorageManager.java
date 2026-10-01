@@ -1,6 +1,6 @@
 /*
  * Open Parties and Claims - adds chunk claims and player parties to Minecraft
- * Copyright (C) 2022-2025, Xaero <xaero1996@gmail.com> and contributors
+ * Copyright (C) 2022-2026, Xaero <xaero1996@gmail.com> and contributors
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of version 3 of the GNU Lesser General Public License
@@ -21,10 +21,11 @@ package xaero.pac.client.player.config;
 import xaero.pac.client.player.config.api.IPlayerConfigClientStorageManagerAPI;
 import xaero.pac.common.misc.MapFactory;
 import xaero.pac.common.player.config.dynamic.PlayerConfigDynamicOptions;
-import xaero.pac.common.server.player.config.api.IPlayerConfigOptionSpecAPI;
+import xaero.pac.common.server.player.config.api.v2.IPlayerConfigOptionSpecAPI;
 
 import javax.annotation.Nonnull;
-import java.util.Collection;
+import java.util.List;
+import java.util.UUID;
 
 public interface IPlayerConfigClientStorageManager<CS extends IPlayerConfigClientStorage<?>> extends IPlayerConfigClientStorageManagerAPI {
 
@@ -48,10 +49,20 @@ public interface IPlayerConfigClientStorageManager<CS extends IPlayerConfigClien
 	@Override
 	@Nonnull
 	public CS getMyPlayerConfig();
+	@Override
+	@Nonnull
+	public CS getPartyClaimsConfig();
 
 	public void setOtherPlayerConfig(CS otherPlayerConfig);
 	public CS getOtherPlayerConfig();
+	boolean isWaitingForOtherPlayerConfig();
+	public void setWaitingForOtherPlayerConfig(boolean waitingForOtherPlayerConfig);
 	public IPlayerConfigClientStorage.IBuilder<CS> beginConfigStorageBuild(MapFactory mapFactory);
-	Collection<IPlayerConfigOptionSpecAPI<?>> getOverridableOptions();
 	public void setDynamicOptions(PlayerConfigDynamicOptions dynamicOptions);
+	void setAdmin(boolean admin);
+	boolean isAdmin();
+	void setConfigurableOptions(List<String> playerConfigurableOptions, List<String> opConfigurableOptions);
+	boolean isOptionPlayerConfigurable(IPlayerConfigOptionSpecAPI<?> option);
+	boolean isOptionOpConfigurable(IPlayerConfigOptionSpecAPI<?> option);
+	public CS getGlobalConfigForClaimOwner(UUID claimOwnerId);
 }

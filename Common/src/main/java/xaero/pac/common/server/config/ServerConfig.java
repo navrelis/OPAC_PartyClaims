@@ -1,6 +1,6 @@
 /*
  * Open Parties and Claims - adds chunk claims and player parties to Minecraft
- * Copyright (C) 2022-2025, Xaero <xaero1996@gmail.com> and contributors
+ * Copyright (C) 2022-2026, Xaero <xaero1996@gmail.com> and contributors
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of version 3 of the GNU Lesser General Public License
@@ -35,6 +35,9 @@ public class ServerConfig {
 	public final ModConfigSpec.IntValue playerSubConfigLimit;
 	public final ModConfigSpec.IntValue partyExpirationTime;
 	public final ModConfigSpec.IntValue partyExpirationCheckInterval;
+	public final ModConfigSpec.BooleanValue partyChatLogging;
+	public final ModConfigSpec.ConfigValue<String> partiesAdminModePermission;
+	public final ModConfigSpec.ConfigValue<String> partiesImpersonationPermission;
 	public final ModConfigSpec.ConfigValue<List<? extends String>> opConfigurablePlayerConfigOptions;
 	public final ModConfigSpec.ConfigValue<List<? extends String>> playerConfigurablePlayerConfigOptions;
 	public final ModConfigSpec.EnumValue<ConfigListType> friendlyChunkProtectedEntityListType;
@@ -52,12 +55,15 @@ public class ServerConfig {
 	public final ModConfigSpec.ConfigValue<List<? extends String>> entityClaimBarrierOptionalGroups;
 	public final ModConfigSpec.ConfigValue<List<? extends String>> entitiesAllowedToGrief;
 	public final ModConfigSpec.ConfigValue<List<? extends String>> entitiesAllowedToGriefEntities;
+	public final ModConfigSpec.ConfigValue<List<? extends String>> entitiesAllowedToAccessPlayers;
 	public final ModConfigSpec.ConfigValue<List<? extends String>> entitiesAllowedToGriefDroppedItems;
 	public final ModConfigSpec.ConfigValue<List<? extends String>> nonBlockGriefingMobs;
 	public final ModConfigSpec.ConfigValue<List<? extends String>> entityGriefingMobs;
+	public final ModConfigSpec.ConfigValue<List<? extends String>> playerGriefingMobs;
 	public final ModConfigSpec.ConfigValue<List<? extends String>> droppedItemGriefingMobs;
 	public final ModConfigSpec.ConfigValue<List<? extends String>> blockAccessEntityGroups;
 	public final ModConfigSpec.ConfigValue<List<? extends String>> entityAccessEntityGroups;
+	public final ModConfigSpec.ConfigValue<List<? extends String>> playerAccessEntityGroups;
 	public final ModConfigSpec.ConfigValue<List<? extends String>> droppedItemAccessEntityGroups;
 	public final ModConfigSpec.ConfigValue<List<? extends String>> staticFakePlayers;
 	public final ModConfigSpec.ConfigValue<List<? extends String>> staticFakePlayerClassExceptions;
@@ -74,6 +80,10 @@ public class ServerConfig {
 	public final ModConfigSpec.EnumValue<ConfigListType> claimableDimensionsListType;
 	public final ModConfigSpec.BooleanValue allowExistingClaimsInUnclaimableDimensions;
 	public final ModConfigSpec.BooleanValue allowExistingForceloadsInUnclaimableDimensions;
+	public final ModConfigSpec.IntValue maxPlayerGroups;
+	public final ModConfigSpec.IntValue playerGroupSpace;
+	public final ModConfigSpec.ConfigValue<String> maxPlayerGroupsPermission;
+	public final ModConfigSpec.ConfigValue<String> playerGroupSpacePermission;
 	public final ModConfigSpec.IntValue maxPlayerClaims;
 	public final ModConfigSpec.IntValue maxPlayerClaimForceloads;
 	public final ModConfigSpec.IntValue maxPartyMembers;
@@ -86,12 +96,22 @@ public class ServerConfig {
 	public final ModConfigSpec.BooleanValue claimWelcomeMessages;
 	public final ModConfigSpec.ConfigValue<String> maxPlayerClaimsPermission;
 	public final ModConfigSpec.ConfigValue<String> maxPlayerClaimForceloadsPermission;
+	public final ModConfigSpec.IntValue maxSingleClaimActionSize;
 	public final ModConfigSpec.ConfigValue<String> serverClaimPermission;
-	public final ModConfigSpec.ConfigValue<String> adminModePermission;
+	public final ModConfigSpec.ConfigValue<String> claimsModeratorModePermission;
+	public final ModConfigSpec.ConfigValue<String> claimsAdminModePermission;
+	public final ModConfigSpec.ConfigValue<String> claimsImpersonationPermission;
+	public final ModConfigSpec.ConfigValue<String> claimsTeleportationPermission;
 	public final ModConfigSpec.ConfigValue<String> permissionSystem;
 	public final ModConfigSpec.ConfigValue<String> primaryPartySystem;
+	public final ModConfigSpec.BooleanValue partyOwnedClaims;
+	public final ModConfigSpec.IntValue claimBonusPerPartyMember;
+	public final ModConfigSpec.IntValue forceloadBonusPerPartyMember;
+	public final ModConfigSpec.IntValue claimBonusForPartyOwner;
+	public final ModConfigSpec.IntValue forceloadBonusForPartyOwner;
+	public final ModConfigSpec.IntValue overLimitClaimAccessCooldown;
+	public final ModConfigSpec.BooleanValue allowTouchingClaims;
 
-	@SuppressWarnings("deprecation")
 	private ServerConfig(ModConfigSpec.Builder builder) {
 		builder.push("serverConfig");
 
@@ -124,6 +144,47 @@ public class ServerConfig {
 			.translation("gui.xaero_pac_config_primary_party_system")
 			.worldRestart()
 			.define("primaryPartySystem", "argonauts_guilds");
+
+		maxPlayerGroups = builder
+				.comment("""
+					The maximum number of player groups that a player can create in their config. Bonus group limits can be configured for individual players in their config.
+					This value can be overridden with a player permission.""")
+				.translation("gui.xaero_pac_config_max_player_groups")
+				.worldRestart()
+				.defineInRange("maxPlayerGroups", 16, 0, 512);
+
+		playerGroupSpace = builder
+				.comment("""
+					The space (in entries) available for player groups in a player's config. The space is shared between groups. Bonus group limits can be configured for individual players in their config.
+					This value can be overridden with a player permission.
+					Be careful with how much group space you give to your normal players.""")
+				.translation("gui.xaero_pac_config_player_group_space")
+				.worldRestart()
+				.defineInRange("playerGroupSpace", 256, 0, 1024);
+
+		maxPlayerGroupsPermission = builder
+				.comment("""
+					The permission that should override the default "maxPlayerGroups" value.
+					Set it to an empty string to never check permissions.
+					Checking permissions requires the player to be online. If you change a permission value for an offline player,
+					it will only take effect when the player logs in.
+					This might not work well with party-owned claims. The party owner would have to log in for any changes.
+					The used permission system can be configured with "permissionSystem".""")
+				.translation("gui.xaero_pac_config_max_player_groups_permission")
+				.worldRestart()
+				.define("maxPlayerGroupsPermission", UsedPermissionNodes.MAX_PLAYER_GROUPS.getDefaultNodeString());
+
+		playerGroupSpacePermission = builder
+				.comment("""
+					The permission that should override the default "playerGroupSpace" value.
+					Set it to an empty string to never check permissions.
+					Checking permissions requires the player to be online. If you change a permission value for an offline player,
+					it will only take effect when the player logs in.
+					This might not work well with party-owned claims. The party owner would have to log in for any changes.
+					The used permission system can be configured with "permissionSystem".""")
+				.translation("gui.xaero_pac_config_player_group_space_permission")
+				.worldRestart()
+				.define("playerGroupSpacePermission", UsedPermissionNodes.PLAYER_GROUP_SPACE.getDefaultNodeString());
 
 		builder.push("parties");
 
@@ -162,6 +223,24 @@ public class ServerConfig {
 			.translation("gui.xaero_pac_config_party_expiration_check_interval")
 			.worldRestart()
 			.defineInRange("partyExpirationCheckInterval", 6 * 60, 10, Integer.MAX_VALUE);
+
+		partyChatLogging = builder
+			.comment("Whether all party chat messages should be added to the server logs like with other types of messages. The messages are not encrypted/private either way.")
+			.translation("gui.xaero_pac_config_party_chat_logging")
+			.worldRestart()
+			.define("partyChatLogging", true);
+
+		partiesAdminModePermission = builder
+			.comment("The permission that gives non-OP players the ability to enable party admin mode. The used permission system can be configured with \"permissionSystem\".")
+			.translation("gui.xaero_pac_config_parties_admin_mode_permission")
+			.worldRestart()
+			.define("adminModePermission", UsedPermissionNodes.PARTIES_ADMIN_MODE.getDefaultNodeString());
+
+		partiesImpersonationPermission = builder
+			.comment("The permission that gives non-OP players the ability to impersonate other players in regards to built-in party commands. The used permission system can be configured with \"permissionSystem\".")
+			.translation("gui.xaero_pac_config_parties_impersonation_permission")
+			.worldRestart()
+			.define("impersonationPermission", UsedPermissionNodes.PARTIES_IMPERSONATION.getDefaultNodeString());
 		
 		builder.pop();
 		
@@ -172,9 +251,79 @@ public class ServerConfig {
 			.translation("gui.xaero_pac_config_claims_enabled")
 			.worldRestart()
 		   	.define("enabled", true);
+
+		partyOwnedClaims = builder
+			.comment(
+					"""
+					Whether parties from the primary party system (option "primaryPartySystem") should act as owners of claims.
+					The technical owner of a party's claims is still a player: the party owner.
+					Party members who are at least the rank equivalent of Claimer can claim and unclaim as the party (owner).
+					If "Whole Party Can Claim" is enabled in the party owner's config (or enforced by the default player config), then every player in the party can claim/unclaim.
+					Party members who are at least the rank equivalent of Moderator can also include and exclude players
+					to/from the player groups of the party's claim config.
+					Party members who are at least the rank equivalent of Admin can also fully edit the party's claim config.
+					If the primary party system supports party colors (e.g. FTB Teams), then the default color of the party's claims is the party color.
+					Changing this option does not automatically reassign claims based on party relations or actual chunk claimers,
+					so it is recommended to only set this option once based on the server's intended gameplay style.
+					Other important options related to this feature are "claimBonusPerPartyMember", "forceloadBonusPerPartyMember",
+					"claimBonusForPartyOwner" and "forceloadBonusForPartyOwner"."""
+			)
+			.translation("gui.xaero_pac_config_party_owned_claims")
+			.worldRestart()
+			.define("partyOwnedClaims", false);
+
+		claimBonusPerPartyMember = builder
+				.comment("How much the party's claim limit should be increased per party member when option \"partyOwnedClaims\" is enabled.")
+				.translation("gui.xaero_pac_config_claims_claim_bonus_per_party_player")
+				.worldRestart()
+				.defineInRange("claimBonusPerPartyMember", 100, 0, Integer.MAX_VALUE);
+
+		forceloadBonusPerPartyMember = builder
+			.comment("How much the party's forceload limit should be increased per party member when option \"partyOwnedClaims\" is enabled.")
+			.translation("gui.xaero_pac_config_claims_forceload_bonus_per_party_player")
+			.worldRestart()
+			.defineInRange("forceloadBonusPerPartyMember", 2, 0, Integer.MAX_VALUE);
+
+		claimBonusForPartyOwner = builder
+			.comment("""
+					How much the party's claim limit should be increased when a player's party has at least another member and
+					"partyOwnedClaims" is enabled. This bonus is added on top of "claimBonusPerPartyMember". The main use for this
+					is to prevent players from claiming until they have started a party with another player ("maxPlayerClaims" should be 0).""")
+			.translation("gui.xaero_pac_config_claims_claim_bonus_for_party_owner")
+			.worldRestart()
+			.defineInRange("claimBonusForPartyOwner", 0, 0, Integer.MAX_VALUE);
+
+		forceloadBonusForPartyOwner = builder
+			.comment("""
+					How much the party's forceload limit should be increased when a player's party has at least another member and
+					"partyOwnedClaims" is enabled. This bonus is added on top of "forceloadBonusPerPartyMember". The main use for this
+					is to prevent players from forceloading until they have started a party with another player ("maxPlayerClaimForceloads" should be 0).""")
+			.translation("gui.xaero_pac_config_claims_forceload_bonus_for_party_owner")
+			.worldRestart()
+			.defineInRange("forceloadBonusForPartyOwner", 0, 0, Integer.MAX_VALUE);
+
+		allowTouchingClaims = builder
+			.comment(
+					"""
+					Whether players should be able to claim chunks that are directly next to claimed chunks owned by another player/party.
+					Disallowing it can prevent players from doing so without realizing that chunks next to claims can also be partially protected,
+					e.g. from item use and mob griefing, making them not ideal for some purposes.
+					Only affects claiming wilderness, so reclaimable claims can still work."""
+			)
+			.translation("gui.xaero_pac_config_allow_touching_claims")
+			.worldRestart()
+			.define("allowTouchingClaims", true);
+
+		overLimitClaimAccessCooldown = builder
+			.comment("""
+					How often (in minutes) to allow players to access a claim when their own claim count is over the claim limit or the claim count
+					of the owner of the claim is over the claim limit.""")
+			.translation("gui.xaero_pac_config_claims_over_limit_claim_access_cooldown")
+			.worldRestart()
+			.defineInRange("overLimitClaimAccessCooldown", 5, 0, Integer.MAX_VALUE);
 		
 		playerClaimsExpirationTime = builder
-			.comment("For how long a player can stay completely inactive on the server until their claims are expired (in hours). This improves performance for servers running for years.")
+			.comment("For how long a player/party can stay completely inactive on the server until their claims are expired (in hours). This improves performance for servers running for years.")
 			.translation("gui.xaero_pac_config_claims_expiration_time")
 			.worldRestart()
 			.defineInRange("playerClaimsExpirationTime", 8760, 1, Integer.MAX_VALUE);
@@ -208,7 +357,12 @@ public class ServerConfig {
 			.defineInRange("maxPlayerClaimForceloads", 10, 0, Integer.MAX_VALUE);
 
 		maxPlayerClaimsPermission = builder
-			.comment("The permission that should override the default \"maxPlayerClaims\" value. Set it to an empty string to never check permissions. The used permission system can be configured with \"permissionSystem\".")
+			.comment("""
+					The permission that should override the default "maxPlayerClaims" value. Set it to an empty string to never check permissions.
+					Checking permissions requires the player to be online. If you change a permission value for an offline player,
+					it will only take effect when the player logs in.
+					This might not work well with party-owned claims. The party owner would have to log in for any changes.
+					The used permission system can be configured with "permissionSystem".""")
 			.translation("gui.xaero_pac_config_max_claims_permission")
 			.worldRestart()
 			.define("maxPlayerClaimsPermission", UsedPermissionNodes.MAX_PLAYER_CLAIMS.getDefaultNodeString());
@@ -216,11 +370,22 @@ public class ServerConfig {
 		maxPlayerClaimForceloadsPermission = builder
 			.comment("""
 					The permission that should override the default "maxPlayerClaimForceloads" value. Set it to an empty string to never check permissions.
-					The permission override only takes effect after the player logs in at least once after a server (re)launch, so it is recommended to keep all permission-based forceload limits equal to or greater than "maxPlayerClaimForceloads".
+					Checking permissions requires the player to be online. If you change a permission value for an offline player,
+					it will only take effect when the player logs in.
+					This might not work well with party-owned claims. The party owner would have to log in for any changes.
 					The used permission system can be configured with "permissionSystem".""")
 			.translation("gui.xaero_pac_config_max_forceloads_permission")
 			.worldRestart()
 			.define("maxPlayerClaimForceloadsPermission", UsedPermissionNodes.MAX_PLAYER_FORCELOADS.getDefaultNodeString());
+
+		maxSingleClaimActionSize = builder
+			.comment("""
+					The maximum size (in chunks) of a single claim action, whether it's claiming, unclaiming or forceloading.
+					The size limit can be circumvented using the claims admin mode.
+					Very big claim actions should not affect your server's performance much, this is mostly a balancing option.""")
+			.translation("gui.xaero_pac_config_max_single_claim_action_size")
+			.worldRestart()
+			.defineInRange("maxSingleClaimActionSize", 121, 0, Integer.MAX_VALUE);
 
 		serverClaimPermission = builder
 			.comment("The permission that gives non-OP players the ability to make server claims and enable server claim mode. The used permission system can be configured with \"permissionSystem\".")
@@ -228,11 +393,29 @@ public class ServerConfig {
 			.worldRestart()
 			.define("serverClaimPermission", UsedPermissionNodes.SERVER_CLAIMS.getDefaultNodeString());
 
-		adminModePermission = builder
-			.comment("The permission that gives non-OP players the ability to enable claim admin mode. The used permission system can be configured with \"permissionSystem\".")
-			.translation("gui.xaero_pac_config_admin_mode_permission")
+		claimsModeratorModePermission = builder
+			.comment("The permission that gives non-OP players the ability to enable claim moderator mode. The used permission system can be configured with \"permissionSystem\".")
+			.translation("gui.xaero_pac_config_claims_moderator_mode_permission")
 			.worldRestart()
-			.define("adminModePermission", UsedPermissionNodes.ADMIN_MODE.getDefaultNodeString());
+			.define("moderatorModePermission", UsedPermissionNodes.CLAIMS_MODERATOR_MODE.getDefaultNodeString());
+
+		claimsAdminModePermission = builder
+			.comment("The permission that gives non-OP players the ability to enable claim admin mode and claim moderator mode. The used permission system can be configured with \"permissionSystem\".")
+			.translation("gui.xaero_pac_config_claims_admin_mode_permission")
+			.worldRestart()
+			.define("adminModePermission", UsedPermissionNodes.CLAIMS_ADMIN_MODE.getDefaultNodeString());
+
+		claimsImpersonationPermission = builder
+			.comment("The permission that gives non-OP players the ability to impersonate other players in regards to claims. The used permission system can be configured with \"permissionSystem\".")
+			.translation("gui.xaero_pac_config_claims_impersonation_permission")
+			.worldRestart()
+			.define("impersonationPermission", UsedPermissionNodes.CLAIMS_IMPERSONATION.getDefaultNodeString());
+
+		claimsTeleportationPermission = builder
+			.comment("The permission that gives non-OP players the ability to teleport to any player's claims. The used permission system can be configured with \"permissionSystem\".")
+			.translation("gui.xaero_pac_config_claims_teleportation_permission")
+			.worldRestart()
+			.define("teleportationPermission", UsedPermissionNodes.CLAIMS_TELEPORTATION.getDefaultNodeString());
 
 		maxClaimDistance = builder
 			.comment("The maximum distance on the X or Z axis (forming a square) that a chunk can be claimed at by a player.")
@@ -270,7 +453,9 @@ public class ServerConfig {
 		claimsSynchronization = builder
 			.comment("""
 					Whether to synchronize world chunk claims to the game clients. Enables client-side mods to access the claims data, e.g. to display it on a map.
-					ALL - all claims are synced. OWNED_ONLY - only the claims that the client player owns and server claims are synced. NOT_SYNCED - claims are not synced.""")
+					ALL - all claims are synced.
+					OWNED_ONLY - only the claims that the client player or their primary party owns and server claims are synced. Party-owned claims need to be enabled with "partyOwnedClaims".
+					NOT_SYNCED - claims are not synced.""")
 			.translation("gui.xaero_pac_config_claims_synchronization")
 			.worldRestart()
 		   	.defineEnum("claimsSynchronization", ClaimsSyncType.ALL);
@@ -377,6 +562,13 @@ public class ServerConfig {
 							"Hoppers{minecraft:hopper}",
 							"Dispenser-like{minecraft:dispenser, minecraft:dropper}",
 							"Anvils{#minecraft:anvil}",
+							"Stonecutters{minecraft:stonecutter}",
+							"Grindstones{minecraft:grindstone}",
+							"Cartography_Tables{minecraft:cartography_table}",
+							"Lecterns{minecraft:lectern}",
+							"Smithing_Tables{minecraft:smithing_table}",
+							"Looms{minecraft:loom}",
+							"Jukeboxes{minecraft:jukebox}",
 							"Beds{#minecraft:beds}",
 							"Beacons{minecraft:beacon}",
 							"Enchanting_Tables{minecraft:enchanting_table}",
@@ -414,7 +606,8 @@ public class ServerConfig {
 							"Traders{minecraft:villager, minecraft:wandering_trader}",
 							"hand$Item_Frames{minecraft:item_frame}",
 							"break$Livestock{minecraft:cow, minecraft:mooshroom, minecraft:sheep, minecraft:chicken, minecraft:pig, minecraft:rabbit, minecraft:goat}",
-							"Armor_Stands{minecraft:armor_stand}"
+							"Armor_Stands{minecraft:armor_stand}",
+							"Players{minecraft:player}"
 					), s -> s instanceof String);
 
 		forcedEntityClaimBarrierList = builder
@@ -444,7 +637,7 @@ public class ServerConfig {
 
 		entitiesAllowedToGrief = builder
 			.comment("""
-					Entities that can bypass all block protection. Supports entity type tags.
+					Entities that can bypass block protection. Supports entity type tags.
 					Prefixing an entity id/tag with "interact$" creates an exception which tries to exclude block breaking.
 					Prefixing an entity id/tag with "break$" creates an exception that only includes block breaking.
 					Leaving an entity id/tag without a prefix creates an exception that includes all block interactions.
@@ -455,10 +648,10 @@ public class ServerConfig {
 					For example ["minecraft:(v|p)illager", "minecraft:*illager", "#minecraft:raiders"]""")
 			.translation("gui.xaero_pac_config_entities_allowed_to_grief")
 			.worldRestart()
-			.defineListAllowEmpty(Lists.newArrayList("entitiesAllowedToGrief"), () -> Lists.newArrayList("minecraft:sheep", "interact$minecraft:potion", "interact$minecraft:trident", "interact$minecraft:(*_|)arrow", "interact$minecraft:ender_pearl", "interact$minecraft:egg"), s -> s instanceof String);
+			.defineListAllowEmpty(Lists.newArrayList("entitiesAllowedToGrief"), () -> Lists.newArrayList("minecraft:sheep", "interact$minecraft:potion", "interact$minecraft:trident", "interact$minecraft:(*_|)arrow", "interact$minecraft:ender_pearl", "interact$minecraft:egg", "interact$minecraft:shulker_bullet"), s -> s instanceof String);
 		entitiesAllowedToGriefEntities = builder
 			.comment("""
-					Entities that can bypass all protection of other entities. Supports entity type tags.
+					Entities that can bypass protection of other entities. Supports entity type tags.
 					Prefixing an entity id/tag with "interact$" creates an exception which tries to exclude attacks.
 					Prefixing an entity id/tag with "break$" creates an exception that only includes attacks.
 					Leaving an entity id/tag without a prefix creates an exception that includes all entity interactions.
@@ -469,7 +662,21 @@ public class ServerConfig {
 					For example ["minecraft:(v|p)illager", "minecraft:*illager", "#minecraft:raiders"]""")
 			.translation("gui.xaero_pac_config_entities_allowed_to_grief_entities")
 			.worldRestart()
-			.defineListAllowEmpty(Lists.newArrayList("entitiesAllowedToGriefEntities"), () -> Lists.newArrayList("interact$minecraft:potion", "interact$minecraft:trident", "interact$minecraft:(*_|)arrow", "interact$minecraft:ender_pearl", "interact$minecraft:egg"), s -> s instanceof String);
+			.defineListAllowEmpty(Lists.newArrayList("entitiesAllowedToGriefEntities"), () -> Lists.newArrayList("interact$minecraft:potion", "interact$minecraft:trident", "interact$minecraft:(*_|)arrow", "interact$minecraft:ender_pearl", "interact$minecraft:egg", "interact$minecraft:shulker_bullet"), s -> s instanceof String);
+		entitiesAllowedToAccessPlayers = builder
+			.comment("""
+					Entities that can bypass protection of players. Supports entity type tags.
+					Prefixing an entity id/tag with "interact$" creates an exception which tries to exclude attacks.
+					Prefixing an entity id/tag with "break$" creates an exception that only includes attacks.
+					Leaving an entity id/tag without a prefix creates an exception that includes all interactions with players.
+					Projectiles landing on players is considered a non-attack interaction first, even if it can result in an attack,
+					which is protected separately afterwards.
+					Projectile landing on players requires non-attack entity access through this option or playerAccessEntityGroups.
+					Supports patterns with special characters *, (, ) and |, where * matches anything, ( ) are used for grouping and | means OR.
+					For example ["minecraft:(v|p)illager", "minecraft:*illager", "#minecraft:raiders"]""")
+			.translation("gui.xaero_pac_config_entities_allowed_to_grief_players")
+			.worldRestart()
+			.defineListAllowEmpty(Lists.newArrayList("entitiesAllowedToAccessPlayers"), () -> Lists.newArrayList("interact$minecraft:potion", "interact$minecraft:trident", "interact$minecraft:(*_|)arrow", "interact$minecraft:ender_pearl", "interact$minecraft:egg", "interact$minecraft:shulker_bullet"), s -> s instanceof String);
 		entitiesAllowedToGriefDroppedItems = builder
 			.comment("""
 					Entities that can bypass all dropped item protection. Supports entity type tags.
@@ -503,6 +710,18 @@ public class ServerConfig {
 			.translation("gui.xaero_pac_config_entity_griefers")
 			.worldRestart()
 			.defineListAllowEmpty(Lists.newArrayList("entityGriefingMobs"), Lists::newArrayList, s -> s instanceof String);
+		playerGriefingMobs = builder
+			.comment(
+					"""
+					(Forge-only option) Mobs that can grief players in ways other than attacking them. This list is used when overriding the vanilla "mob griefing" game rule value.
+					By default, the mod assumes that any "mob griefing" game rule check is meant for block protection only. Add a mob to this list if you want the player protection option to be checked as well when the rule is checked.
+					Check out the "nonBlockGriefingMobs" option if you want to also remove the default block protection check for the mob.
+					Supports entity type tags. Supports patterns with special characters *, (, ) and |, where * matches anything, ( ) are used for grouping and | means OR.
+					For example ["minecraft:(v|p)illager", "minecraft:*illager", "#minecraft:raiders"]"""
+			)
+			.translation("gui.xaero_pac_config_player_griefers")
+			.worldRestart()
+			.defineListAllowEmpty(Lists.newArrayList("playerGriefingMobs"), Lists::newArrayList, s -> s instanceof String);
 		droppedItemGriefingMobs = builder
 			.comment(
 					"""
@@ -559,6 +778,27 @@ public class ServerConfig {
 					() -> Lists.newArrayList(
 							"Zombies{minecraft:zombie, minecraft:zombie_villager, minecraft:husk, minecraft:drowned}"
 					), s -> s instanceof String);
+		playerAccessEntityGroups = builder
+			.comment("""
+					Custom groups of entities that a player/claim config should be able to make player access exceptions for (e.g. letting zombies kill players).
+					Each group can consist of multiple entities and entity tags. The format for an entity group is <group ID>{<entities/tags/wildcards separated by ,>}.
+					The group ID should consist of at most 32 characters that are letters A-Z, numbers 0-9 or the - and _ characters, e.g. "ePiC-GUYS98{minecraft:pig, minecraft:c(ow|at), #minecraft:beehive_inhabitors}".
+					The group can be prefixed with "interact$" to create an exception that tries to exclude attacks.
+					The group can be prefixed with "break$" to create an exception that only includes attacks.
+					The group can be left without a prefix to create an exception that includes all interactions with players.
+					Projectiles landing on players is considered a non-attack interaction first, even if it can result in an attack,
+					which is protected separately afterwards.
+					Projectile landing on players requires non-attack player access through this option or entitiesAllowedToAccessPlayers.
+					The player config options created for the groups, like regular options, must be added in the "playerConfigurablePlayerConfigOptions" list for players to have access to them.
+					The exact paths of the added options can be found in the default player config file after you start the server.
+					Supports patterns with special characters *, (, ) and |, where * matches anything, ( ) are used for grouping and | means OR."""
+			)
+			.translation("gui.xaero_pac_config_player_access_entity_groups")
+			.worldRestart()
+			.defineListAllowEmpty(Lists.newArrayList("playerAccessEntityGroups"),
+					() -> Lists.newArrayList(
+							"Zombies{minecraft:zombie, minecraft:zombie_villager, minecraft:husk, minecraft:drowned}"
+					), s -> s instanceof String);
 		droppedItemAccessEntityGroups = builder
 			.comment("""
 					Custom groups of entities that a player/claim config should be able to make dropped item access exceptions for (e.g. letting piglins pick up gold).
@@ -592,7 +832,14 @@ public class ServerConfig {
 					For example ["41C82C87-7AfB-4024-BB57-13D2C99CAE77", "FakePlayerName"]""")
 			.translation("gui.xaero_pac_config_static_fake_players")
 			.worldRestart()
-			.defineListAllowEmpty(Lists.newArrayList("staticFakePlayers"), () -> Lists.newArrayList("[IntegratedTunnels]"), s -> s instanceof String);
+			.defineListAllowEmpty(
+					Lists.newArrayList("staticFakePlayers"),
+					() -> Lists.newArrayList(
+							"[IntegratedTunnels]",
+							"7400926d-1007-4e53-880f-b43e67f2bf29"//Ars Nouveau
+					),
+					s -> s instanceof String
+			);
 		staticFakePlayerClassExceptions = builder
 				.comment("""
 					A list of Java classes of fake players that should be excluded from claim protection exceptions given to fake players with the "staticFakePlayers" option
@@ -699,79 +946,89 @@ public class ServerConfig {
 							"claims.forceload.enabled",
 							"claims.name",
 							"claims.color",
-							"claims.protection.fromParty",
-							"claims.protection.fromAllyParties",
-							"claims.protection.buttonsFromProjectiles",
-							"claims.protection.targetsFromProjectiles",
-							"claims.protection.platesFromPlayers",
-							"claims.protection.platesFromMobs",
-							"claims.protection.platesFromOther",
-							"claims.protection.tripwireFromPlayers",
-							"claims.protection.tripwireFromMobs",
-							"claims.protection.tripwireFromOther",
-							"claims.protection.cropTrample",
-							"claims.protection.playerLightning",
-							"claims.protection.blocksFromEnchantments",
-							"claims.protection.entitiesFromPlayers",
-							"claims.protection.entitiesFromMobs",
-							"claims.protection.entitiesFromOther",
-							"claims.protection.entitiesRedirect",
-							"claims.protection.entitiesFromExplosions",
-							"claims.protection.entitiesFromFire",
-							"claims.protection.netherPortalsPlayers",
-							"claims.protection.netherPortalsMobs",
-							"claims.protection.netherPortalsOther",
+							"claims.protection.exceptions.fullAccess",
+							"claims.protection.exceptions.buttonsByProjectiles",
+							"claims.protection.exceptions.targetsByProjectiles",
+							"claims.protection.exceptions.platesByPlayers",
+							"claims.protection.exceptions.platesByMobs",
+							"claims.protection.exceptions.platesByOther",
+							"claims.protection.exceptions.tripwireByPlayers",
+							"claims.protection.exceptions.tripwireByMobs",
+							"claims.protection.exceptions.tripwireByOther",
+							"claims.protection.exceptions.cropTrample",
+							"claims.protection.exceptions.playerLightning",
+							"claims.protection.exceptions.frostWalking",
+							"claims.protection.exceptions.blocksByEnchantments",
+							"claims.protection.exceptions.entitiesByPlayers",
+							"claims.protection.exceptions.entitiesByMobs",
+							"claims.protection.exceptions.entitiesByOther",
+							"claims.protection.exceptions.entitiesRedirect",
+							"claims.protection.exceptions.entitiesByExplosions",
+							"claims.protection.exceptions.entitiesByFire",
+							"claims.protection.exceptions.netherPortalsPlayers",
+							"claims.protection.exceptions.netherPortalsMobs",
+							"claims.protection.exceptions.netherPortalsOther",
 							"claims.protection.fluidBarrier",
 							"claims.protection.dispenserBarrier",
 							"claims.protection.pistonBarrier",
-							"claims.protection.itemTossPlayers",
-							"claims.protection.itemTossMobs",
-							"claims.protection.itemTossOther",
-							"claims.protection.itemTossRedirect",
-							"claims.protection.mobLoot",
+							"claims.protection.exceptions.itemTossPlayers",
+							"claims.protection.exceptions.itemTossMobs",
+							"claims.protection.exceptions.itemTossOther",
+							"claims.protection.exceptions.itemTossRedirect",
+							"claims.protection.exceptions.mobLoot",
 							"claims.protection.playerDeathLoot",
-							"claims.protection.itemPickupPlayers",
-							"claims.protection.itemPickupMobs",
-							"claims.protection.itemPickupRedirect",
-							"claims.protection.xpPickup",
-							"claims.protection.raids",
-							"claims.protection.naturalSpawnHostile",
-							"claims.protection.naturalSpawnFriendly",
-							"claims.protection.spawnersHostile",
-							"claims.protection.spawnersFriendly",
-							"claims.protection.projectileHitHostileSpawn",
-							"claims.protection.projectileHitFriendlySpawn",
+							"claims.protection.exceptions.itemPickupPlayers",
+							"claims.protection.exceptions.itemPickupMobs",
+							"claims.protection.exceptions.itemPickupRedirect",
+							"claims.protection.exceptions.xpPickup",
+							"claims.protection.exceptions.raids",
+							"claims.protection.exceptions.naturalSpawnHostile",
+							"claims.protection.exceptions.naturalSpawnFriendly",
+							"claims.protection.exceptions.spawnersHostile",
+							"claims.protection.exceptions.spawnersFriendly",
+							"claims.protection.exceptions.projectileHitHostileSpawn",
+							"claims.protection.exceptions.projectileHitFriendlySpawn",
+							"claims.protection.exceptions.reclaimable",
 							"parties.name",
 							"parties.shareLocationWithParty",
 							"parties.shareLocationWithMutualAllyParties",
 							"parties.receiveLocationsFromParty",
 							"parties.receiveLocationsFromMutualAllyParties",
-							"claims.protection.exceptionGroups.block.interact.Controls",
-							"claims.protection.exceptionGroups.block.interact.Doors",
-							"claims.protection.exceptionGroups.block.interact.Chests",
-							"claims.protection.exceptionGroups.block.interact.Barrels",
-							"claims.protection.exceptionGroups.block.interact.Ender_Chests",
-							"claims.protection.exceptionGroups.block.interact.Shulker_Boxes",
-							"claims.protection.exceptionGroups.block.interact.Furnaces",
-							"claims.protection.exceptionGroups.block.interact.Hoppers",
-							"claims.protection.exceptionGroups.block.interact.Dispenser-like",
-							"claims.protection.exceptionGroups.block.interact.Anvils",
-							"claims.protection.exceptionGroups.block.interact.Beds",
-							"claims.protection.exceptionGroups.block.interact.Beacons",
-							"claims.protection.exceptionGroups.block.interact.Enchanting_Tables",
-							"claims.protection.exceptionGroups.block.break.Crops",
-							"claims.protection.exceptionGroups.entity.interact.Traders",
-							"claims.protection.exceptionGroups.entity.handInteract.Item_Frames",
-							"claims.protection.exceptionGroups.entity.interact.Armor_Stands",
-							"claims.protection.exceptionGroups.entity.break.Livestock",
-							"claims.protection.exceptionGroups.entity.blockAccess.Villagers",
-							"claims.protection.exceptionGroups.entity.entityAccess.Zombies",
-							"claims.protection.exceptionGroups.entity.droppedItemAccess.Villagers",
-							"claims.protection.exceptionGroups.entity.droppedItemAccess.Piglins",
-							"claims.protection.exceptionGroups.entity.droppedItemAccess.Foxes",
-							"claims.protection.exceptionGroups.item.interact.Books",
-							"claims.protection.exceptionGroups.entity.barrier.Ender_Pearls",
-							"/*remove comment to enable*/claims.protection.exceptionGroups.entity.barrier.Players"
+							"claims.protection.exceptions.groups.block.interact.Controls",
+							"claims.protection.exceptions.groups.block.interact.Doors",
+							"claims.protection.exceptions.groups.block.interact.Chests",
+							"claims.protection.exceptions.groups.block.interact.Barrels",
+							"claims.protection.exceptions.groups.block.interact.Ender_Chests",
+							"claims.protection.exceptions.groups.block.interact.Shulker_Boxes",
+							"claims.protection.exceptions.groups.block.interact.Furnaces",
+							"claims.protection.exceptions.groups.block.interact.Hoppers",
+							"claims.protection.exceptions.groups.block.interact.Dispenser-like",
+							"claims.protection.exceptions.groups.block.interact.Anvils",
+							"claims.protection.exceptions.groups.block.interact.Stonecutters",
+							"claims.protection.exceptions.groups.block.interact.Grindstones",
+							"claims.protection.exceptions.groups.block.interact.Cartography_Tables",
+							"claims.protection.exceptions.groups.block.interact.Lecterns",
+							"claims.protection.exceptions.groups.block.interact.Smithing_Tables",
+							"claims.protection.exceptions.groups.block.interact.Looms",
+							"claims.protection.exceptions.groups.block.interact.Jukeboxes",
+							"claims.protection.exceptions.groups.block.interact.Beds",
+							"claims.protection.exceptions.groups.block.interact.Beacons",
+							"claims.protection.exceptions.groups.block.interact.Enchanting_Tables",
+							"claims.protection.exceptions.groups.block.break.Crops",
+							"claims.protection.exceptions.groups.entity.interact.Traders",
+							"claims.protection.exceptions.groups.entity.handInteract.Item_Frames",
+							"claims.protection.exceptions.groups.entity.interact.Armor_Stands",
+							"claims.protection.exceptions.groups.entity.interact.Players",
+							"claims.protection.exceptions.groups.entity.break.Livestock",
+							"claims.protection.exceptions.groups.entity.blockAccess.Villagers",
+							"claims.protection.exceptions.groups.entity.entityAccess.Zombies",
+							"claims.protection.exceptions.groups.entity.playerAccess.Zombies",
+							"claims.protection.exceptions.groups.entity.droppedItemAccess.Villagers",
+							"claims.protection.exceptions.groups.entity.droppedItemAccess.Piglins",
+							"claims.protection.exceptions.groups.entity.droppedItemAccess.Foxes",
+							"claims.protection.exceptions.groups.item.interact.Books",
+							"claims.protection.exceptions.groups.entity.barrier.Ender_Pearls",
+							"/*remove comment to enable*/claims.protection.exceptions.groups.entity.barrier.Players"
 							), s -> s instanceof String);
 
 		opConfigurablePlayerConfigOptions = builder
@@ -782,7 +1039,7 @@ public class ServerConfig {
 					Check the default player config .toml file for the option names.""")
 			.translation("gui.xaero_pac_config_op_configurable_player_options")
 			//.worldRestart()
-			.defineListAllowEmpty(Lists.newArrayList("opConfigurablePlayerConfigOptions"), () -> Lists.newArrayList("claims.bonusChunkClaims", "claims.bonusChunkForceloads"), s -> s instanceof String);
+			.defineListAllowEmpty(Lists.newArrayList("opConfigurablePlayerConfigOptions"), () -> Lists.newArrayList("claims.bonusChunkClaims", "claims.bonusChunkForceloads", "bonusPlayerGroups", "bonusPlayerGroupSpace"), s -> s instanceof String);
 
 		builder.pop();
 	}

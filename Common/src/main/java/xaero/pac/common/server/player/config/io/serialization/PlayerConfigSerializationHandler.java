@@ -1,6 +1,6 @@
 /*
  * Open Parties and Claims - adds chunk claims and player parties to Minecraft
- * Copyright (C) 2022-2025, Xaero <xaero1996@gmail.com> and contributors
+ * Copyright (C) 2022-2026, Xaero <xaero1996@gmail.com> and contributors
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of version 3 of the GNU Lesser General Public License
@@ -43,10 +43,16 @@ public final class PlayerConfigSerializationHandler<
 
 	@Override
 	public PlayerConfig<P> deserialize(PlayerConfigDeserializationInfo info, PlayerConfigManager<P, CM> manager, String serializedData) {
-		PlayerConfig<P> config = info.getSubId() != null || info.getType() == PlayerConfigType.PLAYER ? manager.getConfig(info.getId()) : PlayerConfig.FinalBuilder.<P>begin().setType(info.getType()).setPlayerId(info.getId()).setManager(manager).build();
+		PlayerConfig<P> config = info.getSubId() != null || info.getType() == PlayerConfigType.PLAYER ?
+				manager.getConfig(info.getId()) :
+				PlayerConfig.FinalBuilder.<P>begin()
+						.setType(info.getType())
+						.setPlayerId(info.getId())
+						.setManager(manager)
+						.build();
 		PlayerConfig<P> targetConfig = config;
 		if(info.getSubId() != null)
-			targetConfig = config.createSubConfig(info.getSubId(), info.getSubIndex());
+			targetConfig = config.createSubConfig(info.getSubId(), info.getSubIndex(), true/*irrelevant*/);
 		if(targetConfig != null)
 			serializer.deserializeInto(targetConfig, serializedData);
 		return targetConfig;
