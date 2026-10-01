@@ -515,6 +515,23 @@ public class TeamClaimManager implements IClaimsManagerListenerAPI {
         else forceloadGraceTicksOverrides.put(partyId, ticks);
     }
 
+    public enum ForceloadActivity { ACTIVE, GRACE, INACTIVE }
+
+    /**
+     * Whether the team's forceloads are loaded: {@code ACTIVE} while a member is online, {@code GRACE} while they stay
+     * loaded only for the forceload grace period after the last member left, {@code INACTIVE} otherwise.
+     */
+    public ForceloadActivity getForceloadActivity(UUID partyId) {
+        if (!forceLoadHandler.isTeamActive(partyId)) return ForceloadActivity.INACTIVE;
+        return pendingDeactivations.containsKey(partyId) ? ForceloadActivity.GRACE : ForceloadActivity.ACTIVE;
+    }
+
+    /** Server ticks until the pending forceload release of the party (see the grace period), 0 if none is pending. */
+    public int getGraceTicksLeft(UUID partyId) {
+        Integer releaseTick = pendingDeactivations.get(partyId);
+        return releaseTick == null ? 0 : Math.max(0, releaseTick - server.getTickCount());
+    }
+
     @VisibleForTesting
     public boolean hasPendingDeactivation(UUID partyId) {
         return pendingDeactivations.containsKey(partyId);
@@ -677,13 +694,44 @@ public class TeamClaimManager implements IClaimsManagerListenerAPI {
 
     // ==================== Budget Checks (called by bridge handler) ====================
 
+    /**
+     * One party member's numbers as OPAC enforces them: their personal claims/forceloads (the raw counts minus their own
+     * team ones; their displayed count is that plus the whole team's total) and their full limits.
+     */
+    public record MemberNumbers(int personalClaims, int personalForceloads, int claimLimit, int forceloadLimit) {}
+
+    /**
+     * The {@link MemberNumbers} of a member of the party whose team claims are {@code teamData} (null: it has none), or
+     * null if OPAC has no claim info for the player. Shared by the budget checks and the info command, so both always
+     * agree.
+     */
+    @Nullable
+    public MemberNumbers getMemberNumbers(@Nullable TeamData teamData, UUID memberId) {
+        IServerClaimsManagerAPI claimsAPI = OpenPACServerAPI.get(server).getServerClaimsManager();
+        boolean previousComputing = COMPUTING_OVERHEAD.get();
+        COMPUTING_OVERHEAD.set(true);
+        try {
+            var memberInfo = claimsAPI.getPlayerInfo(memberId);
+            if (memberInfo == null) return null;
+            // Raw counts (no overhead) because COMPUTING_OVERHEAD=true
+            int personalClaims = Math.max(0, memberInfo.getClaimCount()
+                    - (teamData == null ? 0 : teamData.getClaimCountOf(memberId)));
+            int personalForceloads = Math.max(0, memberInfo.getForceloadCount()
+                    - (teamData == null ? 0 : teamData.getForceloadCountOf(memberId)));
+            // Exactly the limits OPAC itself enforces in tryToClaimHelper/tryToForceloadHelper
+            return new MemberNumbers(personalClaims, personalForceloads,
+                    claimsAPI.getPlayerFullClaimLimit(memberId), claimsAPI.getPlayerFullForceloadLimit(memberId));
+        } finally {
+            COMPUTING_OVERHEAD.set(previousComputing);
+        }
+    }
+
     @Nullable
     public ClaimResult<PlayerChunkClaim> checkTeamClaimBudget(UUID playerId, boolean forceLoaded,
                                                               @Nullable PlayerChunkClaim replacedClaim) {
         IServerPartyAPI party = getPlayerParty(playerId);
         if (party == null) return null;
 
-        IServerClaimsManagerAPI claimsAPI = OpenPACServerAPI.get(server).getServerClaimsManager();
         List<String> overClaimBudget = new ArrayList<>();
         List<String> overForceloadBudget = new ArrayList<>();
 
@@ -706,40 +754,25 @@ public class TeamClaimManager implements IClaimsManagerListenerAPI {
 
         // Check ALL members (including self) — each member's displayed count =
         // personal_claims + total_team_claims, plus what this claim adds.
-        boolean previousComputing = COMPUTING_OVERHEAD.get();
-        COMPUTING_OVERHEAD.set(true);
-        try {
-            party.getMemberInfoStream().forEach(member -> {
-                UUID memberId = member.getUUID();
-                var memberInfo = claimsAPI.getPlayerInfo(memberId);
-                if (memberInfo == null) return;
+        party.getMemberInfoStream().forEach(member -> {
+            UUID memberId = member.getUUID();
+            MemberNumbers numbers = getMemberNumbers(teamData, memberId);
+            if (numbers == null) return;
 
-                int rawClaimCount = memberInfo.getClaimCount(); // raw (no overhead) because COMPUTING_OVERHEAD=true
-                int memberTeamClaims = teamData == null ? 0 : teamData.getClaimCountOf(memberId);
-                int memberPersonalClaims = Math.max(0, rawClaimCount - memberTeamClaims);
-                if (memberId.equals(replacedMemberId))
-                    memberPersonalClaims = Math.max(0, memberPersonalClaims - 1);
-                int memberTotalAfterClaim = memberPersonalClaims + totalTeamClaims + teamClaimDelta;
+            int memberPersonalClaims = numbers.personalClaims();
+            if (memberId.equals(replacedMemberId))
+                memberPersonalClaims = Math.max(0, memberPersonalClaims - 1);
+            int memberTotalAfterClaim = memberPersonalClaims + totalTeamClaims + teamClaimDelta;
+            if (memberTotalAfterClaim > numbers.claimLimit()) overClaimBudget.add(member.getUsername());
 
-                // Exactly the limit OPAC itself enforces in tryToClaimHelper/tryToForceloadHelper
-                int memberClaimLimit = claimsAPI.getPlayerFullClaimLimit(memberId);
-                if (memberTotalAfterClaim > memberClaimLimit) overClaimBudget.add(member.getUsername());
-
-                if (teamForceloadDelta > 0) {
-                    int rawForceloadCount = memberInfo.getForceloadCount();
-                    int memberTeamForceloads = teamData == null ? 0 : teamData.getForceloadCountOf(memberId);
-                    int memberPersonalForceloads = Math.max(0, rawForceloadCount - memberTeamForceloads);
-                    if (memberId.equals(replacedMemberId) && replacedWasForceloaded)
-                        memberPersonalForceloads = Math.max(0, memberPersonalForceloads - 1);
-                    int memberTotalForceloadsAfter = memberPersonalForceloads + totalTeamForceloads + teamForceloadDelta;
-
-                    int memberForceloadLimit = claimsAPI.getPlayerFullForceloadLimit(memberId);
-                    if (memberTotalForceloadsAfter > memberForceloadLimit) overForceloadBudget.add(member.getUsername());
-                }
-            });
-        } finally {
-            COMPUTING_OVERHEAD.set(previousComputing);
-        }
+            if (teamForceloadDelta > 0) {
+                int memberPersonalForceloads = numbers.personalForceloads();
+                if (memberId.equals(replacedMemberId) && replacedWasForceloaded)
+                    memberPersonalForceloads = Math.max(0, memberPersonalForceloads - 1);
+                int memberTotalForceloadsAfter = memberPersonalForceloads + totalTeamForceloads + teamForceloadDelta;
+                if (memberTotalForceloadsAfter > numbers.forceloadLimit()) overForceloadBudget.add(member.getUsername());
+            }
+        });
 
         if (!overClaimBudget.isEmpty() || !overForceloadBudget.isEmpty()) {
             ServerPlayer player = server.getPlayerList().getPlayer(playerId);
@@ -764,7 +797,6 @@ public class TeamClaimManager implements IClaimsManagerListenerAPI {
         IServerPartyAPI party = getPlayerParty(currentClaim.getPlayerId());
         if (party == null) return null;
 
-        IServerClaimsManagerAPI claimsAPI = OpenPACServerAPI.get(server).getServerClaimsManager();
         List<String> overBudget = new ArrayList<>();
 
         TeamData teamData = teams().get(party.getId());
@@ -772,24 +804,12 @@ public class TeamClaimManager implements IClaimsManagerListenerAPI {
 
         // Check ALL members — after enabling forceload, each member's displayed forceload count =
         // personal_forceloads + total_team_forceloads + 1.
-        boolean previousComputing = COMPUTING_OVERHEAD.get();
-        COMPUTING_OVERHEAD.set(true);
-        try {
-            party.getMemberInfoStream().forEach(member -> {
-                UUID memberId = member.getUUID();
-                var memberInfo = claimsAPI.getPlayerInfo(memberId);
-                if (memberInfo == null) return;
-                int rawForceloadCount = memberInfo.getForceloadCount();
-                int memberTeamForceloads = teamData == null ? 0 : teamData.getForceloadCountOf(memberId);
-                int memberPersonalForceloads = Math.max(0, rawForceloadCount - memberTeamForceloads);
-                int memberTotal = memberPersonalForceloads + totalTeamForceloads + 1;
-                // Exactly the limit OPAC itself enforces
-                int memberForceloadLimit = claimsAPI.getPlayerFullForceloadLimit(memberId);
-                if (memberTotal > memberForceloadLimit) overBudget.add(member.getUsername());
-            });
-        } finally {
-            COMPUTING_OVERHEAD.set(previousComputing);
-        }
+        party.getMemberInfoStream().forEach(member -> {
+            MemberNumbers numbers = getMemberNumbers(teamData, member.getUUID());
+            if (numbers == null) return;
+            if (numbers.personalForceloads() + totalTeamForceloads + 1 > numbers.forceloadLimit())
+                overBudget.add(member.getUsername());
+        });
 
         if (!overBudget.isEmpty()) {
             ServerPlayer player = server.getPlayerList().getPlayer(requesterId);
@@ -1060,6 +1080,7 @@ public class TeamClaimManager implements IClaimsManagerListenerAPI {
         }
         public int getForceloadCountOf(UUID owner) { return forceloadsByOwner.getOrDefault(owner, 0); }
         @Nullable public UUID getOwner(ClaimPos pos) { return claimOwners.get(pos); }
+        public boolean isForceloaded(ClaimPos pos) { return forceLoadedChunks.contains(pos); }
         public Set<ClaimPos> getTrackedClaims() { return Collections.unmodifiableSet(claimOwners.keySet()); }
         Set<ClaimPos> claimsOf(UUID owner) {
             Set<ClaimPos> owned = claimsByOwner.get(owner);

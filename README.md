@@ -32,6 +32,20 @@ player**, which is worth knowing before you turn it on:
 
 The server logs one WARN line stating this at start-up while the option is enabled.
 
+## Commands
+
+| Command | Who | What it does |
+| --- | --- | --- |
+| `/teamclaims create <name>` | A player in no party | Creates a party with that team name, sets up the team config and every member's team sub-config. |
+| `/oparties create [teamname]` | A player in no party | OPAC's own party create command. With the optional team name argument it does the same as `/teamclaims create`. |
+| `/teamclaims info` | Everybody in a team | Overview of your team: the team name and owner, the team claims and how many of them are forceloaded, the forceload state (active, inactive because no member is online, or active during the grace period with the minutes left), one line per member (owner first, then by rank, then alphabetical) and the budget. A member line shows the claims and forceloads as `personal + team total = count / limit`, in red when the member is at or over a limit. The budget is how many more team claims and team forceloads the team can make right now, which is what the most limited member has left, and who that is. |
+| `/teamclaims info <player>` | Permission level 2 | The same overview for the team of another player (also offline). |
+| `/teamclaims list [page]` | Everybody in a team | The team claims, 10 per page, sorted by dimension, then x, then z: dimension, chunk, block coordinates of the chunk's centre, the member who made it and whether it is forceloaded. The `[<]` and `[>]` in the footer are clickable. A team without team claims gets a hint on how to make one. |
+| `/teamclaims territorymessages [on\|off]` | Everybody | Turns the claim welcome messages off or on for yourself, or shows the current state. See "Territory messages" below. |
+
+`info` and `list` only read, they change nothing. All of `/teamclaims` is unavailable while `enabled` is `false` in the
+Team Claims server config.
+
 ## Server config
 
 Team Claims has its own server config, `openpartiesandclaims-teamclaims-server.toml`, next to OPAC's

@@ -38,7 +38,8 @@ public class TeamClaimsCommands {
         // Registered even when Team Claims is disabled (the server config isn't loaded yet at this point), but then not
         // usable: the requirement is checked when the command is used or listed. Every subcommand needs Team Claims to be
         // active; "create" has the same further requirements as OPAC's "/<parties> create" (parties enabled, the caller,
-        // or the player they impersonate, not in a party yet), "territorymessages" is for everybody.
+        // or the player they impersonate, not in a party yet), "territorymessages" is for everybody, "info" and "list" are
+        // read-only overviews of the caller's team ("info <player>" of any player's, for permission level 2).
         Predicate<CommandSourceStack> nonMemberRequirement = new CommandRequirementProvider().getNonMemberRequirement(p -> true, false);
         dispatcher.register(
                 Commands.literal("teamclaims")
@@ -53,6 +54,8 @@ public class TeamClaimsCommands {
                                         .executes(context -> executeTerritoryMessages(context, true)))
                                 .then(Commands.literal("off")
                                         .executes(context -> executeTerritoryMessages(context, false))))
+                        .then(TeamClaimsOverview.infoNode())
+                        .then(TeamClaimsOverview.listNode())
         );
         LOGGER.info("Registered /teamclaims commands");
     }
@@ -62,7 +65,7 @@ public class TeamClaimsCommands {
      * longer active (e.g. a stale command tree after the server stopped) or the source is not a player.
      */
     @Nullable
-    private static ServerPlayer requirePlayer(CommandSourceStack source) {
+    static ServerPlayer requirePlayer(CommandSourceStack source) {
         IServerData<?, ?> serverData = ServerData.from(source.getServer());
         ServerPlayer player = source.getPlayer();
         if (!TeamClaimsCommon.isActive()) {

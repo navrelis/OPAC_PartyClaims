@@ -63,6 +63,10 @@ public final class TeamClaimsHardeningTestCases {
         @Override public boolean acceptsFailure() { return true; }
         @Override public boolean shouldInformAdmins() { return false; }
 
+        List<Component> messages() {
+            return messages;
+        }
+
         boolean received(String text) {
             return messages.stream().anyMatch(m -> m.getString().contains(text));
         }
