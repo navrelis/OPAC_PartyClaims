@@ -4,9 +4,6 @@ A fork of [Open Parties and Claims](https://github.com/thexaero/open-parties-and
 v0.31.6 by Xaero96, licensed under LGPL-3.0-only, adding a "Team Claims" layer on top
 of the original party/claims system.
 
-This fork targets **Fabric** for Minecraft 1.21.1 only (the upstream Forge/NeoForge
-modules are not part of this repository).
-
 ## Team Claims behaviour notes
 
 **Leaving a party.** When a member leaves or is kicked from a party that still exists, every
@@ -38,10 +35,13 @@ The server logs one WARN line stating this at start-up while the option is enabl
 ## Building
 
 ```
-gradlew.bat :Fabric:build
+gradlew.bat :Fabric:build :NeoForge:build
 ```
 
-The built jar is written to `Fabric/build/libs/`.
+The Fabric jar is written to `Fabric/build/libs/` and the NeoForge jar to `NeoForge/build/libs/`
+(ignore the `-sources` jars next to them). Team Claims works the same on both loaders: the logic
+lives in `Common`, and each loader only has a thin adapter that forwards its events to it
+(`TeamClaimsFabric` on Fabric, `TeamClaimsNeoForge` on NeoForge).
 
 Released builds live in `ExportedJars/<version>/`, together with the CurseForge
 listing text for that release.
@@ -74,3 +74,10 @@ actual Team Claims game logic (team sub-config creation/admin-only editing, clai
 budget sharing, teammate unclaim/forceload, membership-poll-driven claim transfer on leave, long
 team names) against offline UUID players, independently of each other and cleaning up after
 themselves so reruns stay green.
+
+The same tests run on NeoForge with `gradlew.bat :NeoForge:runTeamClaimsGameTest --console=plain`
+(NeoForge's gametest server, which also needs no EULA). The test bodies are shared from
+`Common/src/gametest`; NeoForge loads them through its own test-only `gametest` source set/mod
+(`NeoForge/src/gametest`, never shipped in the release jar). Each run starts with a fresh world,
+and the task fails unless the log contains `All N required tests passed`. Check
+`NeoForge/runs/teamClaimsGameTest/logs/latest.log` for the result.

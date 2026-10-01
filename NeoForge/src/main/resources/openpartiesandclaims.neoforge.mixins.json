@@ -1,0 +1,26 @@
+{
+  "required": true,
+  "plugin" : "xaero.pac.common.mixin.plugin.MixinPlugin",
+  "minVersion": "0.8",
+  "package": "xaero.pac.common.mixin",
+  "compatibilityLevel": "JAVA_17",
+  "mixins": [
+    "MixinNeoForgeBlock",
+    "MixinNeoForgeFireBlock",
+    "MixinNeoForgeMob",
+    "MixinNeoForgePiglin",
+    "MixinNeoForgeServerGamePacketListenerImpl",
+    "MixinOptionalButtonBlock",
+    "MixinOptionalEntityGetter",
+    "optifine.breaks.MixinNeoForgeMob"
+  ],
+  "client": [
+
+  ],
+  "server": [
+
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}

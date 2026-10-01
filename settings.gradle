@@ -37,4 +37,4 @@ plugins {
 }
 
 rootProject.name = "Open Parties and Claims"
-include("Common", "Fabric", "CreateSupportCommon")
+include("Common", "Fabric", "NeoForge", "CreateSupportCommon")

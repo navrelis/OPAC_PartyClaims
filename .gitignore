@@ -24,3 +24,5 @@ run-*
 runs
 run-data
 .gradle/
+# release jars (text files such as the CurseForge listing may be committed)
+ExportedJars/**/*.jar

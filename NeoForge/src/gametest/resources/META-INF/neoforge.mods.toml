@@ -1,0 +1,22 @@
+# Dev/test-only mod: never part of the production NeoForge jar (NeoForge "gametest" source set,
+# loaded only by the ":NeoForge:runTeamClaimsGameTest" run). Values are hardcoded on purpose: the
+# root build.gradle only expands ${...} placeholders in the main "processResources" task.
+modLoader="javafml"
+loaderVersion="[4,)"
+license="GNU Lesser General Public License v3.0 (LGPL-3.0-only)"
+
+[[mods]]
+modId="opac_teamclaims_gametest"
+version="1.0.0"
+displayName="OPAC Team Claims Gametest"
+description='''Headless gametests for the Team Claims layer of Open Parties and Claims (dev/test only).'''
+
+[[mixins]]
+config="opac_teamclaims_gametest.mixins.json"
+
+[[dependencies.opac_teamclaims_gametest]]
+    modId="openpartiesandclaims"
+    type="required"
+    versionRange="[0,)"
+    ordering="AFTER"
+    side="BOTH"
