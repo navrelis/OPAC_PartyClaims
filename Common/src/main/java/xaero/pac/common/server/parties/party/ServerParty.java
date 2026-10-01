@@ -76,6 +76,11 @@ public final class ServerParty extends Party implements IServerParty<PartyMember
 					managedBy.getPartySynchronizer().syncToPartyAndAlliersUpdateName(this, newOwnerConfig.getEffective(PlayerConfigOptions.PARTY_NAME));
 					managedBy.getPartySynchronizer().syncPrimaryPartySwitchForAll(this);
 				}
+				// [Team Claims] the team name follows the owner's party name
+				xaero.pac.common.server.claims.TeamClaimsIntegration.TeamClaimsHandler tcHandler =
+						xaero.pac.common.server.claims.TeamClaimsIntegration.getHandler();
+				if(tcHandler != null && managedBy.isLoaded())
+					tcHandler.onPartyOwnerChanged(getId());
 			}
 			setDirty(true);
 		}
@@ -121,6 +126,11 @@ public final class ServerParty extends Party implements IServerParty<PartyMember
 			managedBy.onMemberRemoved(this, m);
 			if(managedBy.isLoaded())
 				managedBy.getPartySynchronizer().syncToPartyRemoveMember(this, m);
+			// [Team Claims] a member left or was kicked: their team claims go to the party owner
+			xaero.pac.common.server.claims.TeamClaimsIntegration.TeamClaimsHandler tcHandler =
+					xaero.pac.common.server.claims.TeamClaimsIntegration.getHandler();
+			if(tcHandler != null && managedBy.isLoaded())
+				tcHandler.onPartyMemberRemoved(getId(), memberUUID);
 		}
 		memberInfoByUsername.remove(m.getUsername().toLowerCase());
 		setDirty(true);

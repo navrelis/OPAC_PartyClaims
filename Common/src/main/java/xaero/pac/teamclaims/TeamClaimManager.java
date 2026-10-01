@@ -8,15 +8,20 @@ import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.Tag;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.MinecraftServer;
+import net.minecraft.server.TickTask;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.saveddata.SavedData;
 import org.slf4j.Logger;
 import xaero.pac.common.claims.player.PlayerChunkClaim;
 import xaero.pac.common.claims.player.api.IPlayerChunkClaimAPI;
 import xaero.pac.common.claims.result.api.ClaimResult;
 import xaero.pac.common.claims.tracker.api.IClaimsManagerListenerAPI;
+import xaero.pac.common.parties.party.member.api.IPartyMemberAPI;
+import xaero.pac.common.server.IServerData;
+import xaero.pac.common.server.ServerData;
 import xaero.pac.common.server.api.OpenPACServerAPI;
-import xaero.pac.common.server.claims.IServerClaimsManager;
 import xaero.pac.common.server.claims.api.IServerClaimsManagerAPI;
 import xaero.pac.common.server.claims.player.IServerPlayerClaimInfo;
 import xaero.pac.common.server.config.ServerConfig;
@@ -24,7 +29,6 @@ import xaero.pac.common.server.parties.party.api.IPartyManagerAPI;
 import xaero.pac.common.server.parties.party.api.IServerPartyAPI;
 import xaero.pac.common.server.player.config.IPlayerConfig;
 import xaero.pac.common.server.player.config.api.v2.IPlayerConfigAPI;
-import xaero.pac.common.server.player.config.api.v2.IPlayerConfigManagerAPI;
 import xaero.pac.common.server.player.localization.api.IAdaptiveLocalizerAPI;
 import xaero.pac.teamclaims.config.TeamConfig;
 import xaero.pac.teamclaims.config.TeamConfigManager;
@@ -33,128 +37,85 @@ import javax.annotation.Nullable;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
+/**
+ * Tracks the team claims of every party (which chunk is a team claim of which party, owned by which member, and
+ * whether it is forceloaded), derives every member's team claim/forceload "overhead" from that, checks the shared
+ * team budget, and hands the team claims of a leaving member over to the party owner.
+ * <p>
+ * Threading: server-thread confined. {@link TeamData}, the indexes and the caches are only ever touched on the server
+ * thread. The single exception is a call of {@link #getTeamClaimOverheadForPlayer}/{@link
+ * #getTeamForceloadOverheadForPlayer} from another thread (the client thread of an integrated server, via the
+ * {@code PlayerClaimInfo} hook), which reads a {@link ConcurrentHashMap} snapshot that is refreshed at the end of every
+ * tick in which a member's numbers may have changed.
+ */
 public class TeamClaimManager implements IClaimsManagerListenerAPI {
 
     private static final Logger LOGGER = LogUtils.getLogger();
+    /**
+     * Safety net only: membership, claims and logins are all event-driven. Every minute, parties that vanished
+     * without a removal event are cleaned up and the forceload activation is checked against who is online.
+     */
+    private static final int VALIDATION_INTERVAL = 1200;
+
+    /** Re-entrancy guard: while true, {@code PlayerClaimInfo.getClaimCount()/getForceloadCount()} add no overhead. */
+    public static final ThreadLocal<Boolean> COMPUTING_OVERHEAD = ThreadLocal.withInitial(() -> false);
 
     private final MinecraftServer server;
     private final TeamForceLoadHandler forceLoadHandler;
+    @Nullable
     private TeamClaimSavedData savedData;
     private boolean serverReady = false;
-    private volatile boolean suppressListenerCallbacks = false;
-    /**
-     * While true, {@link #onChunkChange} still does all the TeamData bookkeeping but skips the
-     * party-wide overhead recomputation and claim limits packet. Used for batch operations
-     * (the claim transfer of a leaving member), which do one update at the end instead of one
-     * per claim. Only ever touched on the server thread.
-     */
-    private boolean deferTeamLimitSync = false;
 
-    public static final ThreadLocal<Boolean> COMPUTING_OVERHEAD = ThreadLocal.withInitial(() -> false);
-
-    private final Map<UUID, Integer> teamSubIndexCache = new ConcurrentHashMap<>();
-    private final Map<UUID, Integer> cachedClaimOverhead = new ConcurrentHashMap<>();
-    private final Map<UUID, Integer> cachedForceloadOverhead = new ConcurrentHashMap<>();
+    /** Every tracked team claim, to the party that tracks it. Kept in sync with {@link TeamData} by track/untrack. */
+    private final Map<ClaimPos, UUID> claimToParty = new HashMap<>();
+    /** Player to the index of their team sub-config, including -1 for "none" (no party, no team sub-config). */
+    private final Map<UUID, Integer> teamSubIndexCache = new HashMap<>();
+    /** Parties/players whose claim limits are re-sent at the end of the tick (batched). */
+    private final Set<UUID> limitSyncParties = new LinkedHashSet<>();
+    private final Set<UUID> limitSyncPlayers = new LinkedHashSet<>();
+    /** Overhead snapshot for callers off the server thread, see the class description. */
+    private final Map<UUID, Integer> offThreadClaimOverhead = new ConcurrentHashMap<>();
+    private final Map<UUID, Integer> offThreadForceloadOverhead = new ConcurrentHashMap<>();
+    private int validationTickCounter = 0;
 
     public TeamClaimManager(MinecraftServer server, TeamForceLoadHandler forceLoadHandler) {
         this.server = server;
         this.forceLoadHandler = forceLoadHandler;
     }
 
-    private TeamClaimSavedData getSavedData() {
-        if (savedData == null) {
-            savedData = server.overworld().getDataStorage().computeIfAbsent(
-                    new SavedData.Factory<>(TeamClaimSavedData::new, TeamClaimSavedData::load, null),
-                    "opacteamclaims_data"
-            );
-        }
-        return savedData;
+    private Map<UUID, TeamData> teams() {
+        return savedData == null ? Collections.emptyMap() : savedData.teams;
     }
 
-    @Nullable
-    private String resolveSubConfigId(UUID playerUUID) {
-        TeamConfigManager tcm = TeamClaimsCommon.getTeamConfigManager();
-        if (tcm != null) {
-            TeamConfig tc = tcm.getTeamConfigForPlayer(playerUUID);
-            if (tc != null) return tc.getSubConfigId();
-        }
-        IServerPartyAPI party = getPlayerParty(playerUUID);
-        if (party != null) {
-            String teamName = (tcm != null) ? tcm.resolvePartyName(party) : party.getDefaultName();
-            return TeamConfig.buildSubConfigId(teamName);
-        }
-        return null;
+    private void markSavedDataDirty() {
+        if (savedData != null) savedData.setDirty();
     }
 
-    private String resolveSubConfigIdForParty(UUID partyId) {
-        TeamConfigManager tcm = TeamClaimsCommon.getTeamConfigManager();
-        if (tcm != null) {
-            TeamConfig tc = tcm.getTeamConfig(partyId);
-            if (tc != null) return tc.getSubConfigId();
-        }
-        // Fallback: look up party to get its name
-        try {
-            IServerPartyAPI party = OpenPACServerAPI.get(server).getPartyManager().getPartyById(partyId);
-            if (party != null) {
-                String teamName = (tcm != null) ? tcm.resolvePartyName(party) : party.getDefaultName();
-                return TeamConfig.buildSubConfigId(teamName);
-            }
-        } catch (Exception ignored) {}
-        return TeamConfig.buildSubConfigIdFromUUID(partyId);
-    }
-
-    public void ensureTeamSubConfig(UUID playerUUID) {
-        String subConfigId = resolveSubConfigId(playerUUID);
-        if (subConfigId == null) return;
-        try {
-            IPlayerConfigManagerAPI configManager = OpenPACServerAPI.get(server).getPlayerConfigManager();
-            IPlayerConfigAPI playerConfig = configManager.getLoadedConfig(playerUUID);
-            IPlayerConfigAPI existingSub = playerConfig.getSubConfig(subConfigId);
-            if (existingSub != null) {
-                teamSubIndexCache.put(playerUUID, existingSub.getSubIndex());
-            } else {
-                IPlayerConfigAPI newSub = playerConfig.createSubConfig(subConfigId);
-                if (newSub != null) {
-                    teamSubIndexCache.put(playerUUID, newSub.getSubIndex());
-                    LOGGER.info("Created '{}' sub-config for player {} (sub-index {})",
-                            subConfigId, playerUUID, newSub.getSubIndex());
-                } else {
-                    LOGGER.warn("Failed to create '{}' sub-config for player {}", subConfigId, playerUUID);
-                    return;
-                }
-            }
-        } catch (Exception e) {
-            LOGGER.error("Error creating team sub-config for player {}: {}", playerUUID, e.getMessage());
-            return;
-        }
-        TeamConfigManager tcm = TeamClaimsCommon.getTeamConfigManager();
-        if (tcm != null) {
-            tcm.configureTeamSubConfigForPlayer(playerUUID);
-        }
-    }
-
-    public void ensureAllMembersHaveSubConfig(IServerPartyAPI party) {
-        party.getMemberInfoStream().forEach(member -> ensureTeamSubConfig(member.getUUID()));
-    }
+    // ==================== Team sub-config lookup ====================
 
     private int getTeamSubIndex(UUID playerUUID) {
         Integer cached = teamSubIndexCache.get(playerUUID);
         if (cached != null) return cached;
-        String subConfigId = resolveSubConfigId(playerUUID);
-        if (subConfigId == null) return -1;
-        try {
-            IPlayerConfigManagerAPI configManager = OpenPACServerAPI.get(server).getPlayerConfigManager();
-            IPlayerConfigAPI playerConfig = configManager.getLoadedConfig(playerUUID);
-            IPlayerConfigAPI sub = playerConfig.getSubConfig(subConfigId);
-            if (sub != null) {
-                int index = sub.getSubIndex();
-                teamSubIndexCache.put(playerUUID, index);
-                return index;
-            }
-        } catch (Exception e) {
-            LOGGER.debug("Error looking up team sub-config for {}: {}", playerUUID, e.getMessage());
-        }
-        return -1;
+        int index = lookUpTeamSubIndex(playerUUID);
+        teamSubIndexCache.put(playerUUID, index);
+        return index;
+    }
+
+    private int lookUpTeamSubIndex(UUID playerUUID) {
+        TeamConfigManager tcm = TeamClaimsCommon.getTeamConfigManager();
+        TeamConfig teamConfig = tcm == null ? null : tcm.getTeamConfigForPlayer(playerUUID);
+        if (teamConfig == null) return -1;
+        IPlayerConfigAPI playerConfig = OpenPACServerAPI.get(server).getPlayerConfigManager().getLoadedConfig(playerUUID);
+        IPlayerConfigAPI sub = playerConfig.getSubConfig(teamConfig.getSubConfigId());
+        return sub == null ? -1 : sub.getSubIndex();
+    }
+
+    /**
+     * Forgets the cached team sub-config index of a player. Called whenever their party membership, their team
+     * config mapping or one of their team sub-configs changes.
+     */
+    public void invalidateTeamSubIndex(UUID playerUUID) {
+        teamSubIndexCache.remove(playerUUID);
     }
 
     public boolean isTeamClaim(@Nullable IPlayerChunkClaimAPI claim) {
@@ -165,7 +126,25 @@ public class TeamClaimManager implements IClaimsManagerListenerAPI {
         return teamIndex != -1 && subIndex == teamIndex;
     }
 
+    public boolean isTeamSubConfigIndex(UUID playerUUID, int subConfigIndex) {
+        if (subConfigIndex == -1) return false;
+        return getTeamSubIndex(playerUUID) == subConfigIndex;
+    }
+
+    /** Creates the player's team sub-config if they are a team member without one, and applies the team settings. */
+    public void ensureTeamSubConfig(UUID playerUUID) {
+        TeamConfigManager tcm = TeamClaimsCommon.getTeamConfigManager();
+        if (tcm != null) tcm.ensureTeamSubConfigForPlayer(playerUUID);
+    }
+
+    public void ensureAllMembersHaveSubConfig(IServerPartyAPI party) {
+        party.getMemberInfoStream().forEach(member -> ensureTeamSubConfig(member.getUUID()));
+    }
+
+    // ==================== Lifecycle ====================
+
     public void onServerStarted() {
+        savedData = loadSavedData();
         serverReady = true;
         // Order matters: the per-claim owner/count tracking isn't persisted, so it has to be
         // rebuilt (and the claims of members who left while the server was down handed over to the
@@ -173,9 +152,21 @@ public class TeamClaimManager implements IClaimsManagerListenerAPI {
         // stored membership caught up with the real parties, which removes those sub-configs.
         validateSavedData();
         TeamConfigManager tcm = TeamClaimsCommon.getTeamConfigManager();
-        if (tcm != null) tcm.reconcileMembershipWithParties();
+        if (tcm != null) tcm.reconcile();
         warnAboutNativePartyClaims();
-        LOGGER.info("Team Claims system ready — tracking {} parties", getSavedData().teams.size());
+        LOGGER.info("Team Claims system ready — tracking {} parties", teams().size());
+    }
+
+    private TeamClaimSavedData loadSavedData() {
+        ServerLevel overworld = server.overworld();
+        if (overworld == null) {
+            LOGGER.error("[TeamClaims] The overworld isn't loaded, team claim tracking won't be saved this session");
+            return new TeamClaimSavedData();
+        }
+        return overworld.getDataStorage().computeIfAbsent(
+                new SavedData.Factory<>(TeamClaimSavedData::new, TeamClaimSavedData::load, null),
+                "opacteamclaims_data"
+        );
     }
 
     /**
@@ -194,31 +185,13 @@ public class TeamClaimManager implements IClaimsManagerListenerAPI {
     }
 
     public void onPlayerLogin(ServerPlayer player) {
-        UUID playerUUID = player.getUUID();
-        IServerPartyAPI party = getPlayerParty(playerUUID);
+        IServerPartyAPI party = getPlayerParty(player.getUUID());
         if (party == null) return;
-
-        TeamConfigManager tcm = TeamClaimsCommon.getTeamConfigManager();
-        if (tcm != null && tcm.getTeamConfig(party.getId()) == null) {
-            LOGGER.info("Player {} logged in with party but no TeamConfig — creating retroactively", playerUUID);
-            tcm.createTeamConfig(party);
-        }
-
-        ensureAllMembersHaveSubConfig(party);
         UUID partyId = party.getId();
-
-        if (!forceLoadHandler.isTeamActive(partyId)) {
-            TeamData teamData = getSavedData().teams.get(partyId);
-            if (teamData != null && !teamData.forceLoadedChunks.isEmpty()) {
-                activateTeamForceLoads(partyId);
-            }
-        }
-
-        updateOverheadCacheForParty(partyId);
-
-        server.tell(new net.minecraft.server.TickTask(server.getTickCount() + 5, () -> {
-            syncClaimLimitsForTeamMembers(partyId, null);
-        }));
+        updateForceloadActivation(party);
+        markPartyLimitSync(partyId);
+        // OPAC's own login sync may only reach the client after ours; send the team numbers once more when settled
+        server.tell(new TickTask(server.getTickCount() + 5, () -> markPartyLimitSync(partyId)));
     }
 
     public void onPlayerLogout(ServerPlayer player) {
@@ -234,401 +207,324 @@ public class TeamClaimManager implements IClaimsManagerListenerAPI {
         }
     }
 
+    /**
+     * Called once at the end of every server tick: the periodic safety net, the batched claim limits sync and the
+     * "keep forceloaded dimensions ticking" of team forceloads.
+     */
+    public void tick() {
+        if (!serverReady) return;
+        if (++validationTickCounter >= VALIDATION_INTERVAL) {
+            validationTickCounter = 0;
+            periodicValidation();
+        }
+        flushLimitSyncs();
+        forceLoadHandler.keepLevelsTicking();
+    }
+
+    private void periodicValidation() {
+        IPartyManagerAPI partyManager = OpenPACServerAPI.get(server).getPartyManager();
+        List<UUID> vanished = null;
+        for (Map.Entry<UUID, TeamData> entry : teams().entrySet()) {
+            IServerPartyAPI party = partyManager.getPartyById(entry.getKey());
+            if (party == null) {
+                if (vanished == null) vanished = new ArrayList<>();
+                vanished.add(entry.getKey());
+            } else if (!entry.getValue().forceLoadedChunks.isEmpty()) {
+                updateForceloadActivation(party);
+            }
+        }
+        if (vanished != null) {
+            for (UUID partyId : vanished) {
+                LOGGER.warn("[TeamClaims] Party {} no longer exists but its team claims were still tracked, dropping them", partyId);
+                onPartyRemoved(partyId);
+            }
+        }
+    }
+
+    // ==================== Claim tracking ====================
+
     @Override
     public void onChunkChange(ResourceLocation dimension, int chunkX, int chunkZ,
                               @Nullable IPlayerChunkClaimAPI claim) {
-        if (!serverReady || suppressListenerCallbacks) return;
+        if (!serverReady) return;
         ClaimPos pos = new ClaimPos(dimension, chunkX, chunkZ);
+        UUID trackedBy = claimToParty.get(pos);
 
-        if (claim == null) {
-            UUID affectedPartyId = findPartyForTrackedClaim(pos);
-            removeFromAllTeamTracking(pos);
-            if (affectedPartyId != null) updateOverheadAndSync(affectedPartyId);
+        if (claim == null || !isTeamClaim(claim)) {
+            // Unclaimed, or now a personal claim: it no longer counts for any team
+            if (trackedBy != null) {
+                untrackClaim(trackedBy, pos);
+                markPartyLimitSync(trackedBy);
+            }
             return;
         }
 
-        UUID playerId = claim.getPlayerId();
-        IServerPartyAPI party = getPlayerParty(playerId);
+        // The team is the one whose sub-config the claim uses (the same mapping isTeamClaim used). That is also right
+        // for a member whose leave is still queued for the end of this tick: the leave hands the claims they still
+        // own in that team over to its owner.
+        UUID ownerId = claim.getPlayerId();
+        TeamConfigManager tcm = TeamClaimsCommon.getTeamConfigManager();
+        TeamConfig teamConfig = tcm == null ? null : tcm.getTeamConfigForPlayer(ownerId);
+        if (teamConfig == null) return;//isTeamClaim was true, so there is one
+        UUID partyId = teamConfig.getPartyId();
+        if (trackedBy != null && !trackedBy.equals(partyId)) {
+            untrackClaim(trackedBy, pos);
+            markPartyLimitSync(trackedBy);
+        }
 
-        if (isTeamClaim(claim)) {
-            if (party == null) return;
-            UUID partyId = party.getId();
-            TeamData teamData = getOrCreateTeamData(partyId);
-
-            UUID previousOwner = teamData.claimOwners.put(pos, playerId);
-            if (teamData.trackedClaims.add(pos)) {
-                teamData.claimCountByPlayer.merge(playerId, 1, Integer::sum);
-            } else if (previousOwner != null && !previousOwner.equals(playerId)) {
-                teamData.claimCountByPlayer.merge(previousOwner, -1, Integer::sum);
-                teamData.claimCountByPlayer.merge(playerId, 1, Integer::sum);
-            }
-
+        TeamData teamData = getOrCreateTeamData(partyId);
+        UUID previousOwner = teamData.getOwner(pos);
+        boolean changed = false;
+        if (previousOwner == null) {
+            teamData.putClaim(pos, ownerId);
+            claimToParty.put(pos, partyId);
+            changed = true;
+        } else if (!previousOwner.equals(ownerId)) {
+            teamData.putClaim(pos, ownerId);
+            changed = true;
+        }
+        if (teamData.setForceloaded(pos, claim.isForceloadable())) {
+            changed = true;
             if (claim.isForceloadable()) {
-                if (teamData.forceLoadedChunks.add(pos)) {
-                    teamData.forceloadCountByPlayer.merge(playerId, 1, Integer::sum);
-                    if (forceLoadHandler.isTeamActive(partyId)) {
-                        forceLoadHandler.addForceLoad(dimension, chunkX, chunkZ);
-                    }
-                } else if (previousOwner != null && !previousOwner.equals(playerId)) {
-                    teamData.forceloadCountByPlayer.merge(previousOwner, -1, Integer::sum);
-                    teamData.forceloadCountByPlayer.merge(playerId, 1, Integer::sum);
+                if (forceLoadHandler.isTeamActive(partyId)) {
+                    forceLoadHandler.addForceLoad(dimension, chunkX, chunkZ);
+                } else {
+                    // The team's first forceload: active right away if a member is online (adds this ticket too)
+                    IServerPartyAPI party = OpenPACServerAPI.get(server).getPartyManager().getPartyById(partyId);
+                    if (party != null) updateForceloadActivation(party);
                 }
             } else {
-                if (teamData.forceLoadedChunks.remove(pos)) {
-                    UUID forceloadOwner = (previousOwner != null) ? previousOwner : playerId;
-                    teamData.forceloadCountByPlayer.merge(forceloadOwner, -1, Integer::sum);
-                    forceLoadHandler.removeForceLoad(dimension, chunkX, chunkZ);
-                }
+                forceLoadHandler.removeForceLoad(dimension, chunkX, chunkZ);
             }
-            getSavedData().setDirty();
-            // Team claims affect all members' displayed counts — update overhead and sync
-            updateOverheadAndSync(partyId);
-        } else {
-            UUID affectedPartyId = findPartyForTrackedClaim(pos);
-            removeFromAllTeamTracking(pos);
-            if (affectedPartyId != null) updateOverheadAndSync(affectedPartyId);
         }
-        // Non-team (personal) claims only affect the claiming player's count.
-        // Base OPAC already handles syncing the claiming player's limits.
+        if (changed) {
+            markSavedDataDirty();
+            // Team claims affect all members' displayed counts
+            markPartyLimitSync(partyId);
+        }
     }
 
+    /**
+     * Never called on the server at the time of writing ({@link IClaimsManagerListenerAPI} documents it as
+     * client-only; only {@code ClientClaimsManager} fires it), so this deliberately has no region index of its own,
+     * which would cost on every tracked claim change. It does one pass over the global claim index.
+     */
     @Override
     public void onWholeRegionChange(ResourceLocation dimension, int regionX, int regionZ) {
-        if (!serverReady || suppressListenerCallbacks) return;
+        if (!serverReady || claimToParty.isEmpty()) return;
         IServerClaimsManagerAPI claimsManager = OpenPACServerAPI.get(server).getServerClaimsManager();
-        for (TeamData teamData : getSavedData().teams.values()) {
-            List<ClaimPos> toRemove = new ArrayList<>();
-            for (ClaimPos pos : teamData.trackedClaims) {
-                if (!pos.dimension.equals(dimension)) continue;
-                int rX = pos.x >> 9;
-                int rZ = pos.z >> 9;
-                if (rX != regionX || rZ != regionZ) continue;
-                IPlayerChunkClaimAPI current = claimsManager.get(dimension, pos.x, pos.z);
-                if (!isTeamClaim(current)) toRemove.add(pos);
-            }
-            boolean changed = false;
-            for (ClaimPos pos : toRemove) {
-                teamData.trackedClaims.remove(pos);
-                UUID owner = teamData.claimOwners.remove(pos);
-                if (owner != null) teamData.claimCountByPlayer.merge(owner, -1, Integer::sum);
-                if (teamData.forceLoadedChunks.remove(pos)) {
-                    if (owner != null) teamData.forceloadCountByPlayer.merge(owner, -1, Integer::sum);
-                    forceLoadHandler.removeForceLoad(pos.dimension, pos.x, pos.z);
-                }
-                changed = true;
-            }
-            if (changed) getSavedData().setDirty();
+        List<ClaimPos> stale = new ArrayList<>();
+        for (ClaimPos pos : claimToParty.keySet()) {
+            //a region is 512x512 blocks = 32x32 chunks
+            if (!pos.dimension.equals(dimension) || pos.x >> 5 != regionX || pos.z >> 5 != regionZ) continue;
+            if (!isTeamClaim(claimsManager.get(dimension, pos.x, pos.z))) stale.add(pos);
+        }
+        for (ClaimPos pos : stale) {
+            UUID partyId = claimToParty.get(pos);
+            untrackClaim(partyId, pos);
+            markPartyLimitSync(partyId);
         }
     }
 
     @Override
     public void onDimensionChange(ResourceLocation dimension) {
-        // Re-apply force-load tickets when a dimension is reloaded
-        for (Map.Entry<UUID, TeamData> entry : getSavedData().teams.entrySet()) {
-            UUID partyId = entry.getKey();
-            if (!forceLoadHandler.isTeamActive(partyId)) continue;
-            TeamData teamData = entry.getValue();
-            for (ClaimPos pos : teamData.forceLoadedChunks) {
-                if (pos.dimension.equals(dimension)) {
-                    forceLoadHandler.addForceLoad(pos.dimension, pos.x, pos.z);
-                }
-            }
-        }
+        // Re-apply the team force-load tickets of the dimension
+        forceLoadHandler.reassertTickets(dimension);
     }
 
-    private void removeFromAllTeamTracking(ClaimPos pos) {
-        for (TeamData teamData : getSavedData().teams.values()) {
-            boolean removedClaim = teamData.trackedClaims.remove(pos);
-            boolean removedForceload = teamData.forceLoadedChunks.remove(pos);
-            if (removedClaim || removedForceload) {
-                UUID owner = teamData.claimOwners.remove(pos);
-                if (owner != null) {
-                    if (removedClaim) teamData.claimCountByPlayer.merge(owner, -1, Integer::sum);
-                    if (removedForceload) teamData.forceloadCountByPlayer.merge(owner, -1, Integer::sum);
-                }
-                if (removedForceload) forceLoadHandler.removeForceLoad(pos.dimension, pos.x, pos.z);
-                getSavedData().setDirty();
-            }
-        }
+    /** Stops tracking a claim (and releases its team forceload ticket). */
+    private void untrackClaim(UUID partyId, ClaimPos pos) {
+        claimToParty.remove(pos);
+        TeamData teamData = teams().get(partyId);
+        if (teamData != null && teamData.removeClaim(pos) != null) markSavedDataDirty();
+        forceLoadHandler.removeForceLoad(pos.dimension, pos.x, pos.z);
     }
 
     public void activateTeamForceLoads(UUID partyId) {
-        TeamData teamData = getSavedData().teams.get(partyId);
+        TeamData teamData = teams().get(partyId);
         if (teamData == null || teamData.forceLoadedChunks.isEmpty()) return;
+        int added = 0;
         for (ClaimPos pos : teamData.forceLoadedChunks) {
-            forceLoadHandler.addForceLoad(pos.dimension, pos.x, pos.z);
+            if (forceLoadHandler.addForceLoad(pos.dimension, pos.x, pos.z)) added++;
         }
         forceLoadHandler.markTeamActive(partyId);
-        LOGGER.info("Activated {} team force-loads for party {}", teamData.forceLoadedChunks.size(), partyId);
+        if (added > 0) LOGGER.info("Activated {} team force-loads for party {}", added, partyId);
     }
 
     public void deactivateTeamForceLoads(UUID partyId) {
-        TeamData teamData = getSavedData().teams.get(partyId);
+        TeamData teamData = teams().get(partyId);
+        forceLoadHandler.markTeamInactive(partyId);
         if (teamData == null || teamData.forceLoadedChunks.isEmpty()) return;
+        int removed = 0;
         for (ClaimPos pos : teamData.forceLoadedChunks) {
-            forceLoadHandler.removeForceLoad(pos.dimension, pos.x, pos.z);
+            if (forceLoadHandler.removeForceLoad(pos.dimension, pos.x, pos.z)) removed++;
         }
-        forceLoadHandler.markTeamInactive(partyId);
-        LOGGER.info("Deactivated {} team force-loads for party {}", teamData.forceLoadedChunks.size(), partyId);
+        if (removed > 0) LOGGER.info("Deactivated {} team force-loads for party {}", removed, partyId);
     }
 
-    private void cleanupParty(UUID partyId) {
-        TeamData teamData = getSavedData().teams.get(partyId);
+    /** Team forceloads are active while at least one member of the party is online. */
+    private void updateForceloadActivation(IServerPartyAPI party) {
+        UUID partyId = party.getId();
+        TeamData teamData = teams().get(partyId);
+        if (teamData == null || teamData.forceLoadedChunks.isEmpty()) return;
+        boolean anyOnline = party.getOnlineMemberStream().findAny().isPresent();
+        boolean isActive = forceLoadHandler.isTeamActive(partyId);
+        if (anyOnline && !isActive) activateTeamForceLoads(partyId);
+        else if (!anyOnline && isActive) deactivateTeamForceLoads(partyId);
+    }
+
+    /**
+     * The party no longer exists: its team claims stay personal claims of whoever made them (their team sub-configs
+     * are removed with the team config), so they simply stop being tracked.
+     */
+    public void onPartyRemoved(UUID partyId) {
+        TeamData teamData = savedData == null ? null : savedData.teams.remove(partyId);
+        forceLoadHandler.markTeamInactive(partyId);
+        limitSyncParties.remove(partyId);
         if (teamData == null) return;
-        for (ClaimPos pos : teamData.forceLoadedChunks) {
+        for (ClaimPos pos : teamData.getTrackedClaims()) {
+            claimToParty.remove(pos);
             forceLoadHandler.removeForceLoad(pos.dimension, pos.x, pos.z);
         }
-        forceLoadHandler.markTeamInactive(partyId);
-        getSavedData().teams.remove(partyId);
-        getSavedData().setDirty();
+        for (UUID owner : teamData.claimsByOwner.keySet()) markPlayerLimitSync(owner);
+        markSavedDataDirty();
     }
 
+    /**
+     * Rebuilds the tracking from the stored positions and the live claims at server start, and hands the team claims
+     * of members who left while the server was down over to the party owner.
+     */
     private void validateSavedData() {
         IServerClaimsManagerAPI claimsManager = OpenPACServerAPI.get(server).getServerClaimsManager();
         IPartyManagerAPI partyManager = OpenPACServerAPI.get(server).getPartyManager();
 
-        for (UUID partyId : new ArrayList<>(getSavedData().teams.keySet())) {
+        for (UUID partyId : new ArrayList<>(teams().keySet())) {
+            TeamData teamData = teams().get(partyId);
+            List<ClaimPos> storedClaims = teamData.takeLoadedClaims();
             IServerPartyAPI party = partyManager.getPartyById(partyId);
             if (party == null) {
-                cleanupParty(partyId);
+                teams().remove(partyId);
+                markSavedDataDirty();
                 continue;
             }
             ensureAllMembersHaveSubConfig(party);
-            TeamData teamData = getSavedData().teams.get(partyId);
-            Set<ClaimPos> claimsToRemove = new HashSet<>();
-            List<ClaimPos> forceLoadsToRemove = new ArrayList<>();
             Map<UUID, List<ClaimPos>> orphanedByFormerMember = new LinkedHashMap<>();
-            teamData.claimOwners.clear();
-            teamData.claimCountByPlayer.clear();
-            teamData.forceloadCountByPlayer.clear();
-
-            for (ClaimPos pos : teamData.trackedClaims) {
+            int dropped = 0;
+            for (ClaimPos pos : storedClaims) {
                 IPlayerChunkClaimAPI claim = claimsManager.get(pos.dimension, pos.x, pos.z);
-                if (claim == null || !isTeamClaim(claim)) {
-                    claimsToRemove.add(pos);
-                } else {
-                    UUID claimOwner = claim.getPlayerId();
-                    // Rebuild the counts for every surviving claim, including the ones whose
-                    // technical owner is no longer a party member: those are transferred to the
-                    // current party owner below and the transfer needs correct "before" numbers.
-                    teamData.claimOwners.put(pos, claimOwner);
-                    teamData.claimCountByPlayer.merge(claimOwner, 1, Integer::sum);
-                    if (claim.isForceloadable() && teamData.forceLoadedChunks.contains(pos)) {
-                        teamData.forceloadCountByPlayer.merge(claimOwner, 1, Integer::sum);
-                    }
-                    if (party.getMemberInfo(claimOwner) == null)
-                        orphanedByFormerMember.computeIfAbsent(claimOwner, k -> new ArrayList<>()).add(pos);
+                if (claim == null || !isTeamClaim(claim) || claimToParty.containsKey(pos)) {
+                    dropped++;
+                    continue;
                 }
+                // Rebuild every surviving claim, including the ones whose technical owner is no longer a party
+                // member: those are transferred to the current party owner below, which needs correct "before"
+                // numbers. The live forceload flag is the truth.
+                UUID claimOwner = claim.getPlayerId();
+                teamData.putClaim(pos, claimOwner);
+                teamData.setForceloaded(pos, claim.isForceloadable());
+                claimToParty.put(pos, partyId);
+                if (party.getMemberInfo(claimOwner) == null)
+                    orphanedByFormerMember.computeIfAbsent(claimOwner, k -> new ArrayList<>()).add(pos);
             }
+            if (dropped > 0) markSavedDataDirty();
 
-            for (ClaimPos pos : teamData.forceLoadedChunks) {
-                if (claimsToRemove.contains(pos) || !teamData.trackedClaims.contains(pos)) {
-                    forceLoadsToRemove.add(pos);
-                } else {
-                    IPlayerChunkClaimAPI claim = claimsManager.get(pos.dimension, pos.x, pos.z);
-                    if (claim == null || !claim.isForceloadable()) {
-                        forceLoadsToRemove.add(pos);
-                    }
-                }
-            }
-
-            if (!claimsToRemove.isEmpty() || !forceLoadsToRemove.isEmpty()) {
-                teamData.trackedClaims.removeAll(claimsToRemove);
-                teamData.forceLoadedChunks.removeAll(forceLoadsToRemove);
-                getSavedData().setDirty();
-            }
-
-            // Members that left (or were kicked) while the server was down, or that the membership
-            // poll missed: their team claims go to the current party owner, exactly like a normal
-            // leave. Anything that can't be transferred falls back to the legacy behaviour and
-            // simply stops being tracked (it stays a personal claim of the former member).
+            // Members that left (or were kicked) while the server was down: their team claims go to the current
+            // party owner, exactly like a normal leave. Anything that can't be transferred falls back to the legacy
+            // behaviour and simply stops being tracked (it stays a personal claim of the former member).
             for (Map.Entry<UUID, List<ClaimPos>> orphaned : orphanedByFormerMember.entrySet()) {
                 UUID formerMemberId = orphaned.getKey();
                 int transferred = transferTeamClaimsToOwner(party, formerMemberId, orphaned.getValue());
-                dropTrackedClaimsOf(teamData, formerMemberId);
-                invalidateCachesForPlayer(formerMemberId);
+                dropTrackedClaimsOf(partyId, formerMemberId);
+                forgetPlayer(formerMemberId);
                 if (transferred > 0) {
                     LOGGER.info("[TeamClaims] Transferred {} team claim(s) of former party member {} to the party owner {}",
-                            transferred, formerMemberId, party.getOwner().getUUID());
-                    notifyTeamClaimsTransferred(partyId, formerMemberId, transferred);
+                            transferred, formerMemberId, ownerIdOf(party));
+                    notifyTeamClaimsTransferred(party, formerMemberId, transferred);
                 }
             }
-            if (!orphanedByFormerMember.isEmpty()) updateOverheadCacheForParty(partyId);
+            markPartyLimitSync(partyId);
         }
     }
 
-    private int tickCounter = 0;
-    private static final int VALIDATION_INTERVAL = 1200;
-    private int claimSyncTickCounter = 0;
-    private static final int CLAIM_SYNC_INTERVAL = 100;
+    // ==================== Overhead ====================
 
-    public void tick() {
-        if (!serverReady) return;
-        if (++claimSyncTickCounter >= CLAIM_SYNC_INTERVAL) {
-            claimSyncTickCounter = 0;
-            refreshOverheadCacheAndSync();
-        }
-        if (++tickCounter < VALIDATION_INTERVAL) return;
-        tickCounter = 0;
-
-        IPartyManagerAPI partyManager = OpenPACServerAPI.get(server).getPartyManager();
-        for (UUID partyId : new ArrayList<>(getSavedData().teams.keySet())) {
-            IServerPartyAPI party = partyManager.getPartyById(partyId);
-            if (party == null) { cleanupParty(partyId); continue; }
-            TeamData teamData = getSavedData().teams.get(partyId);
-            if (teamData == null) continue;
-            ensureAllMembersHaveSubConfig(party);
-            if (!teamData.forceLoadedChunks.isEmpty()) {
-                boolean anyOnline = party.getOnlineMemberStream().findAny().isPresent();
-                boolean isActive = forceLoadHandler.isTeamActive(partyId);
-                if (anyOnline && !isActive) activateTeamForceLoads(partyId);
-                else if (!anyOnline && isActive) deactivateTeamForceLoads(partyId);
-            }
-        }
-        for (ServerPlayer player : server.getPlayerList().getPlayers()) {
-            UUID playerUUID = player.getUUID();
-            IServerPartyAPI party = partyManager.getPartyByMember(playerUUID);
-            if (party != null) ensureTeamSubConfig(playerUUID);
-        }
-    }
-
-    private void refreshOverheadCacheAndSync() {
-        try {
-            IPartyManagerAPI partyManager = OpenPACServerAPI.get(server).getPartyManager();
-            Set<UUID> partiesSynced = new HashSet<>();
-            for (ServerPlayer player : server.getPlayerList().getPlayers()) {
-                UUID playerUUID = player.getUUID();
-                IServerPartyAPI party = partyManager.getPartyByMember(playerUUID);
-                if (party == null) continue;
-                boolean changed = recomputeOverheadForPlayer(playerUUID, party);
-                if (changed && partiesSynced.add(party.getId())) {
-                    syncClaimLimitsForTeamMembers(party.getId(), null);
-                }
-            }
-        } catch (Exception e) {
-            LOGGER.debug("Error in periodic overhead refresh: {}", e.getMessage());
-        }
-    }
-
-    private boolean recomputeOverheadForPlayer(UUID playerUUID, IServerPartyAPI party) {
-        // Overhead = team claims/forceloads made by OTHER party members.
-        // Personal claims are NOT included — they only count for the player who made them.
-        UUID partyId = party.getId();
-        TeamData teamData = getSavedData().teams.get(partyId);
-        int claimOverhead = 0;
-        int forceloadOverhead = 0;
-        if (teamData != null) {
-            for (Map.Entry<UUID, Integer> entry : teamData.claimCountByPlayer.entrySet()) {
-                if (!entry.getKey().equals(playerUUID)) {
-                    claimOverhead += Math.max(0, entry.getValue());
-                }
-            }
-            for (Map.Entry<UUID, Integer> entry : teamData.forceloadCountByPlayer.entrySet()) {
-                if (!entry.getKey().equals(playerUUID)) {
-                    forceloadOverhead += Math.max(0, entry.getValue());
-                }
-            }
-        }
-        Integer prevClaims = cachedClaimOverhead.put(playerUUID, claimOverhead);
-        Integer prevForceloads = cachedForceloadOverhead.put(playerUUID, forceloadOverhead);
-        return (prevClaims == null || prevClaims != claimOverhead ||
-                prevForceloads == null || prevForceloads != forceloadOverhead);
-    }
-
+    /** Team claims of the player's party made by OTHER members. Personal claims never count. */
     public int getTeamClaimOverheadForPlayer(UUID playerUUID) {
-        return cachedClaimOverhead.getOrDefault(playerUUID, 0);
+        if (!server.isSameThread()) return offThreadClaimOverhead.getOrDefault(playerUUID, 0);
+        TeamData teamData = getTeamDataOfMember(playerUUID);
+        return teamData == null ? 0 : teamData.getClaimCount() - teamData.getClaimCountOf(playerUUID);
     }
 
+    /** Team forceloads of the player's party made by OTHER members. */
     public int getTeamForceloadOverheadForPlayer(UUID playerUUID) {
-        return cachedForceloadOverhead.getOrDefault(playerUUID, 0);
-    }
-
-    /**
-     * Recomputes every member's overhead and pushes fresh claim limits, unless a batch operation
-     * has asked for it to be done once at the end instead of once per changed chunk.
-     */
-    private void updateOverheadAndSync(UUID partyId) {
-        if (deferTeamLimitSync) return;
-        updateOverheadCacheForParty(partyId);
-        syncClaimLimitsForTeamMembers(partyId, null);
-    }
-
-    private void updateOverheadCacheForParty(UUID partyId) {
-        try {
-            IServerPartyAPI party = OpenPACServerAPI.get(server).getPartyManager().getPartyById(partyId);
-            if (party == null) return;
-            var members = party.getMemberInfoStream().toList();
-            for (var member : members) {
-                recomputeOverheadForPlayer(member.getUUID(), party);
-            }
-        } catch (Exception e) {
-            LOGGER.debug("Error updating overhead cache for party {}: {}", partyId, e.getMessage());
-        }
+        if (!server.isSameThread()) return offThreadForceloadOverhead.getOrDefault(playerUUID, 0);
+        TeamData teamData = getTeamDataOfMember(playerUUID);
+        return teamData == null ? 0 : teamData.getForceloadCount() - teamData.getForceloadCountOf(playerUUID);
     }
 
     @Nullable
-    private UUID findPartyForTrackedClaim(ClaimPos pos) {
-        for (Map.Entry<UUID, TeamData> entry : getSavedData().teams.entrySet()) {
-            if (entry.getValue().trackedClaims.contains(pos)) return entry.getKey();
-        }
-        return null;
+    private TeamData getTeamDataOfMember(UUID playerUUID) {
+        if (savedData == null) return null;
+        IServerPartyAPI party = getPlayerParty(playerUUID);
+        return party == null ? null : savedData.teams.get(party.getId());
+    }
+
+    private void refreshOffThreadOverhead(UUID playerUUID) {
+        int claims = getTeamClaimOverheadForPlayer(playerUUID);
+        int forceloads = getTeamForceloadOverheadForPlayer(playerUUID);
+        if (claims == 0) offThreadClaimOverhead.remove(playerUUID); else offThreadClaimOverhead.put(playerUUID, claims);
+        if (forceloads == 0) offThreadForceloadOverhead.remove(playerUUID); else offThreadForceloadOverhead.put(playerUUID, forceloads);
+    }
+
+    // ==================== Claim limits sync (batched) ====================
+
+    /** Every online member of the party gets fresh claim limits at the end of this tick. */
+    public void markPartyLimitSync(UUID partyId) {
+        limitSyncParties.add(partyId);
+    }
+
+    /** The player gets fresh claim limits at the end of this tick. */
+    public void markPlayerLimitSync(UUID playerId) {
+        limitSyncPlayers.add(playerId);
     }
 
     /**
-     * Pushes a fresh claim limits packet to every online member of the party.
+     * Pushes a fresh claim limits packet to every player marked this tick, once each, however many claims changed.
      * <p>
-     * The numbers themselves no longer have to be assembled here: the Common hook in
-     * {@code PlayerClaimInfo.getClaimCount()/getForceloadCount()} already adds each member's team
-     * overhead, so {@code ClaimingModes.PLAYER}'s limits builder — and with it OPAC's own
-     * {@code ClaimsManagerSynchronizer.syncClaimLimits} — reports the overhead-adjusted counts,
-     * while the other claiming modes keep their stock values. The hook in
-     * {@code ClaimsManagerSynchronizer.syncClaimLimits} also takes care of forcing
-     * {@code alwaysUseLoadingValues} while a member has overhead. All this does is make the update
-     * immediate instead of waiting for OPAC's once-per-second limits check.
+     * The numbers themselves don't have to be assembled here: the Common hook in
+     * {@code PlayerClaimInfo.getClaimCount()/getForceloadCount()} already adds each member's team overhead, so
+     * {@code ClaimingModes.PLAYER}'s limits builder — and with it OPAC's own
+     * {@code ClaimsManagerSynchronizer.syncClaimLimits} — reports the overhead-adjusted counts, and the hook in
+     * {@code ClaimsManagerSynchronizer.syncClaimLimits} forces {@code alwaysUseLoadingValues} while a member has
+     * overhead. This only makes the update immediate instead of waiting for OPAC's once-per-second limits check
+     * (which also catches anything this misses).
      */
-    private void syncClaimLimitsForTeamMembers(UUID partyId, @Nullable UUID excludePlayerId) {
-        try {
-            IServerPartyAPI party = OpenPACServerAPI.get(server).getPartyManager().getPartyById(partyId);
-            if (party == null) return;
-            // The public API only exposes IServerClaimsManagerAPI, but the claim limits sync lives on
-            // the internal IServerClaimsManager. The runtime instance always implements both.
-            IServerClaimsManager<?, ?, ?> internalClaimsManager =
-                    (IServerClaimsManager<?, ?, ?>) OpenPACServerAPI.get(server).getServerClaimsManager();
-            IPlayerConfigManagerAPI configManager = OpenPACServerAPI.get(server).getPlayerConfigManager();
-
-            party.getMemberInfoStream().forEach(member -> {
-                UUID memberId = member.getUUID();
-                if (memberId.equals(excludePlayerId)) return;
-                ServerPlayer player = server.getPlayerList().getPlayer(memberId);
-                if (player == null) return;
-                try {
-                    IPlayerConfig memberConfig = (IPlayerConfig) configManager.getLoadedConfig(memberId);
-                    internalClaimsManager.getClaimsManagerSynchronizer().syncClaimLimits(memberConfig, player);
-                } catch (Exception e) {
-                    LOGGER.warn("[TeamClaims] Failed claim limits sync for {}: {}", memberId, e.getMessage());
-                }
-            });
-        } catch (Exception e) {
-            LOGGER.warn("[TeamClaims] Error syncing team claim limits: {}", e.getMessage());
+    private void flushLimitSyncs() {
+        if (limitSyncParties.isEmpty() && limitSyncPlayers.isEmpty()) return;
+        IServerData<?, ?> serverData = ServerData.from(server);
+        if (serverData == null) {
+            limitSyncParties.clear();
+            limitSyncPlayers.clear();
+            return;
         }
-    }
-
-    /**
-     * Same as {@link #syncClaimLimitsForTeamMembers} for a single player, used for a player who is
-     * no longer a party member but whose numbers just changed (a leaver whose claims were moved).
-     */
-    private void syncClaimLimitsForPlayer(UUID playerId) {
-        ServerPlayer player = server.getPlayerList().getPlayer(playerId);
-        if (player == null) return;
-        try {
-            IServerClaimsManager<?, ?, ?> internalClaimsManager =
-                    (IServerClaimsManager<?, ?, ?>) OpenPACServerAPI.get(server).getServerClaimsManager();
-            IPlayerConfig config = (IPlayerConfig) OpenPACServerAPI.get(server)
-                    .getPlayerConfigManager().getLoadedConfig(playerId);
-            internalClaimsManager.getClaimsManagerSynchronizer().syncClaimLimits(config, player);
-        } catch (Exception e) {
-            LOGGER.warn("[TeamClaims] Failed claim limits sync for {}: {}", playerId, e.getMessage());
+        IPartyManagerAPI partyManager = serverData.getPartyManager();
+        for (UUID partyId : limitSyncParties) {
+            IServerPartyAPI party = partyManager.getPartyById(partyId);
+            if (party != null) party.getMemberInfoStream().forEach(member -> limitSyncPlayers.add(member.getUUID()));
         }
+        limitSyncParties.clear();
+        for (UUID playerId : limitSyncPlayers) {
+            refreshOffThreadOverhead(playerId);
+            ServerPlayer player = server.getPlayerList().getPlayer(playerId);
+            if (player == null) continue;
+            try {
+                IPlayerConfig config = serverData.getPlayerConfigManager().getLoadedConfig(playerId);
+                serverData.getServerClaimsManager().getClaimsManagerSynchronizer().syncClaimLimits(config, player);
+            } catch (Exception e) {
+                LOGGER.warn("[TeamClaims] Failed claim limits sync for {}", playerId, e);
+            }
+        }
+        limitSyncPlayers.clear();
     }
 
     // ==================== Budget Checks (called by bridge handler) ====================
@@ -636,24 +532,16 @@ public class TeamClaimManager implements IClaimsManagerListenerAPI {
     @Nullable
     public ClaimResult<PlayerChunkClaim> checkTeamClaimBudget(UUID playerId, boolean forceLoaded,
                                                               @Nullable PlayerChunkClaim replacedClaim) {
-        var partyManager = OpenPACServerAPI.get(server).getPartyManager();
-        var party = partyManager.getPartyByMember(playerId);
+        IServerPartyAPI party = getPlayerParty(playerId);
         if (party == null) return null;
 
         IServerClaimsManagerAPI claimsAPI = OpenPACServerAPI.get(server).getServerClaimsManager();
         List<String> overClaimBudget = new ArrayList<>();
         List<String> overForceloadBudget = new ArrayList<>();
 
-        // Compute total team claims/forceloads from TeamData
-        TeamData teamData = getSavedData().teams.get(party.getId());
-        int totalTeamClaims = 0;
-        int totalTeamForceloads = 0;
-        if (teamData != null) {
-            for (int count : teamData.claimCountByPlayer.values()) totalTeamClaims += Math.max(0, count);
-            for (int count : teamData.forceloadCountByPlayer.values()) totalTeamForceloads += Math.max(0, count);
-        }
-        final int fTotalTeamClaims = totalTeamClaims;
-        final int fTotalTeamForceloads = totalTeamForceloads;
+        TeamData teamData = teams().get(party.getId());
+        final int totalTeamClaims = teamData == null ? 0 : teamData.getClaimCount();
+        final int totalTeamForceloads = teamData == null ? 0 : teamData.getForceloadCount();
 
         // What the new claim actually adds. Re-claiming a chunk that already is a team claim of this
         // party leaves the team totals untouched and only moves the per-member attribution, and a
@@ -670,6 +558,7 @@ public class TeamClaimManager implements IClaimsManagerListenerAPI {
 
         // Check ALL members (including self) — each member's displayed count =
         // personal_claims + total_team_claims, plus what this claim adds.
+        boolean previousComputing = COMPUTING_OVERHEAD.get();
         COMPUTING_OVERHEAD.set(true);
         try {
             party.getMemberInfoStream().forEach(member -> {
@@ -678,11 +567,11 @@ public class TeamClaimManager implements IClaimsManagerListenerAPI {
                 if (memberInfo == null) return;
 
                 int rawClaimCount = memberInfo.getClaimCount(); // raw (no overhead) because COMPUTING_OVERHEAD=true
-                int memberTeamClaims = teamData != null ? Math.max(0, teamData.claimCountByPlayer.getOrDefault(memberId, 0)) : 0;
+                int memberTeamClaims = teamData == null ? 0 : teamData.getClaimCountOf(memberId);
                 int memberPersonalClaims = Math.max(0, rawClaimCount - memberTeamClaims);
                 if (memberId.equals(replacedMemberId))
                     memberPersonalClaims = Math.max(0, memberPersonalClaims - 1);
-                int memberTotalAfterClaim = memberPersonalClaims + fTotalTeamClaims + teamClaimDelta;
+                int memberTotalAfterClaim = memberPersonalClaims + totalTeamClaims + teamClaimDelta;
 
                 // Exactly the limit OPAC itself enforces in tryToClaimHelper/tryToForceloadHelper
                 int memberClaimLimit = claimsAPI.getPlayerFullClaimLimit(memberId);
@@ -690,18 +579,18 @@ public class TeamClaimManager implements IClaimsManagerListenerAPI {
 
                 if (teamForceloadDelta > 0) {
                     int rawForceloadCount = memberInfo.getForceloadCount();
-                    int memberTeamForceloads = teamData != null ? Math.max(0, teamData.forceloadCountByPlayer.getOrDefault(memberId, 0)) : 0;
+                    int memberTeamForceloads = teamData == null ? 0 : teamData.getForceloadCountOf(memberId);
                     int memberPersonalForceloads = Math.max(0, rawForceloadCount - memberTeamForceloads);
                     if (memberId.equals(replacedMemberId) && replacedWasForceloaded)
                         memberPersonalForceloads = Math.max(0, memberPersonalForceloads - 1);
-                    int memberTotalForceloadsAfter = memberPersonalForceloads + fTotalTeamForceloads + teamForceloadDelta;
+                    int memberTotalForceloadsAfter = memberPersonalForceloads + totalTeamForceloads + teamForceloadDelta;
 
                     int memberForceloadLimit = claimsAPI.getPlayerFullForceloadLimit(memberId);
                     if (memberTotalForceloadsAfter > memberForceloadLimit) overForceloadBudget.add(member.getUsername());
                 }
             });
         } finally {
-            COMPUTING_OVERHEAD.remove();
+            COMPUTING_OVERHEAD.set(previousComputing);
         }
 
         if (!overClaimBudget.isEmpty() || !overForceloadBudget.isEmpty()) {
@@ -724,23 +613,18 @@ public class TeamClaimManager implements IClaimsManagerListenerAPI {
 
     @Nullable
     public ClaimResult<PlayerChunkClaim> checkTeamForceloadBudget(UUID requesterId, PlayerChunkClaim currentClaim) {
-        var partyManager = OpenPACServerAPI.get(server).getPartyManager();
-        var party = partyManager.getPartyByMember(currentClaim.getPlayerId());
+        IServerPartyAPI party = getPlayerParty(currentClaim.getPlayerId());
         if (party == null) return null;
 
         IServerClaimsManagerAPI claimsAPI = OpenPACServerAPI.get(server).getServerClaimsManager();
         List<String> overBudget = new ArrayList<>();
 
-        // Compute total team forceloads
-        TeamData teamData = getSavedData().teams.get(party.getId());
-        int totalTeamForceloads = 0;
-        if (teamData != null) {
-            for (int count : teamData.forceloadCountByPlayer.values()) totalTeamForceloads += Math.max(0, count);
-        }
-        final int fTotalTeamForceloads = totalTeamForceloads;
+        TeamData teamData = teams().get(party.getId());
+        final int totalTeamForceloads = teamData == null ? 0 : teamData.getForceloadCount();
 
         // Check ALL members — after enabling forceload, each member's displayed forceload count =
         // personal_forceloads + total_team_forceloads + 1.
+        boolean previousComputing = COMPUTING_OVERHEAD.get();
         COMPUTING_OVERHEAD.set(true);
         try {
             party.getMemberInfoStream().forEach(member -> {
@@ -748,15 +632,15 @@ public class TeamClaimManager implements IClaimsManagerListenerAPI {
                 var memberInfo = claimsAPI.getPlayerInfo(memberId);
                 if (memberInfo == null) return;
                 int rawForceloadCount = memberInfo.getForceloadCount();
-                int memberTeamForceloads = teamData != null ? Math.max(0, teamData.forceloadCountByPlayer.getOrDefault(memberId, 0)) : 0;
+                int memberTeamForceloads = teamData == null ? 0 : teamData.getForceloadCountOf(memberId);
                 int memberPersonalForceloads = Math.max(0, rawForceloadCount - memberTeamForceloads);
-                int memberTotal = memberPersonalForceloads + fTotalTeamForceloads + 1;
+                int memberTotal = memberPersonalForceloads + totalTeamForceloads + 1;
                 // Exactly the limit OPAC itself enforces
                 int memberForceloadLimit = claimsAPI.getPlayerFullForceloadLimit(memberId);
                 if (memberTotal > memberForceloadLimit) overBudget.add(member.getUsername());
             });
         } finally {
-            COMPUTING_OVERHEAD.remove();
+            COMPUTING_OVERHEAD.set(previousComputing);
         }
 
         if (!overBudget.isEmpty()) {
@@ -783,27 +667,38 @@ public class TeamClaimManager implements IClaimsManagerListenerAPI {
 
     @Nullable
     private IServerPartyAPI getPlayerParty(UUID playerUUID) {
-        try {
-            return OpenPACServerAPI.get(server).getPartyManager().getPartyByMember(playerUUID);
-        } catch (Exception e) {
-            return null;
-        }
+        return OpenPACServerAPI.get(server).getPartyManager().getPartyByMember(playerUUID);
+    }
+
+    /** The party owner's ID, or null for a party in an inconsistent state. */
+    @Nullable
+    static UUID ownerIdOf(IServerPartyAPI party) {
+        IPartyMemberAPI owner = party.getOwner();
+        return owner == null ? null : owner.getUUID();
     }
 
     @Nullable
-    public TeamData getTeamData(UUID partyId) { return getSavedData().teams.get(partyId); }
-    public TeamData getOrCreateTeamData(UUID partyId) {
-        return getSavedData().teams.computeIfAbsent(partyId, id -> {
-            getSavedData().setDirty();
+    public TeamData getTeamData(UUID partyId) { return teams().get(partyId); }
+
+    private TeamData getOrCreateTeamData(UUID partyId) {
+        return savedData.teams.computeIfAbsent(partyId, id -> {
+            markSavedDataDirty();
             return new TeamData(id);
         });
     }
-    public Map<UUID, TeamData> getAllTeams() { return Collections.unmodifiableMap(getSavedData().teams); }
-    public TeamForceLoadHandler getForceLoadHandler() { return forceLoadHandler; }
 
-    public boolean isTeamSubConfigIndex(UUID playerUUID, int subConfigIndex) {
-        if (subConfigIndex == -1) return false;
-        return getTeamSubIndex(playerUUID) == subConfigIndex;
+
+    // ==================== Membership changes ====================
+
+    /**
+     * A player joined a party (event-driven, see {@code TeamConfigManager}). Their numbers and those of the
+     * other members change.
+     */
+    public void onPlayerJoinedParty(UUID partyId, UUID playerUUID) {
+        forgetPlayer(playerUUID);
+        markPartyLimitSync(partyId);
+        IServerPartyAPI party = OpenPACServerAPI.get(server).getPartyManager().getPartyById(partyId);
+        if (party != null) updateForceloadActivation(party);
     }
 
     /**
@@ -817,31 +712,22 @@ public class TeamClaimManager implements IClaimsManagerListenerAPI {
      * stops being a team claim).
      */
     public void onPlayerLeftParty(UUID partyId, UUID playerUUID) {
-        TeamData teamData = getSavedData().teams.get(partyId);
-        if (teamData == null) {
-            invalidateCachesForPlayer(playerUUID);
-            return;
-        }
+        TeamData teamData = teams().get(partyId);
         int transferred = 0;
-        List<ClaimPos> owned = getTrackedClaimsOf(teamData, playerUUID);
-        if (!owned.isEmpty()) {
-            IServerPartyAPI party = null;
-            try {
-                party = OpenPACServerAPI.get(server).getPartyManager().getPartyById(partyId);
-            } catch (Exception e) {
-                LOGGER.warn("[TeamClaims] Could not look up party {} while {} left: {}", partyId, playerUUID, e.getMessage());
-            }
-            if (party != null)
-                transferred = transferTeamClaimsToOwner(party, playerUUID, owned);
+        IServerPartyAPI party = OpenPACServerAPI.get(server).getPartyManager().getPartyById(partyId);
+        if (teamData != null && party != null) {
+            List<ClaimPos> owned = new ArrayList<>(teamData.claimsOf(playerUUID));
+            if (!owned.isEmpty()) transferred = transferTeamClaimsToOwner(party, playerUUID, owned);
         }
-        dropTrackedClaimsOf(teamData, playerUUID);
+        if (teamData != null) dropTrackedClaimsOf(partyId, playerUUID);
 
-        invalidateCachesForPlayer(playerUUID);
-        // Recompute overhead for remaining members, then sync everyone whose numbers changed
-        updateOverheadCacheForParty(partyId);
-        syncClaimLimitsForTeamMembers(partyId, null);
-        syncClaimLimitsForPlayer(playerUUID);//no longer a member, but their own count just dropped
-        if (transferred > 0) notifyTeamClaimsTransferred(partyId, playerUUID, transferred);
+        forgetPlayer(playerUUID);
+        markPartyLimitSync(partyId);
+        markPlayerLimitSync(playerUUID);//no longer a member, but their own count just dropped
+        if (party != null) {
+            updateForceloadActivation(party);
+            if (transferred > 0) notifyTeamClaimsTransferred(party, playerUUID, transferred);
+        }
     }
 
     /**
@@ -854,13 +740,19 @@ public class TeamClaimManager implements IClaimsManagerListenerAPI {
      * {@link IServerClaimsManagerAPI#claim} call OPAC's own claim replacement/transfer tasks use,
      * which fires the normal claims tracker callbacks: {@link #onChunkChange} therefore does all
      * the TeamData bookkeeping (owner, per-player counts, force-load state), OPAC moves its own
-     * force-load tickets and marks its saved data dirty, and the clients are synced.
+     * force-load tickets and marks its saved data dirty, and the clients are synced. The claim limits
+     * sync is batched to the end of the tick anyway.
      *
      * @return the number of claims that were actually transferred
      */
     private int transferTeamClaimsToOwner(IServerPartyAPI party, UUID leaverId, List<ClaimPos> positions) {
         if (positions.isEmpty()) return 0;
-        UUID ownerId = party.getOwner().getUUID();
+        UUID ownerId = ownerIdOf(party);
+        if (ownerId == null) {
+            LOGGER.warn("[TeamClaims] Party {} has no owner — leaving the {} team claim(s) of {} alone.",
+                    party.getId(), positions.size(), leaverId);
+            return 0;
+        }
         if (ownerId.equals(leaverId)) {
             //can't happen through OPAC: the owner can't leave without destroying the party
             LOGGER.warn("[TeamClaims] {} left party {} as its owner — leaving their {} team claim(s) alone.",
@@ -882,29 +774,23 @@ public class TeamClaimManager implements IClaimsManagerListenerAPI {
             return 0;
         }
         int transferred = 0;
-        boolean previousDefer = deferTeamLimitSync;
-        deferTeamLimitSync = true;
-        try {
-            for (ClaimPos pos : positions) {
-                IPlayerChunkClaimAPI current = claimsAPI.get(pos.dimension, pos.x, pos.z);
-                if (current == null || !leaverId.equals(current.getPlayerId())) {
-                    LOGGER.warn("[TeamClaims] Not transferring the tracked team claim at {}: it is no longer owned by {}.",
-                            pos, leaverId);
-                    continue;
-                }
-                try {
-                    //null only when claims are disabled server-wide, in which case nothing changed
-                    if (claimsAPI.claim(pos.dimension, ownerId, ownerSubIndex, pos.x, pos.z, current.isForceloadable()) != null)
-                        transferred++;
-                    else
-                        LOGGER.warn("[TeamClaims] Could not transfer the team claim at {}: claims are disabled.", pos);
-                } catch (Exception e) {
-                    LOGGER.warn("[TeamClaims] Failed to transfer the team claim at {} from {} to {}: {}",
-                            pos, leaverId, ownerId, e.getMessage());
-                }
+        for (ClaimPos pos : positions) {
+            IPlayerChunkClaimAPI current = claimsAPI.get(pos.dimension, pos.x, pos.z);
+            if (current == null || !leaverId.equals(current.getPlayerId())) {
+                LOGGER.warn("[TeamClaims] Not transferring the tracked team claim at {}: it is no longer owned by {}.",
+                        pos, leaverId);
+                continue;
             }
-        } finally {
-            deferTeamLimitSync = previousDefer;
+            try {
+                //null only when claims are disabled server-wide, in which case nothing changed
+                if (claimsAPI.claim(pos.dimension, ownerId, ownerSubIndex, pos.x, pos.z, current.isForceloadable()) != null)
+                    transferred++;
+                else
+                    LOGGER.warn("[TeamClaims] Could not transfer the team claim at {}: claims are disabled.", pos);
+            } catch (Exception e) {
+                LOGGER.warn("[TeamClaims] Failed to transfer the team claim at {} from {} to {}",
+                        pos, leaverId, ownerId, e);
+            }
         }
         return transferred;
     }
@@ -920,96 +806,73 @@ public class TeamClaimManager implements IClaimsManagerListenerAPI {
             if (info instanceof IServerPlayerClaimInfo<?> internalInfo)
                 return internalInfo.isTransferInProgress() || internalInfo.isReplacementInProgress();
         } catch (Exception e) {
-            LOGGER.warn("[TeamClaims] Could not check the claim task state of {}: {}", playerId, e.getMessage());
+            LOGGER.warn("[TeamClaims] Could not check the claim task state of {}", playerId, e);
             return true;
         }
         return false;
     }
 
-    private List<ClaimPos> getTrackedClaimsOf(TeamData teamData, UUID playerUUID) {
-        List<ClaimPos> result = new ArrayList<>();
-        for (Map.Entry<ClaimPos, UUID> entry : teamData.claimOwners.entrySet()) {
-            if (playerUUID.equals(entry.getValue())) result.add(entry.getKey());
-        }
-        return result;
-    }
-
     /** Legacy behaviour for claims that stay with the leaving player: drop them from tracking. */
-    private void dropTrackedClaimsOf(TeamData teamData, UUID playerUUID) {
-        List<ClaimPos> remaining = getTrackedClaimsOf(teamData, playerUUID);
-        for (ClaimPos pos : remaining) {
-            teamData.trackedClaims.remove(pos);
-            teamData.claimOwners.remove(pos);
-            if (teamData.forceLoadedChunks.remove(pos)) {
-                forceLoadHandler.removeForceLoad(pos.dimension, pos.x, pos.z);
-            }
-        }
-        boolean hadClaimCount = teamData.claimCountByPlayer.remove(playerUUID) != null;
-        boolean hadForceloadCount = teamData.forceloadCountByPlayer.remove(playerUUID) != null;
-        if (!remaining.isEmpty() || hadClaimCount || hadForceloadCount) getSavedData().setDirty();
+    private void dropTrackedClaimsOf(UUID partyId, UUID playerUUID) {
+        TeamData teamData = teams().get(partyId);
+        if (teamData == null) return;
+        for (ClaimPos pos : new ArrayList<>(teamData.claimsOf(playerUUID))) untrackClaim(partyId, pos);
     }
 
-    private void notifyTeamClaimsTransferred(UUID partyId, UUID leaverId, int count) {
-        try {
-            IServerPartyAPI party = OpenPACServerAPI.get(server).getPartyManager().getPartyById(partyId);
-            if (party == null) return;
-            IAdaptiveLocalizerAPI localizer = OpenPACServerAPI.get(server).getAdaptiveTextLocalizer();
-            String countText = String.valueOf(count);
-            ServerPlayer leaver = server.getPlayerList().getPlayer(leaverId);
-            if (leaver != null) {
-                leaver.sendSystemMessage(localizer.getFor(leaver,
-                        "gui.xaero_pac_team_claims_transfer_leaver", countText).withStyle(ChatFormatting.YELLOW));
-            }
-            ServerPlayer owner = server.getPlayerList().getPlayer(party.getOwner().getUUID());
-            if (owner != null) {
-                owner.sendSystemMessage(localizer.getFor(owner,
-                        "gui.xaero_pac_team_claims_transfer_owner", resolvePlayerName(leaverId), countText)
-                        .withStyle(ChatFormatting.YELLOW));
-            }
-        } catch (Exception e) {
-            LOGGER.warn("[TeamClaims] Failed to announce the team claim transfer of {}: {}", leaverId, e.getMessage());
+    private void notifyTeamClaimsTransferred(IServerPartyAPI party, UUID leaverId, int count) {
+        IAdaptiveLocalizerAPI localizer = OpenPACServerAPI.get(server).getAdaptiveTextLocalizer();
+        String countText = String.valueOf(count);
+        ServerPlayer leaver = server.getPlayerList().getPlayer(leaverId);
+        if (leaver != null) {
+            leaver.sendSystemMessage(localizer.getFor(leaver,
+                    "gui.xaero_pac_team_claims_transfer_leaver", countText).withStyle(ChatFormatting.YELLOW));
+        }
+        UUID ownerId = ownerIdOf(party);
+        ServerPlayer owner = ownerId == null ? null : server.getPlayerList().getPlayer(ownerId);
+        if (owner != null) {
+            owner.sendSystemMessage(localizer.getFor(owner,
+                    "gui.xaero_pac_team_claims_transfer_owner", resolvePlayerName(leaverId), countText)
+                    .withStyle(ChatFormatting.YELLOW));
         }
     }
 
     private String resolvePlayerName(UUID playerId) {
         ServerPlayer online = server.getPlayerList().getPlayer(playerId);
         if (online != null) return online.getGameProfile().getName();
-        try {
-            var info = OpenPACServerAPI.get(server).getServerClaimsManager().getPlayerInfo(playerId);
-            String username = info == null ? null : info.getPlayerUsername();
-            if (username != null && !username.isEmpty()) return username;
-        } catch (Exception ignored) {}
+        var info = OpenPACServerAPI.get(server).getServerClaimsManager().getPlayerInfo(playerId);
+        String username = info == null ? null : info.getPlayerUsername();
+        if (username != null && !username.isEmpty()) return username;
         return playerId.toString();
     }
 
-    private void invalidateCachesForPlayer(UUID playerUUID) {
+    /** Drops every cached value of a player whose party membership changed. */
+    public void forgetPlayer(UUID playerUUID) {
         teamSubIndexCache.remove(playerUUID);
-        cachedClaimOverhead.remove(playerUUID);
-        cachedForceloadOverhead.remove(playerUUID);
-    }
-
-    public void invalidateCacheForPlayer(UUID playerUUID) {
-        teamSubIndexCache.remove(playerUUID);
+        offThreadClaimOverhead.remove(playerUUID);
+        offThreadForceloadOverhead.remove(playerUUID);
     }
 
     // ==================== Data Types ====================
 
-    public static class ClaimPos {
+    /** A chunk in a dimension. Immutable, with a precomputed hash (it is a hot map key). */
+    public static final class ClaimPos {
         public final ResourceLocation dimension;
         public final int x;
         public final int z;
+        private final int hash;
+
         public ClaimPos(ResourceLocation dimension, int x, int z) {
-            this.dimension = dimension;
+            this.dimension = Objects.requireNonNull(dimension);
             this.x = x;
             this.z = z;
+            this.hash = 31 * dimension.hashCode() + Long.hashCode(ChunkPos.asLong(x, z));
         }
         @Override public boolean equals(Object o) {
             if (this == o) return true;
-            if (o == null || getClass() != o.getClass()) return false;
-            ClaimPos claimPos = (ClaimPos) o;
-            return x == claimPos.x && z == claimPos.z && dimension.equals(claimPos.dimension);
+            if (!(o instanceof ClaimPos other)) return false;
+            return hash == other.hash && x == other.x && z == other.z && dimension.equals(other.dimension);
         }
-        @Override public int hashCode() { return Objects.hash(dimension, x, z); }
+        @Override public int hashCode() { return hash; }
         @Override public String toString() { return "[" + x + ", " + z + "] in " + dimension; }
         public CompoundTag save() {
             CompoundTag tag = new CompoundTag();
@@ -1023,33 +886,112 @@ public class TeamClaimManager implements IClaimsManagerListenerAPI {
         }
     }
 
-    public static class TeamData {
-        public UUID partyId;
-        public final Set<ClaimPos> trackedClaims = new LinkedHashSet<>();
-        public final Set<ClaimPos> forceLoadedChunks = new LinkedHashSet<>();
-        public final Map<ClaimPos, UUID> claimOwners = new HashMap<>();
-        public final Map<UUID, Integer> claimCountByPlayer = new HashMap<>();
-        public final Map<UUID, Integer> forceloadCountByPlayer = new HashMap<>();
+    /**
+     * The tracked team claims of one party. Invariants: every forceloaded chunk is a tracked claim, and the per-owner
+     * indexes always agree with {@link #claimOwners}. Only the positions are persisted; owners and forceload flags are
+     * rebuilt from the live claims at server start ({@link #validateSavedData}).
+     */
+    public static final class TeamData {
+        private final UUID partyId;
+        /** Tracked team claim to its owner (the member who technically owns it). */
+        private final Map<ClaimPos, UUID> claimOwners = new LinkedHashMap<>();
+        private final Set<ClaimPos> forceLoadedChunks = new LinkedHashSet<>();
+        private final Map<UUID, Set<ClaimPos>> claimsByOwner = new HashMap<>();
+        private final Map<UUID, Integer> forceloadsByOwner = new HashMap<>();
+        /** Positions read from disk, until {@link #validateSavedData} turns them into tracked claims. */
+        @Nullable
+        private List<ClaimPos> loadedClaims;
+
         public TeamData(UUID partyId) { this.partyId = partyId; }
-        public TeamData() {}
+
+        public int getClaimCount() { return claimOwners.size(); }
+        public int getForceloadCount() { return forceLoadedChunks.size(); }
+        public int getClaimCountOf(UUID owner) {
+            Set<ClaimPos> owned = claimsByOwner.get(owner);
+            return owned == null ? 0 : owned.size();
+        }
+        public int getForceloadCountOf(UUID owner) { return forceloadsByOwner.getOrDefault(owner, 0); }
+        @Nullable public UUID getOwner(ClaimPos pos) { return claimOwners.get(pos); }
+        public Set<ClaimPos> getTrackedClaims() { return Collections.unmodifiableSet(claimOwners.keySet()); }
+        Set<ClaimPos> claimsOf(UUID owner) {
+            Set<ClaimPos> owned = claimsByOwner.get(owner);
+            return owned == null ? Collections.emptySet() : Collections.unmodifiableSet(owned);
+        }
+
+        /** Tracks a claim or changes its owner. */
+        private void putClaim(ClaimPos pos, UUID owner) {
+            UUID previous = claimOwners.put(pos, owner);
+            if (owner.equals(previous)) return;
+            if (previous != null) {
+                removeFromOwnerIndex(previous, pos);
+                if (forceLoadedChunks.contains(pos)) {
+                    addForceload(previous, -1);
+                    addForceload(owner, 1);
+                }
+            }
+            claimsByOwner.computeIfAbsent(owner, o -> new LinkedHashSet<>()).add(pos);
+        }
+
+        /** @return the owner of the claim that stopped being tracked, null if it wasn't */
+        @Nullable
+        private UUID removeClaim(ClaimPos pos) {
+            UUID owner = claimOwners.remove(pos);
+            if (owner == null) return null;
+            removeFromOwnerIndex(owner, pos);
+            if (forceLoadedChunks.remove(pos)) addForceload(owner, -1);
+            return owner;
+        }
+
+        /** @return true if the forceload state of a tracked claim changed */
+        private boolean setForceloaded(ClaimPos pos, boolean forceloaded) {
+            UUID owner = claimOwners.get(pos);
+            if (owner == null) return false;
+            if (forceloaded ? forceLoadedChunks.add(pos) : forceLoadedChunks.remove(pos)) {
+                addForceload(owner, forceloaded ? 1 : -1);
+                return true;
+            }
+            return false;
+        }
+
+        private void removeFromOwnerIndex(UUID owner, ClaimPos pos) {
+            Set<ClaimPos> owned = claimsByOwner.get(owner);
+            if (owned != null && owned.remove(pos) && owned.isEmpty()) claimsByOwner.remove(owner);
+        }
+
+        private void addForceload(UUID owner, int delta) {
+            forceloadsByOwner.merge(owner, delta, (a, b) -> a + b == 0 ? null : a + b);
+        }
+
+        private List<ClaimPos> takeLoadedClaims() {
+            List<ClaimPos> result = loadedClaims == null ? List.of() : loadedClaims;
+            loadedClaims = null;
+            return result;
+        }
+
         public CompoundTag save() {
             CompoundTag tag = new CompoundTag();
             tag.putUUID("partyId", partyId);
             ListTag claimsList = new ListTag();
-            for (ClaimPos pos : trackedClaims) claimsList.add(pos.save());
+            // Not validated yet (saved before the server finished starting): keep what was loaded
+            Collection<ClaimPos> claims = loadedClaims != null ? loadedClaims : claimOwners.keySet();
+            for (ClaimPos pos : claims) claimsList.add(pos.save());
             tag.put("trackedClaims", claimsList);
             ListTag forceList = new ListTag();
             for (ClaimPos pos : forceLoadedChunks) forceList.add(pos.save());
             tag.put("forceLoadedChunks", forceList);
             return tag;
         }
+
+        /**
+         * Reads the stored positions. The stored forceload list is not needed anymore (the live claim's forceload
+         * flag is used at validation) but is still written, so older versions can read the data.
+         */
         public static TeamData load(CompoundTag tag) {
-            TeamData data = new TeamData();
-            data.partyId = tag.getUUID("partyId");
+            TeamData data = new TeamData(tag.getUUID("partyId"));
             ListTag claimsList = tag.getList("trackedClaims", Tag.TAG_COMPOUND);
-            for (int i = 0; i < claimsList.size(); i++) data.trackedClaims.add(ClaimPos.load(claimsList.getCompound(i)));
-            ListTag forceList = tag.getList("forceLoadedChunks", Tag.TAG_COMPOUND);
-            for (int i = 0; i < forceList.size(); i++) data.forceLoadedChunks.add(ClaimPos.load(forceList.getCompound(i)));
+            List<ClaimPos> claims = new ArrayList<>(claimsList.size());
+            for (int i = 0; i < claimsList.size(); i++) claims.add(ClaimPos.load(claimsList.getCompound(i)));
+            data.loadedClaims = claims;
             return data;
         }
     }

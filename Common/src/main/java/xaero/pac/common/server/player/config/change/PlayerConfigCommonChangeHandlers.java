@@ -78,6 +78,11 @@ public class PlayerConfigCommonChangeHandlers {
 		manager.getPartyManager().getPartySynchronizer().syncToPartyAndAlliersUpdateName(party, newValue);
 		manager.getClaimsManager().getPlayerInfo(config.getPlayerId())
 				.resyncPartyName(manager.getPartyManager().getPartySystem());//it's always the built-in OPAC party system, not necessarily the primary one
+		// [Team Claims] the team name follows the owner's party name
+		xaero.pac.common.server.claims.TeamClaimsIntegration.TeamClaimsHandler tcHandler =
+				xaero.pac.common.server.claims.TeamClaimsIntegration.getHandler();
+		if(tcHandler != null)
+			tcHandler.onPartyNameChanged(party.getId());
 	}
 
 	public static <P extends IServerParty<?, ?, ?>> void handleShareLocationWithParty(

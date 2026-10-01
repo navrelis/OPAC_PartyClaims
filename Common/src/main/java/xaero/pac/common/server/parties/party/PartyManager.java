@@ -222,6 +222,11 @@ public final class PartyManager implements IPartyManager<ServerParty>, ObjectMan
 		partyRemovalTaskHandler.addTask(new PartyRemovalSpreadoutTask(this, party), ServerData.from(server));
 		if(loaded)
 			partySynchronizer.resyncPartyNameForClaims(partyOwnerId);
+		// [Team Claims] the party's team config and team sub-configs go away with it
+		xaero.pac.common.server.claims.TeamClaimsIntegration.TeamClaimsHandler tcHandler =
+				xaero.pac.common.server.claims.TeamClaimsIntegration.getHandler();
+		if(tcHandler != null && loaded)
+			tcHandler.onPartyRemoved(party.getId());
 	}
 
 	public void addParty(ServerParty party) {
@@ -261,6 +266,11 @@ public final class PartyManager implements IPartyManager<ServerParty>, ObjectMan
 			ServerPlayer onlinePlayer = server.getPlayerList().getPlayer(m.getUUID());
 			if(onlinePlayer != null)
 				playerPartyOnlineCounterUpdater.onAddedToDefaultParty(onlinePlayer, this, party);
+			// [Team Claims] a new member (or the owner of a new party) gets the team sub-config
+			xaero.pac.common.server.claims.TeamClaimsIntegration.TeamClaimsHandler tcHandler =
+					xaero.pac.common.server.claims.TeamClaimsIntegration.getHandler();
+			if(tcHandler != null)
+				tcHandler.onPartyMemberAdded(party.getId(), m.getUUID());
 		}
 	}
 

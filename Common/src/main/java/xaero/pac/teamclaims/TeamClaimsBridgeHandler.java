@@ -1,15 +1,17 @@
 package xaero.pac.teamclaims;
 
+import com.mojang.authlib.GameProfile;
+import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import xaero.pac.common.claims.player.PlayerChunkClaim;
 import xaero.pac.common.claims.result.api.ClaimResult;
-import xaero.pac.common.server.api.OpenPACServerAPI;
 import xaero.pac.common.server.claims.ServerClaimsManager;
 import xaero.pac.common.server.claims.TeamClaimsIntegration;
 import xaero.pac.common.server.player.config.api.v2.IPlayerConfigOptionSpecAPI;
 import xaero.pac.teamclaims.config.TeamConfigManager;
+import xaero.pac.teamclaims.config.TeamConfigManager.PartyEventType;
 
 import javax.annotation.Nullable;
 import java.util.UUID;
@@ -85,6 +87,14 @@ class TeamClaimsBridgeHandler implements TeamClaimsIntegration.TeamClaimsHandler
     }
 
     @Override
+    public boolean hasTeamOverhead(UUID playerUUID) {
+        TeamClaimManager cm = TeamClaimsCommon.getClaimManager();
+        if (cm == null) return false;
+        return cm.getTeamClaimOverheadForPlayer(playerUUID) > 0
+                || cm.getTeamForceloadOverheadForPlayer(playerUUID) > 0;
+    }
+
+    @Override
     public boolean isInternalEditActive() {
         return TeamConfigManager.INTERNAL_EDIT.get();
     }
@@ -96,11 +106,11 @@ class TeamClaimsBridgeHandler implements TeamClaimsIntegration.TeamClaimsHandler
     }
 
     @Override
-    public void onTeamSubConfigSettingChanged(UUID changedByPlayer,
-            IPlayerConfigOptionSpecAPI<?> option, Object value) {
+    public void onTeamSubConfigSettingChanged(UUID changedByPlayer, String subId,
+            IPlayerConfigOptionSpecAPI<?> option, @Nullable Object value) {
         TeamConfigManager tcm = TeamClaimsCommon.getTeamConfigManager();
         if (tcm != null) {
-            tcm.onTeamSubConfigSettingChanged(changedByPlayer, option, value);
+            tcm.onTeamSubConfigSettingChanged(changedByPlayer, subId, option, value);
         }
     }
 
@@ -111,31 +121,54 @@ class TeamClaimsBridgeHandler implements TeamClaimsIntegration.TeamClaimsHandler
     }
 
     @Override
-    public boolean hasTeamOverhead(UUID playerUUID) {
-        TeamClaimManager cm = TeamClaimsCommon.getClaimManager();
-        if (cm == null) return false;
-        return cm.getTeamClaimOverheadForPlayer(playerUUID) > 0
-                || cm.getTeamForceloadOverheadForPlayer(playerUUID) > 0;
+    public int createPartyWithTeamName(CommandSourceStack source, @Nullable ServerPlayer player,
+            GameProfile ownerProfile, String rawTeamName) {
+        return TeamClaimsCommands.createPartyWithTeamName(source, player, ownerProfile, rawTeamName, false);
+    }
+
+    // ==================== Party events (queued, processed at the end of the tick) ====================
+
+    @Override
+    public void onPartyMemberAdded(UUID partyId, UUID memberId) {
+        queue(PartyEventType.MEMBER_ADDED, partyId, memberId);
     }
 
     @Override
-    public void onPartyCreated(ServerPlayer owner) {
-        MinecraftServer currentServer = TeamClaimsCommon.getServer();
-        if (currentServer == null) return;
-        try {
-            var partyManager = OpenPACServerAPI.get(currentServer).getPartyManager();
-            var party = partyManager.getPartyByMember(owner.getUUID());
-            if (party == null) return;
-            TeamConfigManager tcm = TeamClaimsCommon.getTeamConfigManager();
-            if (tcm != null) {
-                tcm.createTeamConfig(party);
-            }
-            TeamClaimManager cm = TeamClaimsCommon.getClaimManager();
-            if (cm != null) {
-                cm.ensureAllMembersHaveSubConfig(party);
-            }
-        } catch (Exception e) {
-            TeamClaimsCommon.LOGGER.warn("Error in onPartyCreated for {}: {}", owner.getUUID(), e.getMessage());
-        }
+    public void onPartyMemberRemoved(UUID partyId, UUID memberId) {
+        queue(PartyEventType.MEMBER_REMOVED, partyId, memberId);
+    }
+
+    @Override
+    public void onPartyOwnerChanged(UUID partyId) {
+        queue(PartyEventType.OWNER_CHANGED, partyId, null);
+    }
+
+    @Override
+    public void onPartyNameChanged(UUID partyId) {
+        queue(PartyEventType.NAME_CHANGED, partyId, null);
+    }
+
+    @Override
+    public void onPartyRemoved(UUID partyId) {
+        queue(PartyEventType.PARTY_REMOVED, partyId, null);
+    }
+
+    private static void queue(PartyEventType type, UUID partyId, @Nullable UUID playerId) {
+        TeamConfigManager tcm = TeamClaimsCommon.getTeamConfigManager();
+        if (tcm != null) tcm.queuePartyEvent(type, partyId, playerId);
+    }
+
+    // ==================== Sub-config / forceload events ====================
+
+    @Override
+    public void onTeamSubConfigExistenceChanged(UUID playerId, String subId, boolean exists) {
+        TeamConfigManager tcm = TeamClaimsCommon.getTeamConfigManager();
+        if (tcm != null) tcm.onTeamSubConfigExistenceChanged(playerId, subId, exists);
+    }
+
+    @Override
+    public void onOpacForceloadTicketRemoved(ResourceLocation dimension, int x, int z) {
+        TeamForceLoadHandler handler = TeamClaimsCommon.getForceLoadHandler();
+        if (handler != null) handler.onOpacTicketRemoved(dimension, x, z);
     }
 }

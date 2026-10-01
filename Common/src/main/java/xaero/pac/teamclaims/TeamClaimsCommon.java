@@ -29,17 +29,21 @@ import java.util.UUID;
  *     <li>{@link #onPlayerLoggedIn} / {@link #onPlayerLoggedOut} on player join/leave</li>
  *     <li>{@link #registerCommands} on command registration</li>
  * </ul>
- * Everything here runs on the server thread. No loader (Fabric/NeoForge) classes may be
- * referenced from this package.
+ * Everything here runs on the server thread. The managers ({@link TeamClaimManager},
+ * {@link TeamConfigManager}, {@link TeamForceLoadHandler}) and their data (e.g.
+ * {@link TeamClaimManager.TeamData}) are server-thread confined; the fields below are
+ * {@code volatile} only so that a reader on another thread (the bridge handler, called from the client
+ * thread of an integrated server) sees a fully published manager or null. No loader (Fabric/NeoForge)
+ * classes may be referenced from this package.
  */
 public final class TeamClaimsCommon {
 
     public static final Logger LOGGER = LogUtils.getLogger();
 
-    private static TeamClaimManager claimManager;
-    private static TeamForceLoadHandler forceLoadHandler;
-    private static TeamConfigManager teamConfigManager;
-    private static MinecraftServer currentServer;
+    private static volatile TeamClaimManager claimManager;
+    private static volatile TeamForceLoadHandler forceLoadHandler;
+    private static volatile TeamConfigManager teamConfigManager;
+    private static volatile MinecraftServer currentServer;
 
     private TeamClaimsCommon() {}
 
@@ -66,33 +70,33 @@ public final class TeamClaimsCommon {
     }
 
     public static void onServerStarted(MinecraftServer server) {
-        if (teamConfigManager != null) {
-            teamConfigManager.loadAll();
-        }
-        if (claimManager != null) {
-            claimManager.onServerStarted();
-        }
-        if (forceLoadHandler != null) {
-            forceLoadHandler.onServerStarted();
-        }
+        TeamConfigManager tcm = teamConfigManager;
+        if (tcm != null) tcm.loadAll();
+        TeamForceLoadHandler flh = forceLoadHandler;
+        if (flh != null) flh.onServerStarted();
+        TeamClaimManager cm = claimManager;
+        if (cm != null) cm.onServerStarted();
     }
 
+    /**
+     * End of every server tick: first the party events queued by OPAC's party hooks during this tick
+     * (and the periodic reconciliation), then the claim manager (batched claim limits sync, safety net),
+     * then the dirty team config files are handed to the IO thread.
+     */
     public static void onServerTickEnd(MinecraftServer server) {
-        if (claimManager != null) {
-            claimManager.tick();
-        }
-        if (teamConfigManager != null) {
-            teamConfigManager.pollForChanges();
-        }
+        TeamConfigManager tcm = teamConfigManager;
+        TeamClaimManager cm = claimManager;
+        if (tcm != null) tcm.processPendingEvents();
+        if (cm != null) cm.tick();
+        if (tcm != null) tcm.tick();
     }
 
     public static void onServerStopping(MinecraftServer server) {
-        if (forceLoadHandler != null) {
-            forceLoadHandler.onServerStopping();
-        }
-        if (teamConfigManager != null) {
-            teamConfigManager.shutdown();
-        }
+        TeamConfigManager tcm = teamConfigManager;
+        if (tcm != null) tcm.processPendingEvents();
+        TeamForceLoadHandler flh = forceLoadHandler;
+        if (flh != null) flh.onServerStopping();
+        if (tcm != null) tcm.shutdown();
         TeamClaimsIntegration.setHandler(null);
         claimManager = null;
         forceLoadHandler = null;
@@ -114,20 +118,21 @@ public final class TeamClaimsCommon {
         server.tell(new TickTask(server.getTickCount() + 1, () -> {
             ServerPlayer sp = server.getPlayerList().getPlayer(playerId);
             if (sp == null) return; // disconnected before the deferred tick ran
-            TeamClaimManager cm = claimManager;
-            if (cm != null) {
-                cm.onPlayerLogin(sp);
-            }
             TeamConfigManager tcm = teamConfigManager;
             if (tcm != null) {
                 tcm.onPlayerLogin(sp);
+            }
+            TeamClaimManager cm = claimManager;
+            if (cm != null) {
+                cm.onPlayerLogin(sp);
             }
         }));
     }
 
     public static void onPlayerLoggedOut(ServerPlayer player) {
-        if (claimManager != null && player != null) {
-            claimManager.onPlayerLogout(player);
+        TeamClaimManager cm = claimManager;
+        if (cm != null && player != null) {
+            cm.onPlayerLogout(player);
         }
     }
 

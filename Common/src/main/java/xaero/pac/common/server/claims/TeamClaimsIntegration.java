@@ -18,8 +18,11 @@
 
 package xaero.pac.common.server.claims;
 
+import com.mojang.authlib.GameProfile;
+import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.MinecraftServer;
+import net.minecraft.server.level.ServerPlayer;
 import xaero.pac.common.claims.player.PlayerChunkClaim;
 import xaero.pac.common.claims.result.api.ClaimResult;
 import xaero.pac.common.server.player.config.api.v2.IPlayerConfigOptionSpecAPI;
@@ -30,15 +33,22 @@ import java.util.UUID;
 /**
  * Bridge interface for Team Claims integration.
  * <p>
- * This allows the Common module to call into the platform (Fabric)-specific Team Claims
- * implementation without a direct dependency. The handler is set by the platform (Fabric)
- * module during initialization.
+ * This allows the upstream OPAC code to call into the Team Claims implementation
+ * ({@code xaero.pac.teamclaims}) without a direct dependency. The handler is installed by
+ * {@code TeamClaimsCommon.onAddonRegister} during OPAC's server addon registration.
  * <p>
  * The direct code modifications in ServerClaimsManager, PlayerConfig, PlayerClaimInfo,
- * PlayerSubConfig, ServerboundSubConfigExistencePacket, CreatePartyCommand and
- * ClaimsManagerSynchronizer all call through this bridge. Every one of those hooks is a
+ * PlayerSubConfig, ServerboundSubConfigExistencePacket, CreatePartyCommand,
+ * ClaimsManagerSynchronizer, ServerParty, PartyManager, PlayerConfigCommonChangeHandlers and
+ * ForceLoadTicketManager all call through this bridge. Every one of those hooks is a
  * no-op while {@link #getHandler()} returns null, which is the case on a vanilla client,
  * before the server addon is registered and after the server has stopped.
+ * <p>
+ * Every handler method is called on the server thread, except
+ * {@link TeamClaimsHandler#getTeamClaimOverheadForPlayer},
+ * {@link TeamClaimsHandler#getTeamForceloadOverheadForPlayer} and
+ * {@link TeamClaimsHandler#isComputingOverhead}, which {@code PlayerClaimInfo} may also call from
+ * the client thread of an integrated server.
  * <p>
  * Team Claims only ever applies to sub-configs of a real <i>player</i> config whose sub ID
  * starts with {@link #TEAM_SUB_ID_PREFIX}. Native party claims (server option
@@ -53,7 +63,7 @@ public final class TeamClaimsIntegration {
 	public static final String TEAM_SUB_ID_PREFIX = "team_";
 
 	/**
-	 * Handler interface implemented by the platform (Fabric) Team Claims module.
+	 * Handler interface implemented by the Team Claims module ({@code TeamClaimsBridgeHandler}).
 	 * Provides all the hooks needed by the modified Common classes.
 	 */
 	public interface TeamClaimsHandler {
@@ -147,11 +157,12 @@ public final class TeamClaimsIntegration {
 		boolean isPlayerTeamAdmin(UUID playerUUID);
 
 		/**
-		 * Called after a setting is successfully changed on a team sub-config.
-		 * Propagates the change to all other team members' sub-configs.
+		 * Called after a setting is successfully changed on the team sub-config {@code subId} of
+		 * {@code changedByPlayer}. Persists the change and propagates it to all other team members'
+		 * sub-configs.
 		 */
-		void onTeamSubConfigSettingChanged(UUID changedByPlayer,
-				IPlayerConfigOptionSpecAPI<?> option, Object value);
+		void onTeamSubConfigSettingChanged(UUID changedByPlayer, String subId,
+				IPlayerConfigOptionSpecAPI<?> option, @Nullable Object value);
 
 		/**
 		 * Returns the current MinecraftServer instance, or null.
@@ -159,19 +170,71 @@ public final class TeamClaimsIntegration {
 		@Nullable
 		MinecraftServer getServer();
 
+		// ==================== Party Commands ====================
+
 		/**
-		 * Called immediately after a party is created.
-		 * Creates the team config and sub-config for the owner right away
-		 * instead of waiting for the polling cycle.
+		 * Called by {@code CreatePartyCommand} for {@code /<parties> create <teamname>}. Validates the
+		 * team name, creates the party for {@code ownerProfile}, names it and sets up the team config
+		 * right away, then reports the outcome to {@code source}. The same code path backs
+		 * {@code /teamclaims create}.
+		 *
+		 * @param player  the player executing the command, null when there is none
+		 * @return the command result (1 on success, 0 on failure)
 		 */
-		void onPartyCreated(net.minecraft.server.level.ServerPlayer owner);
+		int createPartyWithTeamName(CommandSourceStack source, @Nullable ServerPlayer player,
+				GameProfile ownerProfile, String rawTeamName);
+
+		// ==================== Party Events ====================
+		// Called by the party hooks once the party manager has finished loading. The handler only
+		// queues them; they are processed in order at the end of the current server tick.
+
+		/**
+		 * A member was added to a managed party, including the owner of a newly created party.
+		 */
+		void onPartyMemberAdded(UUID partyId, UUID memberId);
+
+		/**
+		 * A member left or was kicked from a party that still exists. Not called when a whole
+		 * party is removed, see {@link #onPartyRemoved}.
+		 */
+		void onPartyMemberRemoved(UUID partyId, UUID memberId);
+
+		/**
+		 * The ownership of a party was transferred to another member.
+		 */
+		void onPartyOwnerChanged(UUID partyId);
+
+		/**
+		 * The party owner's {@code PARTY_NAME} option changed.
+		 */
+		void onPartyNameChanged(UUID partyId);
+
+		/**
+		 * A party was removed (disbanded, expired or replaced).
+		 */
+		void onPartyRemoved(UUID partyId);
+
+		// ==================== Sub-Config / Forceload Events ====================
+
+		/**
+		 * A team sub-config ({@link #isTeamSubId}) of a player config was created or removed, by any
+		 * code path (Team Claims itself, a client packet, a command or a claim transfer).
+		 */
+		void onTeamSubConfigExistenceChanged(UUID playerId, String subId, boolean exists);
+
+		/**
+		 * OPAC's own forceload ticket for a chunk was just removed. On loaders that keep the
+		 * "force ticks" state per chunk rather than per ticket (Fabric), that also cleared it for a
+		 * team forceload ticket of the same chunk, which the handler then restores.
+		 */
+		void onOpacForceloadTicketRemoved(ResourceLocation dimension, int x, int z);
 	}
 
 	@Nullable
 	private static volatile TeamClaimsHandler handler;
 
 	/**
-	 * Sets the handler. Called by the platform (Fabric) module during OPAC addon registration.
+	 * Sets the handler. Called by Team Claims during OPAC addon registration and server stop.
 	 */
 	public static void setHandler(@Nullable TeamClaimsHandler h) {
 		handler = h;

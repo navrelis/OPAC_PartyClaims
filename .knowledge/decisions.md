@@ -6,3 +6,5 @@
 - NeoForge built with upstream NeoGradle 7.0.181 / NeoForge 21.1.168 (user choice) — least divergence from upstream.
 - Optional features picked by lead: forceload grace period + `/teamclaims convert`; not pooled-budget (redesign of core budget logic, high risk) and not activity log (low value).
 - Status board renamed `.fable/` -> `.knowledge/` (session convention).
+- T4 runs before T3 in parallel: T3 (NeoForge adapter) only depends on the stable TeamClaimsCommon lifecycle API, which T4 must not change; avoids idle time.
+- Worktree branch from T2 is reused for T3 and merged into fabric-port after T4 is committed — keeps main checkout stable for the running T4 agent.

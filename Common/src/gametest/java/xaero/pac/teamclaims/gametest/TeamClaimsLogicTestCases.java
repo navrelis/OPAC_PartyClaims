@@ -52,36 +52,38 @@ import java.util.UUID;
  */
 public final class TeamClaimsLogicTestCases {
 
-    /** Timeout {@link #leavingMemberClaimsTransferToOwner} must be registered with (2 poll waits). */
-    public static final int LEAVING_MEMBER_TIMEOUT_TICKS = 700;
+    /**
+     * Timeout {@link #leavingMemberClaimsTransferToOwner} must be registered with. The leave is event-driven, so
+     * the test only waits a few ticks; kept as a constant for the loader wrappers.
+     */
+    public static final int LEAVING_MEMBER_TIMEOUT_TICKS = 100;
 
-    private static final ResourceLocation OVERWORLD = Level.OVERWORLD.location();
+    static final ResourceLocation OVERWORLD = Level.OVERWORLD.location();
 
     private TeamClaimsLogicTestCases() {}
 
     // ==================== Shared helpers ====================
 
-    private static IPartyManagerAPI partyManager(MinecraftServer server) {
+    static IPartyManagerAPI partyManager(MinecraftServer server) {
         return OpenPACServerAPI.get(server).getPartyManager();
     }
 
-    private static IServerClaimsManagerAPI claimsAPI(MinecraftServer server) {
+    static IServerClaimsManagerAPI claimsAPI(MinecraftServer server) {
         return OpenPACServerAPI.get(server).getServerClaimsManager();
     }
 
-    private static IPlayerConfigManagerAPI configManager(MinecraftServer server) {
+    static IPlayerConfigManagerAPI configManager(MinecraftServer server) {
         return OpenPACServerAPI.get(server).getPlayerConfigManager();
     }
 
     /**
      * Creates a party for {@code ownerProfile}, adds every profile in {@code memberProfiles} as a
-     * regular {@link PartyMemberRank#MEMBER}, then triggers Team Claims config creation the same
-     * way the real mod does it from {@code CreatePartyCommand}'s patch (see
-     * {@code TeamClaimsBridgeHandler#onPartyCreated}): create the {@link TeamConfig}
-     * and make sure every member has their {@code team_*} sub-config, instead of waiting up to 60
-     * ticks for {@link TeamConfigManager#pollForChanges()} to notice the new party on its own.
+     * regular {@link PartyMemberRank#MEMBER}, then creates the {@link TeamConfig} right away the same
+     * way the real create commands do it ({@code TeamClaimsCommands#createPartyWithTeamName}), so
+     * every member has their {@code team_*} sub-config immediately. The party events queued by the
+     * party hooks are then processed at the end of the tick and find everything already set up.
      */
-    private static IServerPartyAPI createPartyWithTeam(MinecraftServer server, GameProfile ownerProfile,
+    static IServerPartyAPI createPartyWithTeam(MinecraftServer server, GameProfile ownerProfile,
             List<GameProfile> memberProfiles) {
         IServerPartyAPI party = partyManager(server).createPartyForOwner(ownerProfile);
         if (party == null) {
@@ -103,7 +105,7 @@ public final class TeamClaimsLogicTestCases {
     }
 
     /** Best-effort teardown of a party and its Team Claims config; never throws. */
-    private static void disbandPartyQuiet(MinecraftServer server, UUID partyId) {
+    static void disbandPartyQuiet(MinecraftServer server, UUID partyId) {
         try {
             TeamConfigManager tcm = TeamClaimsCommon.getTeamConfigManager();
             if (tcm != null)
@@ -117,7 +119,7 @@ public final class TeamClaimsLogicTestCases {
     }
 
     /** Best-effort direct chunk unclaim (bypasses all checks), for cleanup; never throws. */
-    private static void unclaimQuiet(MinecraftServer server, int... xzPairs) {
+    static void unclaimQuiet(MinecraftServer server, int... xzPairs) {
         IServerClaimsManagerAPI api = claimsAPI(server);
         for (int i = 0; i + 1 < xzPairs.length; i += 2) {
             try {
@@ -127,26 +129,26 @@ public final class TeamClaimsLogicTestCases {
         }
     }
 
-    private static int teamSubIndexOf(MinecraftServer server, String subConfigId, UUID playerId) {
+    static int teamSubIndexOf(MinecraftServer server, String subConfigId, UUID playerId) {
         IPlayerConfigAPI sub = configManager(server).getLoadedConfig(playerId).getSubConfig(subConfigId);
         return sub == null ? -1 : sub.getSubIndex();
     }
 
-    private static ClaimResult<IPlayerChunkClaimAPI> doClaim(MinecraftServer server, UUID playerId, int subIndex,
+    static ClaimResult<IPlayerChunkClaimAPI> doClaim(MinecraftServer server, UUID playerId, int subIndex,
             int x, int z) {
         return claimsAPI(server).tryToClaim(OVERWORLD, playerId, subIndex, OVERWORLD, x, z, x, z, false);
     }
 
-    private static ClaimResult<IPlayerChunkClaimAPI> doUnclaim(MinecraftServer server, UUID playerId, int x, int z) {
+    static ClaimResult<IPlayerChunkClaimAPI> doUnclaim(MinecraftServer server, UUID playerId, int x, int z) {
         return claimsAPI(server).tryToUnclaim(OVERWORLD, playerId, OVERWORLD, x, z, x, z, false);
     }
 
-    private static ClaimResult<IPlayerChunkClaimAPI> doForceload(MinecraftServer server, UUID playerId, int x, int z,
+    static ClaimResult<IPlayerChunkClaimAPI> doForceload(MinecraftServer server, UUID playerId, int x, int z,
             boolean enable) {
         return claimsAPI(server).tryToForceload(OVERWORLD, playerId, OVERWORLD, x, z, x, z, enable, false);
     }
 
-    private static GameProfile profile(String name) {
+    static GameProfile profile(String name) {
         return new GameProfile(UUID.randomUUID(), name);
     }
 
@@ -500,19 +502,12 @@ public final class TeamClaimsLogicTestCases {
 
     /**
      * 7) When a member leaves (or is kicked from) a party that still exists, their team claims are
-     * transferred to the party owner (staying team claims, forceload flag kept), detected by the
-     * membership poll, and the leaver's team sub-config is removed.
+     * transferred to the party owner (staying team claims, forceload flag kept), and the leaver's
+     * team sub-config is removed.
      * <p>
-     * {@link TeamConfigManager#pollForChanges()} detects a membership change by diffing the
-     * current party membership against its own {@code lastKnownMembers} snapshot, which is only
-     * ever updated by the poll itself (never by {@link TeamConfigManager#createTeamConfig}, which
-     * this test calls directly to trigger team config creation immediately instead of waiting on
-     * the poll). If the member were removed before the very first poll tick had a chance to record
-     * both members as the baseline, that first poll would see an empty "previous members" set and
-     * would never notice the member's absence -- there'd be nothing to diff against. So this test
-     * first waits out one full poll interval to let that baseline get recorded (both members still
-     * in the party at that point), only then removes the member, and waits out a second poll
-     * interval for the actual leave to be detected and processed.
+     * The leave is event-driven: {@code ServerParty.removeMember}'s hook queues it and it is
+     * processed at the end of the same server tick, so a few ticks of waiting are enough (the old
+     * membership poll needed two full poll intervals).
      */
     public static void leavingMemberClaimsTransferToOwner(GameTestHelper helper) {
         MinecraftServer server = helper.getLevel().getServer();
@@ -541,9 +536,8 @@ public final class TeamClaimsLogicTestCases {
             helper.assertTrue(f1.getResultType() == ClaimResult.Type.SUCCESSFUL_FORCELOAD,
                     "expected member to be able to forceload their own team claim, got " + f1.getResultType());
 
-            // Stage 1 (t+120): let one full poll interval (60 ticks) pass so the poll records both
-            // members as its "previously known" baseline for this party, THEN remove the member.
-            helper.runAfterDelay(120, () -> {
+            // Stage 1 (t+1): the party events of the setup have been processed; remove the member.
+            helper.runAfterDelay(1, () -> {
                 try {
                     IPartyMemberAPI removed = party.removeMember(memberId);
                     helper.assertTrue(removed != null,
@@ -554,9 +548,9 @@ public final class TeamClaimsLogicTestCases {
                     throw e;
                 }
 
-                // Stage 2 (t+120+300): another full poll interval for the removal itself to be
-                // detected and processed (transfer + sub-config removal).
-                helper.runAfterDelay(300, () -> {
+                // Stage 2 (t+1+3): the leave was processed at the end of the removal tick
+                // (transfer + sub-config removal); a few ticks of margin.
+                helper.runAfterDelay(3, () -> {
                     try {
                         IPlayerChunkClaimAPI claim1 = claimsAPI(server).get(OVERWORLD, x0, 0);
                         helper.assertTrue(claim1 != null,

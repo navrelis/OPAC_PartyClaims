@@ -116,8 +116,14 @@ public final class ForceLoadTicketManager {
 		ChunkPos pos = new ChunkPos(ticket.getX(), ticket.getZ());
 		ResourceKey<Level> levelKey = ResourceKey.create(Registries.DIMENSION, ticket.getDimension());
 		ServerLevel world = server.getLevel(levelKey);
-		if(world != null)//null can happen when a dimension is removed from a server
+		if(world != null) {//null can happen when a dimension is removed from a server
 			Services.PLATFORM.getServerChunkCacheAccess().removeRegionTicket(world.getChunkSource(), OPAC_TICKET, pos, 2, pos, true);
+			// [Team Claims] a team forceload ticket of the same chunk may share the forced ticking state
+			xaero.pac.common.server.claims.TeamClaimsIntegration.TeamClaimsHandler tcHandler =
+					xaero.pac.common.server.claims.TeamClaimsIntegration.getHandler();
+			if(tcHandler != null)
+				tcHandler.onOpacForceloadTicketRemoved(ticket.getDimension(), ticket.getX(), ticket.getZ());
+		}
 		ticket.setEnabled(false);
 		countEnabled(ticket.getDimension(), -1);
 //		OpenPartiesAndClaims.LOGGER.info("Disabled force load ticket at " + pos);
@@ -195,6 +201,20 @@ public final class ForceLoadTicketManager {
 			if (playerTickets.failedToEnableSome())
 				updateTicketsFor(id, false);//to enable another one that was disabled by the forceload limit
 		}
+	}
+
+	// [Team Claims] whether OPAC's own forceload ticket for the claim of player `id` at this chunk is
+	// currently enabled, so that removing a team forceload ticket of the same chunk can restore the
+	// forced ticking state that both tickets share on some loaders
+	public boolean isTicketEnabled(ResourceLocation dimension, UUID id, int x, int z){
+		PlayerForceloadTicketManager playerTickets = claimTickets.get(id);
+		if(playerTickets == null)
+			return false;
+		ClaimTicket key = new ClaimTicket(id, dimension, x, z);
+		for(ClaimTicket ticket : playerTickets.values())
+			if(ticket.equals(key))
+				return ticket.isEnabled();
+		return false;
 	}
 
 	public boolean hasEnabledTickets(ServerLevel level){

@@ -238,7 +238,7 @@ public class PlayerConfig
 		if(tcHandler != null && !tcHandler.isInternalEditActive()) {
 			UUID tcOwnerId = getPlayerId();
 			if(tcOwnerId != null)
-				tcHandler.onTeamSubConfigSettingChanged(tcOwnerId, o, value);
+				tcHandler.onTeamSubConfigSettingChanged(tcOwnerId, getSubId(), o, value);
 		}
 		return SetResult.SUCCESS;
 	}
@@ -444,6 +444,11 @@ public class PlayerConfig
 			subConfig.getStorage();//creates the storage here to avoid concur modif exception when saving
 			manager.getSynchronizer().syncSubExistence(null, subConfig, true);
 		}
+		// [Team Claims] a team sub-config may be created by any code path (client packet, command,
+		// claim transfer), and Team Claims caches which sub-config is a player's team sub-config
+		xaero.pac.common.server.claims.TeamClaimsIntegration.TeamClaimsHandler tcHandler = getTeamClaimsHandlerForSub(id);
+		if(tcHandler != null)
+			tcHandler.onTeamSubConfigExistenceChanged(playerId, id, true);
 		return subConfig;
 	}
 
@@ -468,7 +473,19 @@ public class PlayerConfig
 			tryToReset(PlayerConfigOptions.USED_SUBCLAIM);
 		if(manager.isLoaded())
 			manager.getSynchronizer().syncSubExistence(null, subConfig, false);
+		// [Team Claims] see createSubConfig
+		xaero.pac.common.server.claims.TeamClaimsIntegration.TeamClaimsHandler tcHandler = getTeamClaimsHandlerForSub(id);
+		if(tcHandler != null)
+			tcHandler.onTeamSubConfigExistenceChanged(playerId, id, false);
 		return subConfig;
+	}
+
+	// [Team Claims] the Team Claims handler, but only for a team sub-config ID of a loaded real player config
+	@Nullable
+	private xaero.pac.common.server.claims.TeamClaimsIntegration.TeamClaimsHandler getTeamClaimsHandlerForSub(String subId){
+		if(type != PlayerConfigType.PLAYER || playerId == null || !manager.isLoaded())
+			return null;
+		return xaero.pac.common.server.claims.TeamClaimsIntegration.getHandlerForSubId(subId);
 	}
 
 	@Override

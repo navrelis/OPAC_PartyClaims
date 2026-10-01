@@ -77,19 +77,17 @@ public class CreatePartyCommand {
 		IServerData<IServerClaimsManager<IPlayerChunkClaim, IServerPlayerClaimInfo<IPlayerDimensionClaims<IPlayerClaimPosList>>, IServerDimensionClaimsManager<IServerRegionClaims>>, IServerParty<IPartyMember, IPartyPlayerInfo, IPartyAlly>> serverData = ServerData.from(server);
 		AdaptiveLocalizer adaptiveLocalizer = serverData.getAdaptiveLocalizer();
 		IPartyManager<IServerParty<IPartyMember, IPartyPlayerInfo, IPartyAlly>> partyManager = serverData.getPartyManager();
+		// [Team Claims] with a team name, the shared Team Claims create path validates the name, creates
+		// and names the party, sets up the team config and reports the outcome (same as /teamclaims create)
+		xaero.pac.common.server.claims.TeamClaimsIntegration.TeamClaimsHandler tcHandler =
+				xaero.pac.common.server.claims.TeamClaimsIntegration.getHandler();
+		if(teamName != null && tcHandler != null)
+			return tcHandler.createPartyWithTeamName(context.getSource(), player, ownerProfile, teamName);
 		partyManager.createPartyForOwner(ownerProfile);
-		// [Team Claims] name the new party after the given team name
+		// [Team Claims] without Team Claims active, the team name is just the party name
 		if(teamName != null && !teamName.isBlank())
 			serverData.getPlayerConfigManager().getLoadedConfig(ownerProfile.getId())
 					.tryToSet(PlayerConfigOptions.PARTY_NAME, teamName);
-		// [Team Claims] create the team config and everyone's team sub-config right away
-		xaero.pac.common.server.claims.TeamClaimsIntegration.TeamClaimsHandler tcHandler =
-				xaero.pac.common.server.claims.TeamClaimsIntegration.getHandler();
-		if(tcHandler != null) {
-			ServerPlayer tcOwner = server.getPlayerList().getPlayer(ownerProfile.getId());
-			if(tcOwner != null)
-				tcHandler.onPartyCreated(tcOwner);
-		}
 		player.sendSystemMessage(adaptiveLocalizer.getFor(player, "gui.xaero_parties_party_created"));
 		serverData.getPlayerPermissionChangeHandler().sendCommandsAndUpdatePermissions(player, serverData, false);
 		return 1;
