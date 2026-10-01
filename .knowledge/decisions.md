@@ -13,3 +13,4 @@
 - T8 roles design: claim-role check in existing interceptClaim hook (it knows the subConfigIndex); unclaim/forceload roles via OPAC's official IClaimActionListenerAPI (addon register context) -> no new upstream hooks, forced/admin actions bypass naturally. Rank thresholds reuse OPAC PartyMemberRank (MEMBER<CLAIMER<MODERATOR<ADMIN) + OWNER; default MEMBER keeps current behaviour.
 - Roles: claiming over an own-team team claim with a personal sub-config requires the unclaim level (otherwise unclaim role is bypassable).
 - A forceloaded new team claim (only convert creates one) needs claim AND forceload role — keeps the forceload role non-bypassable.
+- Fork metadata: sources/issues URLs point to github.com/navrelis/OPAC_PartyClaims (fork bugs must not go to upstream); homepage stays upstream OPAC.

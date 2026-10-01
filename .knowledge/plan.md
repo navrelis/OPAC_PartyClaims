@@ -15,5 +15,5 @@ Gradle builds share one project dir -> tasks that build run sequentially unless 
 | 7 | `/teamclaims info` + `/teamclaims list` | M/E | Sonnet | 6 | done | info: team, members, per-member budget, forceloads; list: claim positions paged; localized; test |
 | 8 | Team roles: team admins set who may claim / unclaim / forceload team land (owner / admins / members) | M/H | Opus | 7 | done | enforced server-side in bridge predicates; persisted per team; command to set; tests |
 | 9 | `/teamclaims convert` personal <-> team claims in an area (radius cap from config, budget-checked) | M/H | Opus | 8 | done | uses OPAC claim path, budget respected, tests |
-| 10 | Release prep: version `1.1.0+opac.0.31.6`, README, CURSEFORGE text, export jars for both loaders to `ExportedJars/v1.1.0/` | S/E | Sonnet | 9 | in progress | both jars built, metadata correct, docs updated |
-| 11 | Final acceptance: full clean build both loaders, all tests, leftover scan, Graphify graph, report.md, push | – | lead | 10 | open | report.md; pushed |
+| 10 | Release prep: version `1.1.0+opac.0.31.6`, README, CURSEFORGE text, export jars for both loaders to `ExportedJars/v1.1.0/` | S/E | Sonnet | 9 | done | both jars built, metadata correct, docs updated |
+| 11 | Final acceptance: full clean build both loaders, all tests, leftover scan, Graphify graph, report.md, push | – | lead | 10 | in progress | report.md; pushed |

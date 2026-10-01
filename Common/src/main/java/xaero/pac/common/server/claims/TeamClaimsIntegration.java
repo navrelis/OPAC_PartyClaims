@@ -111,7 +111,15 @@ public final class TeamClaimsIntegration {
 		/**
 		 * Called by {@code ServerClaimsManager.tryToClaimHelper} for a new claim only
 		 * (never for the forceload/unforceload re-entry, server claims or forced requests).
-		 * Checks the shared team claim budget of every party member.
+		 * Checks the team roles and the shared team claim budget of every party member:
+		 * <ul>
+		 * <li>a claim made with the team sub-config needs the team's claim role (and, when {@code forceLoaded},
+		 * the forceload role as well), checked before the budget so that the role is the reported reason, and
+		 * then has to fit into the shared team claim budget of every member;</li>
+		 * <li>a personal claim that replaces a team claim of the player's own team takes that claim away from the
+		 * team, so it needs the team's unclaim role;</li>
+		 * <li>any other personal claim is not restricted.</li>
+		 * </ul>
 		 *
 		 * @return non-null ClaimResult to reject the claim, null to proceed normally
 		 */
