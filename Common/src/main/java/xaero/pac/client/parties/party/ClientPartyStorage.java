@@ -22,6 +22,7 @@ import xaero.pac.common.parties.party.IParty;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
+import java.util.List;
 
 public class ClientPartyStorage implements IClientPartyStorage<ClientPartyAllyInfo, ClientParty, ClientPartyMemberDynamicInfoSyncableStorage> {
 
@@ -34,6 +35,7 @@ public class ClientPartyStorage implements IClientPartyStorage<ClientPartyAllyIn
 	private int loadingMemberLimit;
 	private int loadingInviteLimit;
 	private int loadingAllyLimit;
+	private List<ClientReceivedPartyInvite> receivedInvites = List.of();
 	private final ClientPartyAllyInfoStorage allyInfoStorage;
 	private final ClientPartyMemberDynamicInfoSyncableStorage partyMemberDynamicInfoSyncableStorage;
 	
@@ -165,8 +167,20 @@ public class ClientPartyStorage implements IClientPartyStorage<ClientPartyAllyIn
 		return this.partyMemberDynamicInfoSyncableStorage;
 	}
 
+	@Nonnull
+	@Override
+	public List<ClientReceivedPartyInvite> getReceivedInvites() {
+		return receivedInvites;
+	}
+
+	@Override
+	public void setReceivedInvites(@Nonnull List<ClientReceivedPartyInvite> receivedInvites) {
+		this.receivedInvites = List.copyOf(receivedInvites);
+	}
+
 	public void reset() {
 		setParty(null);
+		receivedInvites = List.of();
 	}
 	
 	public static final class Builder {

@@ -34,6 +34,7 @@ import xaero.pac.client.claims.player.mode.ClientClaimingModeHandler;
 import xaero.pac.client.command.util.CommandUtil;
 import xaero.pac.client.controls.keybinding.IKeyBindingHelper;
 import xaero.pac.client.gui.component.CachedComponentSupplier;
+import xaero.pac.client.gui.party.PartyScreen;
 import xaero.pac.client.gui.widget.dropdown.DropDownWidget;
 import xaero.pac.client.parties.party.IClientParty;
 import xaero.pac.client.parties.party.IClientPartyAllyInfo;
@@ -135,6 +136,7 @@ public class MainMenu extends XPACScreen {
 	private boolean serverHasPartiesEnabled;
 	private Button configsButton;
 	private Button aboutPartyButton;
+	private Button partyScreenButton;
 	private Button claimButton;
 	private Button forceloadButton;
 	private List<ClaimingMode> claimModeOptions;
@@ -154,6 +156,7 @@ public class MainMenu extends XPACScreen {
 		addRenderableWidget(configsButton = Button.builder(Component.translatable("gui.xaero_pac_ui_config_menu"), this::onConfigsButton).bounds(width / 2 - 100, height / 8 + 8, 200, 20).build());
 		
 		aboutPartyButton = Button.builder(Component.translatable("gui.xaero_pac_ui_about_party"), this::onAboutPartyButton).tooltip(Tooltip.create(ABOUT_PARTY_COMMAND)).bounds(width / 2 - 100, height / 8 + 40, 70, 20).build();
+		partyScreenButton = Button.builder(Component.translatable("gui.xaero_pac_party_screen_open"), this::onPartyScreenButton).bounds(width / 2 - 100, height / 8 + 64, 70, 20).build();
 
 		addRenderableWidget(claimingModeMenu = setupClaimModeDropdown());
 
@@ -169,6 +172,7 @@ public class MainMenu extends XPACScreen {
 
 		if(serverHasPartiesEnabled){
 			addRenderableWidget(aboutPartyButton);
+			addRenderableWidget(partyScreenButton);
 		}
 		if(serverHasClaimsEnabled){
 			addRenderableWidget(claimButton);
@@ -232,7 +236,8 @@ public class MainMenu extends XPACScreen {
 		serverHasClaimsEnabled = mainCap.getClientWorldData().serverHasClaimsEnabled();
 		serverHasPartiesEnabled = mainCap.getClientWorldData().serverHasPartiesEnabled();
 		aboutPartyButton.active = serverHasMod && OpenPartiesAndClaims.INSTANCE.getClientDataInternal().getClientPartyStorage().getParty() != null;
-		
+		partyScreenButton.active = serverHasMod && serverHasPartiesEnabled;
+
 		forceloadButton.active = false;
 		IClientClaimsManager<?, ?, ?> claimsManager = OpenPartiesAndClaims.INSTANCE.getClientDataInternal().getClaimsManager();
 		if(serverHasMod && !claimsManager.isLoading()) {
@@ -275,6 +280,10 @@ public class MainMenu extends XPACScreen {
 	private void onAboutPartyButton(Button b) {
 		CommandUtil.sendCommand(minecraft, ABOUT_PARTY_COMMAND.getString().substring(1));
 		minecraft.setScreen(null);
+	}
+
+	private void onPartyScreenButton(Button b) {
+		minecraft.setScreen(new PartyScreen(escape, this));
 	}
 
 	private boolean wouldClaim(IPlayerChunkClaim currentClaim){
