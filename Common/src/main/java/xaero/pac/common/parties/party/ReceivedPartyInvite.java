@@ -16,7 +16,7 @@
  * If not, see <https://www.gnu.org/licenses/>.
  */
 
-package xaero.pac.client.parties.party;
+package xaero.pac.common.parties.party;
 
 import java.util.UUID;
 
@@ -27,5 +27,5 @@ import java.util.UUID;
  * @param partyName  the display name of the party
  * @param ownerName  the username of the owner of the party
  */
-public record ClientReceivedPartyInvite(UUID partyId, String partyName, String ownerName) {
+public record ReceivedPartyInvite(UUID partyId, String partyName, String ownerName) {
 }

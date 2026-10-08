@@ -18,7 +18,9 @@
 
 package xaero.pac.client.parties.party;
 
+import xaero.pac.common.packet.parties.PartyBudgetData;
 import xaero.pac.common.parties.party.IParty;
+import xaero.pac.common.parties.party.ReceivedPartyInvite;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
@@ -35,7 +37,9 @@ public class ClientPartyStorage implements IClientPartyStorage<ClientPartyAllyIn
 	private int loadingMemberLimit;
 	private int loadingInviteLimit;
 	private int loadingAllyLimit;
-	private List<ClientReceivedPartyInvite> receivedInvites = List.of();
+	private List<ReceivedPartyInvite> receivedInvites = List.of();
+	private PartyBudgetData budget;
+	private long budgetReceivedTime;
 	private final ClientPartyAllyInfoStorage allyInfoStorage;
 	private final ClientPartyMemberDynamicInfoSyncableStorage partyMemberDynamicInfoSyncableStorage;
 	
@@ -169,18 +173,37 @@ public class ClientPartyStorage implements IClientPartyStorage<ClientPartyAllyIn
 
 	@Nonnull
 	@Override
-	public List<ClientReceivedPartyInvite> getReceivedInvites() {
+	public List<ReceivedPartyInvite> getReceivedInvites() {
 		return receivedInvites;
 	}
 
 	@Override
-	public void setReceivedInvites(@Nonnull List<ClientReceivedPartyInvite> receivedInvites) {
+	public void setReceivedInvites(@Nonnull List<ReceivedPartyInvite> receivedInvites) {
 		this.receivedInvites = List.copyOf(receivedInvites);
+	}
+
+	@Nullable
+	@Override
+	public PartyBudgetData getBudget() {
+		return budget;
+	}
+
+	@Override
+	public long getBudgetReceivedTime() {
+		return budgetReceivedTime;
+	}
+
+	@Override
+	public void setBudget(@Nullable PartyBudgetData budget, long receivedTime) {
+		this.budget = budget;
+		this.budgetReceivedTime = receivedTime;
 	}
 
 	public void reset() {
 		setParty(null);
 		receivedInvites = List.of();
+		budget = null;
+		budgetReceivedTime = 0;
 	}
 	
 	public static final class Builder {

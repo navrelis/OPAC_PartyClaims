@@ -24,6 +24,7 @@ import xaero.pac.common.packet.claims.*;
 import xaero.pac.common.packet.config.*;
 import xaero.pac.common.packet.config.group.*;
 import xaero.pac.common.packet.parties.ClientboundPartyAllyPacket;
+import xaero.pac.common.packet.parties.ClientboundPartyBudgetPacket;
 import xaero.pac.common.packet.parties.ClientboundPartyInvitesPacket;
 import xaero.pac.common.packet.parties.ClientboundPartyNamePacket;
 import xaero.pac.common.packet.parties.ClientboundPartyPacket;
@@ -214,6 +215,12 @@ public class PacketRegister {
 		packetHandler.register(52, ServerboundPartyInviteDeclinePacket.class,
 				partyInviteDeclineCodec, partyInviteDeclineCodec,
 				new ServerboundPartyInviteDeclinePacket.ServerHandler(), null
+		);
+
+		ClientboundPartyBudgetPacket.Codec partyBudgetCodec = new ClientboundPartyBudgetPacket.Codec();
+		packetHandler.register(53, ClientboundPartyBudgetPacket.class,
+				partyBudgetCodec, partyBudgetCodec,
+				null, new ClientboundPartyBudgetPacket.ClientHandler()
 		);
 	}
 

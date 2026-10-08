@@ -20,7 +20,7 @@ package xaero.pac.common.packet.parties;
 
 import net.minecraft.network.FriendlyByteBuf;
 import xaero.pac.OpenPartiesAndClaims;
-import xaero.pac.client.parties.party.ClientReceivedPartyInvite;
+import xaero.pac.common.parties.party.ReceivedPartyInvite;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -39,9 +39,9 @@ public class ClientboundPartyInvitesPacket {
 	public static final int MAX_OWNER_NAME_LENGTH = 64;
 	private static final int MAX_PACKET_SIZE = 65536;
 
-	private final List<ClientReceivedPartyInvite> invites;
+	private final List<ReceivedPartyInvite> invites;
 
-	public ClientboundPartyInvitesPacket(List<ClientReceivedPartyInvite> invites) {
+	public ClientboundPartyInvitesPacket(List<ReceivedPartyInvite> invites) {
 		super();
 		this.invites = invites;
 	}
@@ -62,12 +62,12 @@ public class ClientboundPartyInvitesPacket {
 				int count = input.readVarInt();
 				if(count < 0 || count > MAX_ENTRIES)
 					return null;
-				List<ClientReceivedPartyInvite> invites = new ArrayList<>(count);
+				List<ReceivedPartyInvite> invites = new ArrayList<>(count);
 				for(int i = 0; i < count; i++) {
 					UUID partyId = input.readUUID();
 					String partyName = input.readUtf(MAX_PARTY_NAME_LENGTH);
 					String ownerName = input.readUtf(MAX_OWNER_NAME_LENGTH);
-					invites.add(new ClientReceivedPartyInvite(partyId, partyName, ownerName));
+					invites.add(new ReceivedPartyInvite(partyId, partyName, ownerName));
 				}
 				if(input.readableBytes() > 0)
 					return null;
@@ -82,7 +82,7 @@ public class ClientboundPartyInvitesPacket {
 			int count = Math.min(t.invites.size(), MAX_ENTRIES);
 			u.writeVarInt(count);
 			for(int i = 0; i < count; i++) {
-				ClientReceivedPartyInvite invite = t.invites.get(i);
+				ReceivedPartyInvite invite = t.invites.get(i);
 				u.writeUUID(invite.partyId());
 				u.writeUtf(limitLength(invite.partyName(), MAX_PARTY_NAME_LENGTH), MAX_PARTY_NAME_LENGTH);
 				u.writeUtf(limitLength(invite.ownerName(), MAX_OWNER_NAME_LENGTH), MAX_OWNER_NAME_LENGTH);
