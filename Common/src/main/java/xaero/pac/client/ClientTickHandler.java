@@ -22,6 +22,7 @@ import net.minecraft.client.Minecraft;
 import xaero.pac.OpenPartiesAndClaims;
 import xaero.pac.client.event.api.OPACClientAddonRegisterEventContext;
 import xaero.pac.client.gui.MainMenu;
+import xaero.pac.client.gui.party.PartyScreen;
 
 public class ClientTickHandler {
 
@@ -35,6 +36,8 @@ public class ClientTickHandler {
 		}
 		if(clientData.getKeyBindings().openModMenu.consumeClick())
 			Minecraft.getInstance().setScreen(new MainMenu(null, null));
+		if(clientData.getKeyBindings().openPartyMenu.consumeClick())
+			Minecraft.getInstance().setScreen(new PartyScreen(null, null));
 	}
 
 }	

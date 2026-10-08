@@ -106,6 +106,7 @@ public class ServerPlayerData extends ServerPlayerDataAPI {
 	private GameProfile claimTransferRequestSourcePlayerProfile;
 	private UUID claimTransferRequestTargetPlayerId;
 	private long claimTransferRequestTime;
+	private long lastPartyInvitesRequestTick = -1000;
 
 	public ServerPlayerData(
 			IServerData<IServerClaimsManager<IPlayerChunkClaim, IServerPlayerClaimInfo<IPlayerDimensionClaims<IPlayerClaimPosList>>, IServerDimensionClaimsManager<IServerRegionClaims>>, IServerParty<IPartyMember, IPartyPlayerInfo, IPartyAlly>>
@@ -325,6 +326,14 @@ public class ServerPlayerData extends ServerPlayerDataAPI {
 
 	public void setLastOtherConfigRequest(UUID lastOtherConfigRequest) {
 		this.lastOtherConfigRequest = lastOtherConfigRequest;
+	}
+
+	public long getLastPartyInvitesRequestTick() {
+		return lastPartyInvitesRequestTick;
+	}
+
+	public void setLastPartyInvitesRequestTick(long lastPartyInvitesRequestTick) {
+		this.lastPartyInvitesRequestTick = lastPartyInvitesRequestTick;
 	}
 
 	public void setHasMod(boolean hasMod) {

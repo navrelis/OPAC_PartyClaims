@@ -23,6 +23,7 @@ import xaero.pac.common.parties.party.IParty;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
+import java.util.List;
 
 public interface IClientPartyStorage
 <
@@ -64,5 +65,15 @@ public interface IClientPartyStorage
 	public void setAllyLimit(int allyLimit);
 	
 	public void setInviteLimit(int inviteLimit);
+
+	/**
+	 * Gets the invitations to parties that the server last reported for the local player.
+	 *
+	 * @return an immutable list of the received invites, not null
+	 */
+	@Nonnull
+	public List<ClientReceivedPartyInvite> getReceivedInvites();
+
+	public void setReceivedInvites(@Nonnull List<ClientReceivedPartyInvite> receivedInvites);
 	
 }

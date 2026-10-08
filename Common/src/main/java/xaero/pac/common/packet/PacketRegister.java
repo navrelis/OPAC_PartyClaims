@@ -24,9 +24,12 @@ import xaero.pac.common.packet.claims.*;
 import xaero.pac.common.packet.config.*;
 import xaero.pac.common.packet.config.group.*;
 import xaero.pac.common.packet.parties.ClientboundPartyAllyPacket;
+import xaero.pac.common.packet.parties.ClientboundPartyInvitesPacket;
 import xaero.pac.common.packet.parties.ClientboundPartyNamePacket;
 import xaero.pac.common.packet.parties.ClientboundPartyPacket;
 import xaero.pac.common.packet.parties.ClientboundPartyPlayerPacket;
+import xaero.pac.common.packet.parties.ServerboundPartyInviteDeclinePacket;
+import xaero.pac.common.packet.parties.ServerboundPartyInvitesRequestPacket;
 import xaero.pac.common.parties.party.PartyMemberDynamicInfoSyncable;
 
 public class PacketRegister {
@@ -193,6 +196,24 @@ public class PacketRegister {
 		packetHandler.register(49, ClientboundPlayerConfigConfigurableOptionsPacket.class,
 				configurableOptionsCodec, configurableOptionsCodec,
 				null, new ClientboundPlayerConfigConfigurableOptionsPacket.ClientHandler()
+		);
+
+		ServerboundPartyInvitesRequestPacket.Codec partyInvitesRequestCodec = new ServerboundPartyInvitesRequestPacket.Codec();
+		packetHandler.register(50, ServerboundPartyInvitesRequestPacket.class,
+				partyInvitesRequestCodec, partyInvitesRequestCodec,
+				new ServerboundPartyInvitesRequestPacket.ServerHandler(), null
+		);
+
+		ClientboundPartyInvitesPacket.Codec partyInvitesCodec = new ClientboundPartyInvitesPacket.Codec();
+		packetHandler.register(51, ClientboundPartyInvitesPacket.class,
+				partyInvitesCodec, partyInvitesCodec,
+				null, new ClientboundPartyInvitesPacket.ClientHandler()
+		);
+
+		ServerboundPartyInviteDeclinePacket.Codec partyInviteDeclineCodec = new ServerboundPartyInviteDeclinePacket.Codec();
+		packetHandler.register(52, ServerboundPartyInviteDeclinePacket.class,
+				partyInviteDeclineCodec, partyInviteDeclineCodec,
+				new ServerboundPartyInviteDeclinePacket.ServerHandler(), null
 		);
 	}
 
