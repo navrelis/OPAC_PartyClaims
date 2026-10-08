@@ -16,3 +16,11 @@
 - Fork metadata: sources/issues URLs point to github.com/navrelis/OPAC_PartyClaims (fork bugs must not go to upstream); homepage stays upstream OPAC.
 - Graphify output (graphify-out/, ~52 MB incl. 25 MB graph.json + cache) stays local and uncommitted: too large and churny for git history; the next session on this machine reads it from disk.
 - GitHub default branch = fabric-port (main only holds the old initial commit); main left untouched.
+- 2026-10-08 v1.2: budgets are separated (overrides the v1.1 "no pooled budget" decision) — explicit user requirement; team pool limit = f(member count), private limit = OPAC's own.
+- FTB Teams sync is part of the Team Claims module (active only with Team Claims enabled + FTB Teams present + `ftbTeamsSync`) — reuses the existing party hooks/event queue; no second bridge.
+- FTB has no events for invites/rank changes -> those two are reconciled about once a second from the FTB side; everything else is event-driven.
+- Party screen acts through the existing `/oparties` commands (like OPAC's own menu) — keeps every permission check, message and sync hook in one place; only "invites sent to me" + decline need new packets.
+- Over-limit rule (user): warning + 7 days real time (config) then newest team claims are unclaimed. Applied to team forceloads too (newest are un-forceloaded, the claim stays).
+- Party disband: team claims become private claims while the former owner of each claim has private room; the excess is unclaimed at once (newest first) — otherwise disbanding would turn a team pool into extra private land. Lead decision, to be stated in the report.
+- T1 (budgets, main checkout) and T2 (party screen, worktree) run in parallel with disjoint files; T2 only reports its lang keys, T4 writes them — the lang file belongs to one agent at a time.
+- No Graphify update this session (user).
