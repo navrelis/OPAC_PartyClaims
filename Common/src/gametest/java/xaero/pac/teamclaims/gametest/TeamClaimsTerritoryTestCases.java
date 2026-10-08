@@ -74,7 +74,7 @@ public final class TeamClaimsTerritoryTestCases {
         int x0 = 20000;
         try {
             party = createPartyWithTeam(server, ownerProfile, List.of(memberProfile));
-            otherParty = createPartyWithTeam(server, otherOwnerProfile, List.of());
+            otherParty = createPartyWithTeam(server, otherOwnerProfile, List.of(profile("T20_OtherMember")));//2 members to make team claims
             claim(helper, server, party.getId(), ownerProfile, true, x0);
             claim(helper, server, party.getId(), memberProfile, true, x0 + 1);
             claim(helper, server, party.getId(), ownerProfile, false, x0 + 2);
@@ -226,7 +226,7 @@ public final class TeamClaimsTerritoryTestCases {
         int x0 = 21000;
         try {
             party = createPartyWithTeam(server, ownerProfile, List.of(memberProfile));
-            otherParty = createPartyWithTeam(server, otherOwnerProfile, List.of());
+            otherParty = createPartyWithTeam(server, otherOwnerProfile, List.of(profile("T21_OtherMember")));//2 members to make team claims
             claim(helper, server, party.getId(), ownerProfile, true, x0);                 // team A, owner
             claim(helper, server, party.getId(), memberProfile, true, x0 + 1);            // team A, member
             claim(helper, server, party.getId(), ownerProfile, true, x0 + 2);             // team A, owner again
@@ -276,7 +276,7 @@ public final class TeamClaimsTerritoryTestCases {
         var defaultConfig = TeamClaimsServerConfig.CONFIG.territoryMessagesDefault;
         int x0 = 22000;
         try {
-            party = createPartyWithTeam(server, ownerProfile, List.of());
+            party = createPartyWithTeam(server, ownerProfile, List.of(profile("T22_Member")));//2 members to make team claims
             claim(helper, server, party.getId(), ownerProfile, true, x0);
             claim(helper, server, party.getId(), ownerProfile, false, x0 + 1);
             helper.assertTrue(ServerConfig.CONFIG.claimWelcomeMessages.get(), "expected OPAC's claimWelcomeMessages option to be on");

@@ -52,9 +52,9 @@ class TeamClaimsBridgeHandler implements TeamClaimsIntegration.TeamClaimsHandler
             UUID id, int x, int z, PlayerChunkClaim currentClaim) {
         TeamClaimManager tcm = TeamClaimsCommon.getClaimManager();
         if (tcm == null || currentClaim == null) return null;
-        // Only team claims share a budget; personal claims keep stock OPAC behavior.
+        // Only a team claim's forceload counts for the team; a private one is OPAC's own check on the private count.
         if (!tcm.isTeamClaim(currentClaim)) return null;
-        return tcm.checkTeamForceloadBudget(id, currentClaim);
+        return tcm.checkTeamForceloadBudget(id, new TeamClaimManager.ClaimPos(dimension, x, z), currentClaim);
     }
 
     @Override
@@ -65,44 +65,75 @@ class TeamClaimsBridgeHandler implements TeamClaimsIntegration.TeamClaimsHandler
         TeamClaimManager tcm = TeamClaimsCommon.getClaimManager();
         MinecraftServer server = TeamClaimsCommon.getServer();
         if (tcm == null || server == null) return null;
-        // The claim being replaced (if any) decides what this claim really adds to the team's
-        // totals and to the previous owner's own count — the budget check needs both.
+        // The claim being replaced (if any) decides what this claim really adds to which budget.
         PlayerChunkClaim existing = claimsManager.get(dimension, x, z);
-        // Only check the team role and budget for claims made with the team sub-config, not personal ones.
-        // A personal claim replacing a team claim of the own team still takes it away from the team,
-        // so it needs the team's unclaim role.
-        if (!tcm.isTeamSubConfigIndex(playerId, subConfigIndex))
-            return TeamRoles.checkClaimOverTeamClaim(tcm, server, playerId, existing);
-        // The role comes first: a member who may not make team claims gets that reason, not a budget one. A forceloaded
-        // team claim also needs the forceload role (OPAC's claim commands never claim forceloaded, convert does).
+        if (!tcm.isTeamSubConfigIndex(playerId, subConfigIndex)) {
+            // A private claim. Replacing a team claim of the own team takes it away from the team, so it needs the
+            // team's unclaim role. The private claim limit is OPAC's own check (on the private count); only a
+            // forceloaded private claim, which OPAC itself never makes, has to be checked for the forceload limit here.
+            ClaimResult<PlayerChunkClaim> roleResult = TeamRoles.checkClaimOverTeamClaim(tcm, server, playerId, existing);
+            if (roleResult != null || !forceLoaded) return roleResult;
+            return tcm.checkPrivateForceloadBudget(playerId, existing);
+        }
+        // A team claim. The role comes first: a member who may not make team claims gets that reason, not a budget one.
+        // A forceloaded team claim also needs the forceload role (OPAC's claim commands never claim forceloaded, convert
+        // does). Then the team's own budget, which is all that limits a team claim.
         ClaimResult<PlayerChunkClaim> roleResult = TeamRoles.checkClaim(server, playerId, forceLoaded);
         if (roleResult != null) return roleResult;
-        return tcm.checkTeamClaimBudget(playerId, forceLoaded, existing);
+        return tcm.checkTeamClaimBudget(playerId, new TeamClaimManager.ClaimPos(dimension, x, z), forceLoaded, existing);
     }
 
     @Override
-    public boolean isComputingOverhead() {
-        return TeamClaimManager.COMPUTING_OVERHEAD.get();
+    public boolean isTeamSubConfigIndex(UUID playerId, int subConfigIndex) {
+        TeamClaimManager tcm = serverThreadClaimManager();
+        return tcm != null && tcm.isTeamSubConfigIndex(playerId, subConfigIndex);
     }
 
     @Override
-    public int getTeamClaimOverheadForPlayer(UUID playerUUID) {
+    public boolean isTeamClaim(@Nullable IPlayerChunkClaim claim) {
+        TeamClaimManager tcm = serverThreadClaimManager();
+        return tcm != null && tcm.isTeamClaim(claim);
+    }
+
+    /**
+     * The claim manager for the two lookups above, which use its server-thread confined caches: null (so "not a team
+     * claim", the stock behaviour) should one of the hooks ever run on another thread.
+     */
+    @Nullable
+    private static TeamClaimManager serverThreadClaimManager() {
+        MinecraftServer server = TeamClaimsCommon.getServer();
+        return server != null && server.isSameThread() ? TeamClaimsCommon.getClaimManager() : null;
+    }
+
+    @Override
+    public int getOwnedTeamClaimCount(UUID playerId) {
         TeamClaimManager tcm = TeamClaimsCommon.getClaimManager();
-        return tcm != null ? tcm.getTeamClaimOverheadForPlayer(playerUUID) : 0;
+        return tcm != null ? tcm.getOwnedTeamClaimCount(playerId) : 0;
     }
 
     @Override
-    public int getTeamForceloadOverheadForPlayer(UUID playerUUID) {
+    public int getOwnedTeamForceloadCount(UUID playerId) {
         TeamClaimManager tcm = TeamClaimsCommon.getClaimManager();
-        return tcm != null ? tcm.getTeamForceloadOverheadForPlayer(playerUUID) : 0;
+        return tcm != null ? tcm.getOwnedTeamForceloadCount(playerId) : 0;
     }
 
     @Override
-    public boolean hasTeamOverhead(UUID playerUUID) {
-        TeamClaimManager cm = TeamClaimsCommon.getClaimManager();
-        if (cm == null) return false;
-        return cm.getTeamClaimOverheadForPlayer(playerUUID) > 0
-                || cm.getTeamForceloadOverheadForPlayer(playerUUID) > 0;
+    @Nullable
+    public TeamClaimsIntegration.BudgetNumbers getUsedTeamBudget(UUID playerId) {
+        TeamClaimManager tcm = TeamClaimsCommon.getClaimManager();
+        return tcm != null ? tcm.getUsedTeamBudget(playerId) : null;
+    }
+
+    @Override
+    public boolean usesServerSideClaimCounts(UUID playerId) {
+        TeamClaimManager tcm = TeamClaimsCommon.getClaimManager();
+        return tcm != null && tcm.usesServerSideClaimCounts(playerId);
+    }
+
+    @Override
+    public boolean hasPrivateForceloadLimitChangedUnnoticed(UUID playerId, int privateForceloadLimit) {
+        TeamClaimManager tcm = TeamClaimsCommon.getClaimManager();
+        return tcm != null && tcm.hasPrivateForceloadLimitChangedUnnoticed(playerId, privateForceloadLimit);
     }
 
     @Override

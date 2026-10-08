@@ -22,8 +22,18 @@ public class TeamClaimsConvertTest implements FabricGameTest {
     }
 
     @GameTest(template = FabricGameTest.EMPTY_STRUCTURE)
-    public void toTeamStopsAtBudget(GameTestHelper helper) {
-        TeamClaimsConvertTestCases.toTeamStopsAtBudget(helper);
+    public void toTeamStopsAtTeamLimit(GameTestHelper helper) {
+        TeamClaimsConvertTestCases.toTeamStopsAtTeamLimit(helper);
+    }
+
+    @GameTest(template = FabricGameTest.EMPTY_STRUCTURE)
+    public void toPersonalStopsAtPrivateLimit(GameTestHelper helper) {
+        TeamClaimsConvertTestCases.toPersonalStopsAtPrivateLimit(helper);
+    }
+
+    @GameTest(template = FabricGameTest.EMPTY_STRUCTURE)
+    public void toTeamSkipsForceloadedAtTeamForceloadLimit(GameTestHelper helper) {
+        TeamClaimsConvertTestCases.toTeamSkipsForceloadedAtTeamForceloadLimit(helper);
     }
 
     @GameTest(template = FabricGameTest.EMPTY_STRUCTURE)

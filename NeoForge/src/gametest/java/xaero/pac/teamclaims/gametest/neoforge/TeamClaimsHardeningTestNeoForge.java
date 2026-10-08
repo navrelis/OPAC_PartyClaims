@@ -24,8 +24,8 @@ public final class TeamClaimsHardeningTestNeoForge {
     }
 
     @GameTest(template = TeamClaimsGameTestMod.EMPTY_STRUCTURE)
-    public static void overheadStaysCorrectAfterManyChanges(GameTestHelper helper) {
-        TeamClaimsHardeningTestCases.overheadStaysCorrectAfterManyChanges(helper);
+    public static void budgetsStayCorrectAfterManyChanges(GameTestHelper helper) {
+        TeamClaimsHardeningTestCases.budgetsStayCorrectAfterManyChanges(helper);
     }
 
     @GameTest(template = TeamClaimsGameTestMod.EMPTY_STRUCTURE)

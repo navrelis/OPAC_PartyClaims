@@ -68,6 +68,22 @@ public class ClaimingModes {
 				int forceloadCount = playerClaims.getForceloadCount();
 				int claimLimit = claimsManager.getPlayerFullClaimLimit(playerId);
 				int forceloadLimit = claimsManager.getPlayerFullForceloadLimit(playerId);
+				// [Team Claims] private and team claims are two separate budgets: the player sees the team's
+				// numbers while their team sub-config is the used sub-claim, else their private numbers
+				xaero.pac.common.server.claims.TeamClaimsIntegration.TeamClaimsHandler tcHandler =
+						xaero.pac.common.server.claims.TeamClaimsIntegration.getHandler();
+				if(tcHandler != null) {
+					xaero.pac.common.server.claims.TeamClaimsIntegration.BudgetNumbers tcTeamBudget = tcHandler.getUsedTeamBudget(playerId);
+					if(tcTeamBudget != null) {
+						claimCount = tcTeamBudget.claimCount();
+						forceloadCount = tcTeamBudget.forceloadCount();
+						claimLimit = tcTeamBudget.claimLimit();
+						forceloadLimit = tcTeamBudget.forceloadLimit();
+					} else {
+						claimCount -= tcHandler.getOwnedTeamClaimCount(playerId);
+						forceloadCount -= tcHandler.getOwnedTeamForceloadCount(playerId);
+					}
+				}
 				return new ClaimingModeLimits(
 						ClaimingModes.PLAYER, claimCount, forceloadCount, claimLimit, forceloadLimit
 				);
@@ -117,6 +133,14 @@ public class ClaimingModes {
 						partyForceloadCount = partyOwnerClaims.getForceloadCount();
 						partyClaimLimit = claimsManager.getPlayerFullClaimLimit(partyOwner);
 						partyForceloadLimit = claimsManager.getPlayerFullForceloadLimit(partyOwner);
+						// [Team Claims] native party claims are private claims of the party owner, the owner's
+						// team claims have their own budget
+						xaero.pac.common.server.claims.TeamClaimsIntegration.TeamClaimsHandler tcHandler =
+								xaero.pac.common.server.claims.TeamClaimsIntegration.getHandler();
+						if(tcHandler != null) {
+							partyClaimCount -= tcHandler.getOwnedTeamClaimCount(partyOwner);
+							partyForceloadCount -= tcHandler.getOwnedTeamForceloadCount(partyOwner);
+						}
 					}
 				}
 				return new ClaimingModeLimits(

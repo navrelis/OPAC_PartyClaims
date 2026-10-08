@@ -20,13 +20,13 @@ public class TeamClaimsLogicTest implements FabricGameTest {
     }
 
     @GameTest(template = FabricGameTest.EMPTY_STRUCTURE)
-    public void teamClaimCountsAsOverhead(GameTestHelper helper) {
-        TeamClaimsLogicTestCases.teamClaimCountsAsOverhead(helper);
+    public void teamClaimsCountInTeamBudgetOnly(GameTestHelper helper) {
+        TeamClaimsLogicTestCases.teamClaimsCountInTeamBudgetOnly(helper);
     }
 
     @GameTest(template = FabricGameTest.EMPTY_STRUCTURE)
-    public void teamClaimRejectedWhenTeammateAtLimit(GameTestHelper helper) {
-        TeamClaimsLogicTestCases.teamClaimRejectedWhenTeammateAtLimit(helper);
+    public void privateLimitDoesNotBlockTeamClaims(GameTestHelper helper) {
+        TeamClaimsLogicTestCases.privateLimitDoesNotBlockTeamClaims(helper);
     }
 
     @GameTest(template = FabricGameTest.EMPTY_STRUCTURE)
@@ -62,8 +62,8 @@ public class TeamClaimsLogicTest implements FabricGameTest {
     }
 
     @GameTest(template = FabricGameTest.EMPTY_STRUCTURE)
-    public void overheadStaysCorrectAfterManyChanges(GameTestHelper helper) {
-        TeamClaimsHardeningTestCases.overheadStaysCorrectAfterManyChanges(helper);
+    public void budgetsStayCorrectAfterManyChanges(GameTestHelper helper) {
+        TeamClaimsHardeningTestCases.budgetsStayCorrectAfterManyChanges(helper);
     }
 
     @GameTest(template = FabricGameTest.EMPTY_STRUCTURE)

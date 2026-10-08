@@ -26,12 +26,27 @@ public class TeamClaimsServerConfig {
     public static final int MAX_FORCELOAD_GRACE_MINUTES = 24 * 60;
     public static final int DEFAULT_CONVERT_MAX_RADIUS = 4;
     public static final int MAX_CONVERT_RADIUS = 16;
+    public static final int DEFAULT_TEAM_CLAIMS_MIN_MEMBERS = 2;
+    public static final int DEFAULT_TEAM_CLAIMS_BASE = 500;
+    public static final int DEFAULT_TEAM_CLAIMS_PER_EXTRA_MEMBER = 25;
+    public static final int DEFAULT_TEAM_FORCELOADS_BASE = 10;
+    public static final int DEFAULT_TEAM_FORCELOADS_PER_EXTRA_MEMBER = 2;
+    public static final int DEFAULT_OVER_LIMIT_GRACE_HOURS = 7 * 24;
+    public static final int MAX_OVER_LIMIT_GRACE_HOURS = 365 * 24;
+    /** Upper bound of the base and per-member options, far above anything a server would want. */
+    public static final int MAX_TEAM_BUDGET_VALUE = 1_000_000;
 
     public final ModConfigSpec.BooleanValue enabled;
     public final ModConfigSpec.IntValue maxTeamNameLength;
     public final ModConfigSpec.IntValue forceloadGraceMinutes;
     public final ModConfigSpec.BooleanValue territoryMessagesDefault;
     public final ModConfigSpec.IntValue convertMaxRadius;
+    public final ModConfigSpec.IntValue teamClaimsMinMembers;
+    public final ModConfigSpec.IntValue teamClaimsBase;
+    public final ModConfigSpec.IntValue teamClaimsPerExtraMember;
+    public final ModConfigSpec.IntValue teamForceloadsBase;
+    public final ModConfigSpec.IntValue teamForceloadsPerExtraMember;
+    public final ModConfigSpec.IntValue overLimitGraceHours;
 
     private TeamClaimsServerConfig(ModConfigSpec.Builder builder) {
         builder.push("teamClaims");
@@ -72,6 +87,49 @@ public class TeamClaimsServerConfig {
                         The largest radius (in chunks around the player's current chunk) of /teamclaims convert <toteam|topersonal> [radius].
                         0 = only the chunk the player stands in. The largest allowed value, 16, is a square of 33x33 chunks.""")
                 .defineInRange("convertMaxRadius", DEFAULT_CONVERT_MAX_RADIUS, 0, MAX_CONVERT_RADIUS);
+
+        teamClaimsMinMembers = builder
+                .comment("""
+                        How many members (the owner included, invited players not) a team needs before it can make team claims
+                        and team forceloads at all. A team with fewer members has a team claim limit and a team forceload limit of 0.
+                        Team claims have their own budget per team: they never count against a member's private claim limit
+                        (OPAC's maxPlayerClaims), and private claims never count against the team's.""")
+                .defineInRange("teamClaimsMinMembers", DEFAULT_TEAM_CLAIMS_MIN_MEMBERS, 1, 100);
+
+        teamClaimsBase = builder
+                .comment("""
+                        The team claim limit of a team that has exactly teamClaimsMinMembers members.
+                        The limit of a team is teamClaimsBase + (members - teamClaimsMinMembers) * teamClaimsPerExtraMember.""")
+                .defineInRange("teamClaimsBase", DEFAULT_TEAM_CLAIMS_BASE, 0, MAX_TEAM_BUDGET_VALUE);
+
+        teamClaimsPerExtraMember = builder
+                .comment("""
+                        How many team claims every member beyond teamClaimsMinMembers adds to the team claim limit.
+                        With the defaults: 2 members = 500, 3 members = 525, 4 members = 550 team claims.""")
+                .defineInRange("teamClaimsPerExtraMember", DEFAULT_TEAM_CLAIMS_PER_EXTRA_MEMBER, 0, MAX_TEAM_BUDGET_VALUE);
+
+        teamForceloadsBase = builder
+                .comment("""
+                        The team forceload limit of a team that has exactly teamClaimsMinMembers members.
+                        The limit of a team is teamForceloadsBase + (members - teamClaimsMinMembers) * teamForceloadsPerExtraMember.
+                        Team forceloads never count against a member's private forceload limit (OPAC's maxPlayerClaimForceloads).""")
+                .defineInRange("teamForceloadsBase", DEFAULT_TEAM_FORCELOADS_BASE, 0, MAX_TEAM_BUDGET_VALUE);
+
+        teamForceloadsPerExtraMember = builder
+                .comment("""
+                        How many team forceloads every member beyond teamClaimsMinMembers adds to the team forceload limit.
+                        With the defaults: 2 members = 10, 3 members = 12, 4 members = 14 team forceloads.""")
+                .defineInRange("teamForceloadsPerExtraMember", DEFAULT_TEAM_FORCELOADS_PER_EXTRA_MEMBER, 0, MAX_TEAM_BUDGET_VALUE);
+
+        overLimitGraceHours = builder
+                .comment("""
+                        How long (in real hours, also while the server is off) a team may stay above its team claim or team
+                        forceload limit, e.g. after a member left. The team can make no new team claims during that time and its
+                        members are warned. When the time is up, the most recently made team claims are unclaimed (or the most
+                        recent team forceloads turned off) until the team is within its limit again. A team that gets back within
+                        its limit earlier keeps everything. A running countdown keeps its end time when this option is changed.
+                        0 = the excess is removed at the next check (at the latest a minute later).""")
+                .defineInRange("overLimitGraceHours", DEFAULT_OVER_LIMIT_GRACE_HOURS, 0, MAX_OVER_LIMIT_GRACE_HOURS);
 
         builder.pop();
     }

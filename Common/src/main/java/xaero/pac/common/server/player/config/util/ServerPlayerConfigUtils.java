@@ -55,6 +55,11 @@ public class ServerPlayerConfigUtils {
 		IPlayerConfigManager manager = config.getManager();
 		UUID playerId = config.getPlayerId();
 		int claimCount = manager.getClaimsManager().getPlayerInfo(playerId).getClaimCount();
+		// [Team Claims] team claims have their own budget, only private claims count against the player's limit
+		xaero.pac.common.server.claims.TeamClaimsIntegration.TeamClaimsHandler tcHandler =
+				xaero.pac.common.server.claims.TeamClaimsIntegration.getHandler();
+		if(tcHandler != null)
+			claimCount -= tcHandler.getOwnedTeamClaimCount(playerId);
 		int claimLimit = manager.getClaimsManager().getPlayerFullClaimLimit(playerId);
 		return claimCount > claimLimit;
 	}

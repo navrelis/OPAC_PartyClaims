@@ -23,8 +23,9 @@ import xaero.pac.common.server.ServerData;
 import xaero.pac.common.server.api.OpenPACServerAPI;
 import xaero.pac.common.server.parties.party.api.IServerPartyAPI;
 import xaero.pac.common.server.player.localization.AdaptiveLocalizer;
+import xaero.pac.teamclaims.TeamClaimManager.BudgetInfo;
 import xaero.pac.teamclaims.TeamClaimManager.ClaimPos;
-import xaero.pac.teamclaims.TeamClaimManager.MemberNumbers;
+import xaero.pac.teamclaims.TeamClaimManager.TeamBudget;
 import xaero.pac.teamclaims.TeamClaimManager.TeamData;
 import xaero.pac.teamclaims.config.TeamAction;
 import xaero.pac.teamclaims.config.TeamConfig;
@@ -96,8 +97,11 @@ public final class TeamClaimsOverview {
     // ==================== /teamclaims info ====================
 
     /**
-     * Sends the team overview of the party of {@code subjectId} to {@code source}: name and owner, the team totals and
-     * forceload state, the team roles, one line per member and what the team can still claim and forceload.
+     * Sends the team overview of the party of {@code subjectId} to {@code source}: name and owner, the team's own
+     * budget (team claims and team forceloads against the team limits), the member count and what the next member
+     * would add, a pending over-limit deadline, the forceload state, the team roles, and one line per member with
+     * their private budget and how many of the team claims they technically own. The numbers are the ones
+     * {@link TeamClaimManager#getBudgetInfo} returns, which are the ones that are enforced.
      *
      * @param viewer      the player running the command, null when there is none (the texts then use the server's
      *                    default translation)
@@ -114,25 +118,43 @@ public final class TeamClaimsOverview {
         AdaptiveLocalizer localizer = serverData.getAdaptiveLocalizer();
         IServerPartyAPI party = OpenPACServerAPI.get(server).getPartyManager().getPartyByMember(subjectId);
         TeamConfig teamConfig = party == null ? null : configManager.getTeamConfig(party.getId());
-        if (teamConfig == null) {
+        TeamBudget team = teamConfig == null ? null : claimManager.getTeamBudget(party.getId());
+        if (team == null) {
             if (subjectName == null) fail(source, localizer, viewer, KEY + "info_no_team");
             else fail(source, localizer, viewer, KEY + "info_player_no_team", subjectName);
             return 0;
         }
 
         UUID partyId = party.getId();
-        TeamData teamData = claimManager.getTeamData(partyId);
-        int teamClaims = teamData == null ? 0 : teamData.getClaimCount();
-        int teamForceloads = teamData == null ? 0 : teamData.getForceloadCount();
         String teamName = teamConfig.getTeamName() == null || teamConfig.getTeamName().isBlank()
                 ? configManager.resolvePartyName(party) : teamConfig.getTeamName();
         IPartyMemberAPI owner = party.getOwner();
 
         send(source, localizer, viewer, KEY + "info_header", ChatFormatting.GRAY,
                 value(teamName, ChatFormatting.GOLD), value(owner == null ? "?" : owner.getUsername(), ChatFormatting.GOLD));
-        send(source, localizer, viewer, KEY + "info_totals", ChatFormatting.GRAY,
-                value(teamClaims, ChatFormatting.WHITE), value(teamForceloads, ChatFormatting.WHITE));
-        if (teamForceloads > 0) {
+        boolean teamFull = team.claims() >= team.claimLimit() || team.forceloads() >= team.forceloadLimit();
+        send(source, localizer, viewer, KEY + "info_team_budget", teamFull ? ChatFormatting.RED : ChatFormatting.GRAY,
+                value(formatCount(team.claims(), team.claimLimit()), ChatFormatting.WHITE),
+                value(formatCount(team.forceloads(), team.forceloadLimit()), ChatFormatting.WHITE));
+        if (team.memberCount() < team.minMembers())
+            send(source, localizer, viewer, KEY + "info_members_too_few", ChatFormatting.YELLOW,
+                    value(team.memberCount(), ChatFormatting.WHITE), value(team.minMembers(), ChatFormatting.WHITE));
+        send(source, localizer, viewer, KEY + "info_members", ChatFormatting.GRAY,
+                value(team.memberCount(), ChatFormatting.WHITE), value(team.nextMemberClaims(), ChatFormatting.WHITE),
+                value(team.nextMemberForceloads(), ChatFormatting.WHITE));
+        if (team.claimDeadline() != 0 && team.claimsOverLimit() > 0) {
+            long left = claimManager.millisUntil(team.claimDeadline());
+            send(source, localizer, viewer, KEY + "info_over_limit_claims", ChatFormatting.RED,
+                    value(team.claimsOverLimit(), ChatFormatting.WHITE), value(TeamClaimManager.hoursOf(left), ChatFormatting.WHITE),
+                    value(TeamClaimManager.minutesOf(left), ChatFormatting.WHITE));
+        }
+        if (team.forceloadDeadline() != 0 && team.forceloadsOverLimit() > 0) {
+            long left = claimManager.millisUntil(team.forceloadDeadline());
+            send(source, localizer, viewer, KEY + "info_over_limit_forceloads", ChatFormatting.RED,
+                    value(team.forceloadsOverLimit(), ChatFormatting.WHITE), value(TeamClaimManager.hoursOf(left), ChatFormatting.WHITE),
+                    value(TeamClaimManager.minutesOf(left), ChatFormatting.WHITE));
+        }
+        if (team.forceloads() > 0) {
             switch (claimManager.getForceloadActivity(partyId)) {
                 case ACTIVE -> send(source, localizer, viewer, KEY + "info_forceload_active", ChatFormatting.GREEN);
                 case GRACE -> {
@@ -147,59 +169,26 @@ public final class TeamClaimsOverview {
                 teamConfig.getRequiredRole(TeamAction.UNCLAIM).displayName(),
                 teamConfig.getRequiredRole(TeamAction.FORCELOAD).displayName());
 
-        // The budget is what the most limited member still has room for, see TeamClaimManager#checkTeamClaimBudget
-        int claimRoom = Integer.MAX_VALUE;
-        int forceloadRoom = Integer.MAX_VALUE;
-        String claimLimiter = null;
-        String forceloadLimiter = null;
+        // One line per member: their private budget, which is theirs alone, and their share of the team claims
         for (IPartyMemberAPI member : sortedMembers(party)) {
-            MemberNumbers numbers = claimManager.getMemberNumbers(teamData, member.getUUID());
-            if (numbers == null) continue;
-            int claimCount = numbers.personalClaims() + teamClaims;
-            int forceloadCount = numbers.personalForceloads() + teamForceloads;
-            boolean atLimit = claimCount >= numbers.claimLimit() || forceloadCount >= numbers.forceloadLimit();
+            BudgetInfo budget = claimManager.getBudgetInfo(member.getUUID());
+            boolean atLimit = budget.privateClaims() >= budget.privateClaimLimit()
+                    || budget.privateForceloads() >= budget.privateForceloadLimit();
             boolean online = server.getPlayerList().getPlayer(member.getUUID()) != null;
             ChatFormatting nameColor = member.isOwner() ? ChatFormatting.GOLD : member.getRank().getColor();
             send(source, localizer, viewer, KEY + "info_member", atLimit ? ChatFormatting.RED : ChatFormatting.GRAY,
                     value(member.getUsername(), nameColor), rankName(member),
                     value(online ? "●" : "○", online ? ChatFormatting.GREEN : ChatFormatting.DARK_GRAY),
-                    value(formatCount(numbers.personalClaims(), teamClaims, numbers.claimLimit()), null),
-                    value(formatCount(numbers.personalForceloads(), teamForceloads, numbers.forceloadLimit()), null));
-
-            int memberClaimRoom = room(numbers.claimLimit(), claimCount);
-            if (memberClaimRoom < claimRoom) {
-                claimRoom = memberClaimRoom;
-                claimLimiter = member.getUsername();
-            }
-            int memberForceloadRoom = room(numbers.forceloadLimit(), forceloadCount);
-            if (memberForceloadRoom < forceloadRoom) {
-                forceloadRoom = memberForceloadRoom;
-                forceloadLimiter = member.getUsername();
-            }
+                    value(formatCount(budget.privateClaims(), budget.privateClaimLimit()), null),
+                    value(formatCount(budget.privateForceloads(), budget.privateForceloadLimit()), null),
+                    value(budget.ownedTeamClaims(), null));
         }
-        sendBudget(source, localizer, viewer, "claims", claimRoom, claimLimiter);
-        sendBudget(source, localizer, viewer, "forceloads", forceloadRoom, forceloadLimiter);
         return 1;
     }
 
-    private static void sendBudget(CommandSourceStack source, AdaptiveLocalizer localizer, @Nullable ServerPlayer viewer,
-            String what, int room, @Nullable String limiter) {
-        if (limiter == null) {//nobody has a limit
-            send(source, localizer, viewer, KEY + "info_budget_" + what + "_unlimited", ChatFormatting.GREEN);
-            return;
-        }
-        send(source, localizer, viewer, KEY + "info_budget_" + what, room == 0 ? ChatFormatting.RED : ChatFormatting.GREEN,
-                value(room, ChatFormatting.WHITE), value(limiter, ChatFormatting.WHITE));
-    }
-
-    /** How many more a player can have under {@code limit} with {@code count} now, never below 0. */
-    private static int room(int limit, int count) {
-        return limit == Integer.MAX_VALUE ? Integer.MAX_VALUE : Math.max(0, limit - count);
-    }
-
-    /** {@code personal + team = count / limit}, the way OPAC's own claim count shows the limit. */
-    private static String formatCount(int personal, int team, int limit) {
-        return personal + " + " + team + " = " + (personal + team) + " / " + (limit == Integer.MAX_VALUE ? UNLIMITED : limit);
+    /** {@code count / limit}, the way OPAC's own claim count shows the limit. */
+    private static String formatCount(int count, int limit) {
+        return count + " / " + (limit == Integer.MAX_VALUE ? UNLIMITED : limit);
     }
 
     /** The owner first, then by rank from the highest, alphabetical within a rank. */

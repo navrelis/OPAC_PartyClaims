@@ -33,8 +33,8 @@ import java.util.UUID;
  * Everything here runs on the server thread. The managers ({@link TeamClaimManager},
  * {@link TeamConfigManager}, {@link TeamForceLoadHandler}) and their data (e.g.
  * {@link TeamClaimManager.TeamData}) are server-thread confined; the fields below are
- * {@code volatile} only so that a reader on another thread (the bridge handler, called from the client
- * thread of an integrated server) sees a fully published manager or null. No loader (Fabric/NeoForge)
+ * {@code volatile} only so that a reader on another thread (the bridge handler, should one of its
+ * count methods ever be called off the server thread) sees a fully published manager or null. No loader (Fabric/NeoForge)
  * classes may be referenced from this package.
  */
 public final class TeamClaimsCommon {

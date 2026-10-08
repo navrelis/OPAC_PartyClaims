@@ -264,6 +264,13 @@ public class ClaimsTransferCommand {
 				return 0;
 			}
 			int availableTargetClaims = claimsManager.getPlayerFullClaimLimit(transferTo.getId()) - toPlayerInfo.getClaimCount();
+			// [Team Claims] every transferred claim becomes a private claim of the target (also the source's team
+			// claims, their sub-config is copied under a new ID), and the target's own team claims don't use up
+			// the target's private limit
+			xaero.pac.common.server.claims.TeamClaimsIntegration.TeamClaimsHandler tcHandler =
+					xaero.pac.common.server.claims.TeamClaimsIntegration.getHandler();
+			if(tcHandler != null && availableTargetClaims < Integer.MAX_VALUE / 2)
+				availableTargetClaims += tcHandler.getOwnedTeamClaimCount(transferTo.getId());
 			if(fromPlayerInfo.getClaimCount() > availableTargetClaims){
 				context.getSource().sendFailure(adaptiveLocalizer.getFor(callerPlayer, "gui.xaero_claims_transfer_target_claim_limit" + errorSuffix, availableTargetClaims, fromPlayerInfo.getClaimCount()));
 				return 0;

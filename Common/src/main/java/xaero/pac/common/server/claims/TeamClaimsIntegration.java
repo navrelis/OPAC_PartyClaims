@@ -40,18 +40,26 @@ import java.util.UUID;
  * ({@code xaero.pac.teamclaims}) without a direct dependency. The handler is installed by
  * {@code TeamClaimsCommon.onAddonRegister} during OPAC's server addon registration.
  * <p>
- * The direct code modifications in ServerClaimsManager, PlayerConfig, PlayerClaimInfo,
+ * The direct code modifications in ServerClaimsManager, PlayerConfig, ClaimingModes,
  * PlayerSubConfig, ServerboundSubConfigExistencePacket, CreatePartyCommand,
  * ClaimsManagerSynchronizer, ServerParty, PartyManager, PlayerConfigCommonChangeHandlers,
- * ForceLoadTicketManager and ServerPlayerClaimWelcomer all call through this bridge. Every one of those hooks is a
+ * ForceLoadTicketManager, ServerPlayerClaimWelcomer, ServerPlayerConfigUtils, ChunkProtection, ClaimsAboutCommand
+ * and ClaimsTransferCommand all call through this bridge. Every one of those hooks is a
  * no-op while {@link #getHandler()} returns null, which is the case on a vanilla client,
  * before the server addon is registered and after the server has stopped.
  * <p>
- * Every handler method is called on the server thread, except
- * {@link TeamClaimsHandler#getTeamClaimOverheadForPlayer},
- * {@link TeamClaimsHandler#getTeamForceloadOverheadForPlayer} and
- * {@link TeamClaimsHandler#isComputingOverhead}, which {@code PlayerClaimInfo} may also call from
- * the client thread of an integrated server.
+ * Every handler method is called on the server thread. Should one of the claim hooks ever run on another thread,
+ * {@link TeamClaimsHandler#getOwnedTeamClaimCount} and {@link TeamClaimsHandler#getOwnedTeamForceloadCount} answer
+ * from a snapshot and {@link TeamClaimsHandler#isTeamSubConfigIndex}/{@link TeamClaimsHandler#isTeamClaim} with
+ * false, which is the stock behaviour.
+ * <p>
+ * Two budgets: a player's <i>private</i> claims (every claim of theirs that is not a team claim) count
+ * against OPAC's own per-player limits ({@code getPlayerFullClaimLimit}/{@code getPlayerFullForceloadLimit}),
+ * the <i>team</i> claims of a party count against the team limits, which only depend on the member count.
+ * Neither counts against the other. {@code PlayerClaimInfo.getClaimCount()}/{@code getForceloadCount()} stay
+ * stock (all claims the player technically owns, team claims included), so every stock consumer that compares
+ * them with the private limit subtracts {@link TeamClaimsHandler#getOwnedTeamClaimCount}/{@link
+ * TeamClaimsHandler#getOwnedTeamForceloadCount} first.
  * <p>
  * Team Claims only ever applies to sub-configs of a real <i>player</i> config whose sub ID
  * starts with {@link #TEAM_SUB_ID_PREFIX}. Native party claims (server option
@@ -98,8 +106,11 @@ public final class TeamClaimsIntegration {
 
 		/**
 		 * Called by {@code ServerClaimsManager.tryToForceloadHelper} before a forceload is
-		 * enabled on an existing claim (never for unforceloading, server claims or forced
-		 * requests). Checks the shared team forceload budget of every party member.
+		 * enabled on an existing <b>team</b> claim (never for unforceloading, server claims,
+		 * forced requests or private claims). Checks the team's forceload budget: the team
+		 * forceloads of the claim's party against the team forceload limit. Nobody's private
+		 * forceload count or limit matters, which is why the caller skips its own limit check
+		 * for a team claim.
 		 *
 		 * @return non-null ClaimResult to reject the forceload, null to proceed normally
 		 */
@@ -111,14 +122,20 @@ public final class TeamClaimsIntegration {
 		/**
 		 * Called by {@code ServerClaimsManager.tryToClaimHelper} for a new claim only
 		 * (never for the forceload/unforceload re-entry, server claims or forced requests).
-		 * Checks the team roles and the shared team claim budget of every party member:
+		 * Checks the team roles and everything about the two budgets that the stock claim
+		 * limit check doesn't:
 		 * <ul>
 		 * <li>a claim made with the team sub-config needs the team's claim role (and, when {@code forceLoaded},
-		 * the forceload role as well), checked before the budget so that the role is the reported reason, and
-		 * then has to fit into the shared team claim budget of every member;</li>
-		 * <li>a personal claim that replaces a team claim of the player's own team takes that claim away from the
+		 * the forceload role as well), checked before the budget so that the role is the reported reason. It
+		 * then has to fit into the team's budget: the team claims of the party against the team claim limit,
+		 * and for a forceloaded one the team forceloads against the team forceload limit. A claim that
+		 * replaces a team claim of the same team adds nothing; a private claim of the same player that becomes
+		 * a team claim does. The caller skips its own limit check for a team claim, so this is the only check;</li>
+		 * <li>a private claim that replaces a team claim of the player's own team takes that claim away from the
 		 * team, so it needs the team's unclaim role;</li>
-		 * <li>any other personal claim is not restricted.</li>
+		 * <li>a forceloaded private claim (only {@code /teamclaims convert topersonal} makes one) that adds a
+		 * private forceload has to fit into the player's private forceload limit. The private claim limit
+		 * itself is left to the caller's stock check, which runs on the private count.</li>
 		 * </ul>
 		 *
 		 * @return non-null ClaimResult to reject the claim, null to proceed normally
@@ -128,30 +145,54 @@ public final class TeamClaimsIntegration {
 				ServerClaimsManager claimsManager, ResourceLocation dimension,
 				UUID playerId, int subConfigIndex, int x, int z, boolean forceLoaded);
 
-		// ==================== PlayerClaimInfo Overhead ====================
+		// ==================== Private / Team Budgets ====================
 
 		/**
-		 * Returns true if overhead is currently being computed (re-entrancy guard).
-		 * When true, getClaimCount/getForceloadCount must NOT add overhead.
+		 * Returns true if {@code subConfigIndex} is the index of the player's team sub-config, which
+		 * makes a claim of that player with that sub-config a team claim.
 		 */
-		boolean isComputingOverhead();
+		boolean isTeamSubConfigIndex(UUID playerId, int subConfigIndex);
 
 		/**
-		 * Returns the team claim overhead for a player (team claims by other party members).
+		 * Returns true if the claim is a team claim (a claim that uses its owner's team sub-config).
 		 */
-		int getTeamClaimOverheadForPlayer(UUID playerUUID);
+		boolean isTeamClaim(@Nullable IPlayerChunkClaim claim);
 
 		/**
-		 * Returns the team forceload overhead for a player (team forceloads by other party members).
+		 * Returns how many of the claims technically owned by the player are team claims. The player's
+		 * private claim count is {@code getClaimCount()} minus this.
 		 */
-		int getTeamForceloadOverheadForPlayer(UUID playerUUID);
+		int getOwnedTeamClaimCount(UUID playerId);
 
 		/**
-		 * Returns true if the player currently has any team claim/forceload overhead.
-		 * Used by the claim limits sync to force the client to display the server-computed
-		 * counts instead of counting the synced claim data locally.
+		 * Returns how many of the forceloaded claims technically owned by the player are team claims. The
+		 * player's private forceload count is {@code getForceloadCount()} minus this.
 		 */
-		boolean hasTeamOverhead(UUID playerUUID);
+		int getOwnedTeamForceloadCount(UUID playerId);
+
+		/**
+		 * Called by the limits builder of {@code ClaimingModes.PLAYER}. Returns the team's numbers
+		 * (team claims / team claim limit, team forceloads / team forceload limit) if the sub-claim the
+		 * player currently uses ({@code USED_SUBCLAIM}) is their team sub-config, null otherwise, in which
+		 * case the builder sends the player's private numbers.
+		 */
+		@Nullable
+		BudgetNumbers getUsedTeamBudget(UUID playerId);
+
+		/**
+		 * Returns true if the player has a team sub-config. Used by the claim limits sync to make the
+		 * client display the server-computed counts: counting the synced claim data locally would count
+		 * the player's own team claims as private claims and miss the team claims of the other members.
+		 */
+		boolean usesServerSideClaimCounts(UUID playerId);
+
+		/**
+		 * Called by {@code ClaimsManagerSynchronizer.updateClaimLimitsSyncOnTick} (once a second per
+		 * online player) with the player's own (private) forceload limit. Returns true if that limit
+		 * changed since the previous call while the synced player mode limits are the team's, which is
+		 * the one case OPAC's own comparison of the synced limits can't notice.
+		 */
+		boolean hasPrivateForceloadLimitChangedUnnoticed(UUID playerId, int privateForceloadLimit);
 
 		// ==================== PlayerConfig Editing ====================
 
@@ -260,6 +301,11 @@ public final class TeamClaimsIntegration {
 		 */
 		boolean areTerritoryMessagesSuppressed(UUID playerId);
 	}
+
+	/**
+	 * The counts and limits of one budget, as shown to a player ("claims: count / limit").
+	 */
+	public record BudgetNumbers(int claimCount, int claimLimit, int forceloadCount, int forceloadLimit) {}
 
 	@Nullable
 	private static volatile TeamClaimsHandler handler;

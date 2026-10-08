@@ -95,7 +95,12 @@ public class ClaimsAboutCommand {
 			int forceloadLimit = claimsManager.getPlayerFullForceloadLimit(profile.getId());
 			String claimLimitString = claimLimit == Integer.MAX_VALUE ? "∞" : "" + claimLimit;
 			String forceloadLimitString = forceloadLimit == Integer.MAX_VALUE ? "∞" : "" + forceloadLimit;
-			Component claimCountNumbers = Component.literal(playerInfo.getClaimCount() + " / " + claimLimitString).withStyle(s -> s.withColor(0xFFAAAAAA));
+			// [Team Claims] team claims have their own budget (see /teamclaims info), these are the private numbers
+			xaero.pac.common.server.claims.TeamClaimsIntegration.TeamClaimsHandler tcHandler =
+					xaero.pac.common.server.claims.TeamClaimsIntegration.getHandler();
+			int tcClaimCount = playerInfo.getClaimCount() - (tcHandler == null ? 0 : tcHandler.getOwnedTeamClaimCount(profile.getId()));
+			int tcForceloadCount = playerInfo.getForceloadCount() - (tcHandler == null ? 0 : tcHandler.getOwnedTeamForceloadCount(profile.getId()));
+			Component claimCountNumbers = Component.literal(tcClaimCount + " / " + claimLimitString).withStyle(s -> s.withColor(0xFFAAAAAA));
 			String claimName = usedSubConfig.getEffective(PlayerConfigOptions.CLAIMS_NAME);
 			if(claimName.isEmpty())
 				claimName = "N/A";
@@ -104,7 +109,7 @@ public class ClaimsAboutCommand {
 				subId = PlayerConfig.MAIN_SUB_ID;
 			claimName += " (" + subId + ")";
 			Component claimNameComponent = Component.literal(claimName).withStyle(s -> s.withColor(0xFFAAAAAA));
-			Component forceloadCountNumbers = Component.literal(playerInfo.getForceloadCount() + " / " + forceloadLimitString).withStyle(s -> s.withColor(0xFFAAAAAA));
+			Component forceloadCountNumbers = Component.literal(tcForceloadCount + " / " + forceloadLimitString).withStyle(s -> s.withColor(0xFFAAAAAA));
 			context.getSource().sendSuccess(() -> Component.literal(""), true);
 			context.getSource().sendSuccess(() -> Component.literal("===== Open Parties and Claims").withStyle(s -> s.withColor(ChatFormatting.GRAY)), true);
 			context.getSource().sendSuccess(adaptiveLocalizer.supplierFor(casterPlayer, "gui.xaero_pac_ui_claim_count", claimCountNumbers), true);

@@ -76,7 +76,8 @@ public final class ServerPlayerClaimInfo extends PlayerClaimInfo<ServerPlayerCla
 	public void onClaim(IPlayerConfigManager configManager, ResourceLocation dimension, PlayerChunkClaim claim, int x, int z) {
 		super.onClaim(configManager, dimension, claim, x, z);
 		if(claim.isForceloadable())
-			manager.getTicketManager().addTicket(dimension, playerId, x, z);
+			// [Team Claims] the sub-config index tells a team forceload from a private one
+			manager.getTicketManager().addTicket(dimension, playerId, x, z, claim.getSubConfigIndex());
 		setDirty(true);
 		beenUsed = true;
 		if(manager.isLoaded())

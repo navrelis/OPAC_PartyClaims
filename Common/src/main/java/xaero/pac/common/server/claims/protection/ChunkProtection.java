@@ -454,7 +454,8 @@ public class ChunkProtection
 			ServerPlayerData playerData = (ServerPlayerData) ServerPlayerData.from(accessorPlayer);
 			if(playerData.isClaimsNonallyMode())
 				return false;
-			if(shouldBlockClaimAccessForGoingOverLimit(claimConfig.getPlayerId(), accessorPlayer))
+			// [Team Claims] see isTeamClaimConfig
+			if(shouldBlockClaimAccessForGoingOverLimit(claimConfig.getPlayerId(), accessorPlayer, isTeamClaimConfig(claimConfig)))
 				return false;
 			//not calling ensureImpersonationPermission here because having it in hasChunkAccess should be enough
 			UUID impersonatedId = playerData.getClaimsImpersonationInfo().getPlayerId();
@@ -591,7 +592,8 @@ public class ChunkProtection
 			boolean isAServerPlayer = accessor instanceof ServerPlayer;
 			if(isAServerPlayer && ServerPlayerDataAPI.from((ServerPlayer) accessor).isClaimsNonallyMode())
 				return false;
-			if(isAServerPlayer && shouldBlockClaimAccessForGoingOverLimit(claimConfig.getPlayerId(), accessor))
+			// [Team Claims] see isTeamClaimConfig
+			if(isAServerPlayer && shouldBlockClaimAccessForGoingOverLimit(claimConfig.getPlayerId(), accessor, isTeamClaimConfig(claimConfig)))
 				return false;
 			if(accessorId.equals(claimConfig.getPlayerId()))
 				return true;
@@ -2566,7 +2568,17 @@ public class ChunkProtection
 		return false;
 	}
 
-	private boolean shouldBlockClaimAccessForGoingOverLimit(UUID claimOwnerId, Entity accessor){
+	// [Team Claims] whether this is the config of a team claim. A team claim belongs to the team's budget, not to
+	// its technical owner's, so that owner being over their own claim limit doesn't close it for the team (the
+	// accessor being over their own limit still does, as for any claim)
+	private static boolean isTeamClaimConfig(IPlayerConfigAPI claimConfig){
+		xaero.pac.common.server.claims.TeamClaimsIntegration.TeamClaimsHandler tcHandler =
+				xaero.pac.common.server.claims.TeamClaimsIntegration.getHandlerForSubId(claimConfig.getSubId());
+		return tcHandler != null && claimConfig.getPlayerId() != null &&
+				tcHandler.isTeamSubConfigIndex(claimConfig.getPlayerId(), claimConfig.getSubIndex());
+	}
+
+	private boolean shouldBlockClaimAccessForGoingOverLimit(UUID claimOwnerId, Entity accessor, boolean tcTeamClaim){
 		if(!(accessor instanceof ServerPlayer player))
 			return false;
 		if(player.getGameProfile().getName() == null)//some broken fake players have a null name (Ars Nouveau 1.19.2 and 1.20.1)
@@ -2579,7 +2591,7 @@ public class ChunkProtection
 		if(claimsManager.getPermissionHandler().playerHasAdminModePermission(player))
 			return false;
 		IPlayerConfigManager configManager = serverData.getPlayerConfigManager();
-		boolean result = ServerPlayerConfigUtils.isOverClaimLimit(configManager.getLoadedConfig(claimOwnerId));
+		boolean result = !tcTeamClaim && ServerPlayerConfigUtils.isOverClaimLimit(configManager.getLoadedConfig(claimOwnerId));
 		if(!result)
 			result = ServerPlayerConfigUtils.isOverClaimLimit(configManager.getLoadedConfig(accessor.getUUID()));
 		if(!result)
