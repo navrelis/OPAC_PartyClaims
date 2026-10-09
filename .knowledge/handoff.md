@@ -7,12 +7,12 @@ running. (The handoff of the stopped session of 2026-10-09 is in the git history
 - `v1.2-dev` = origin: budgets, party screen, FTB Teams sync, lang en + de, tests, README, version `1.2.0+opac.0.31.6`.
 - `v1.2-dev` is merged into `fabric-port` (GitHub default) and pushed; `main` is untouched.
 - Release files: `ExportedJars/v1.2.0/` (two jars, not committed; `CURSEFORGE.md` committed).
-- CurseForge project 1704256 (Beta): NeoForge 1.2.0 uploaded (file 9106819). Fabric 1.2.0 NOT uploaded yet: the upload tool's relation check (api.cfwidget.com) returns 404 for `forge-config-api-port` and `ftb-teams-fabric`; plan file `curseforge-plan-1704256-1.2.0-fabric.json` in the tool's `local/` folder, changelog text = section "Changelog for this file" of `ExportedJars/v1.2.0/CURSEFORGE.md`.
+- CurseForge project 1704256 (Beta, files go through CurseForge's review first): NeoForge 1.2.0 = file 9106819 (no relations), Fabric 1.2.0 = file 9108825 (Fabric API + Forge Config API Port required, FTB Teams (Fabric) optional). The project description and summary on the website still show the 1.1.0 text.
 - Untracked and to stay untracked: `graphify-out/`, `ExportedJars/opacteamclaimslogo.png`.
 
 ## Open for the user
 1. Manual test checklist in `report.md` (two clients; with and without FTB Teams).
-2. Fabric upload to CurseForge (see State), then the project description / summary from `ExportedJars/v1.2.0/CURSEFORGE.md`.
+2. CurseForge website: project description and summary from `ExportedJars/v1.2.0/CURSEFORGE.md`; optionally add FTB Teams (NeoForge) as optional relation of the NeoForge file.
 3. Server admins: read "Updating from 1.1.0" in the README (solo teams have a team limit of 0 by default).
 
 ## Commands
