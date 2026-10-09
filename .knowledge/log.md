@@ -44,3 +44,4 @@
 - 2026-10-09 | Session 2 start | lead | read handoff + board; no leftover Java processes; T4 branch merged into v1.2-dev (dbd00a5, no conflicts). Own run on the merged state: both builds green, Fabric 60/60, NeoForge 60/60. Pushed.
 - 2026-10-09 | T3 draft pre-read | lead | read FtbTeamsSync, FtbSyncEngine, FtbSyncOpac, FtbSyncStore, FtbSyncEvents, FtbSyncNames, FtbSyncCommands, hooks and build files of `wip/t3-ftb-sync`; both loader wrappers list all 27 sync tests; FTB impl signatures used by the engine checked against the v2101.1.11 source. Never compiled -> finish delegated.
 - 2026-10-09 | T3 finish FTB Teams <-> OPAC party sync | Opus | delegated (main checkout, draft squashed in uncommitted; first build + all four test runs, then complete; lang keys only reported).
+- 2026-10-09 | T5a over-limit texts in days + ways out, gametests for packets 50-53 | Sonnet | delegated (isolated worktree based on 0bae240, parallel to T3, disjoint files).

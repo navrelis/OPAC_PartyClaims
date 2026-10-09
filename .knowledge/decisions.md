@@ -24,3 +24,6 @@
 - Party disband: team claims become private claims while the former owner of each claim has private room; the excess is unclaimed at once (newest first) — otherwise disbanding would turn a team pool into extra private land. Lead decision, to be stated in the report.
 - T1 (budgets, main checkout) and T2 (party screen, worktree) run in parallel with disjoint files; T2 only reports its lang keys, T4 writes them — the lang file belongs to one agent at a time.
 - No Graphify update this session (user).
+- 2026-10-09 T5 split: 5a (over-limit texts, packet gametests) runs in a worktree parallel to T3 because its files are disjoint from T3's (T3 is barred from lang files, `TeamClaimManager` and the existing gametest files); 5b (FTB lang keys, docs, version, jars) needs T3's key list and runs after both.
+- Over-limit durations reuse the party screen's three `party_screen_time_*` keys as one nested component — chat, `/teamclaims info` and screen can never show different units for the same time; no duplicate keys.
+- Merged worktrees of T2/T4 removed (branches deleted after merge; folders deleted by hand because git hit Windows' path length limit).
