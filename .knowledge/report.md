@@ -3,8 +3,8 @@
 Branch `v1.2-dev` on github.com/navrelis/OPAC_PartyClaims, merged into `fabric-port` (GitHub default) on 2026-10-09;
 `main` untouched. Release files: `ExportedJars/v1.2.0/`
 (`opac-team-claims-fabric-1.21.1-v1.2.0.jar`, `opac-team-claims-neoforge-1.21.1-v1.2.0.jar`, `CURSEFORGE.md`; jars are
-not committed). Version `1.2.0+opac.0.31.6`, mod id `openpartiesandclaims`. CurseForge (project 1704256, Beta): NeoForge file
-9106819 uploaded; the Fabric file is still open (see `handoff.md`).
+not committed). Version `1.2.0+opac.0.31.6`, mod id `openpartiesandclaims`. CurseForge (project 1704256, Beta): NeoForge file 9106819 and
+Fabric file 9108825 uploaded on 2026-10-09; the project description on the website is still the 1.1.0 text.
 (The v1.1.0 report is in the git history of this file.)
 
 ## Requirements → implementation
