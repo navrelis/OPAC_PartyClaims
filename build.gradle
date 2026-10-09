@@ -76,6 +76,22 @@ subprojects {
         maven {
             url = "https://chocolateminecraft.com/maven"
         }
+        // [Team Claims] FTB Teams / FTB Library and Architectury: compile-only for the optional FTB Teams support
+        // (the upstream party system adapter and the Team Claims party sync), runtime only in the FTB gametest runs.
+        maven {
+            name = "FTB"
+            url = "https://maven.ftb.dev/releases"
+            content {
+                includeGroup "dev.ftb.mods"
+            }
+        }
+        maven {
+            name = "Architectury"
+            url = "https://maven.architectury.dev"
+            content {
+                includeGroup "dev.architectury"
+            }
+        }
     }
 
     tasks.withType(JavaCompile).configureEach {

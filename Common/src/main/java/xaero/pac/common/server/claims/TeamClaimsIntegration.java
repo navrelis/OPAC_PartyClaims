@@ -266,6 +266,17 @@ public final class TeamClaimsIntegration {
 		 */
 		void onPartyRemoved(UUID partyId);
 
+		/**
+		 * A player was invited to a party ({@code invited} true), or an invitation was removed: withdrawn,
+		 * declined, or used up by the player joining ({@code invited} false).
+		 */
+		void onPartyInviteChanged(UUID partyId, UUID playerId, boolean invited);
+
+		/**
+		 * The rank of a party member (never the owner) was set.
+		 */
+		void onPartyMemberRankChanged(UUID partyId, UUID memberId);
+
 		// ==================== Sub-Config / Forceload Events ====================
 
 		/**

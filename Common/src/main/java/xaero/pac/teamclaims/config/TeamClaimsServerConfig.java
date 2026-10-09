@@ -14,8 +14,8 @@ import org.apache.commons.lang3.tuple.Pair;
  * {@link xaero.pac.teamclaims.TeamClaimsCommon#onAddonRegister}) on both Fabric and NeoForge, but <em>after</em> the
  * commands were registered (the server's {@code Commands} are built before it starts). Reading a value earlier than
  * that, or after the server stopped, throws {@link IllegalStateException}. Edits of the file while the server runs are
- * picked up by the loaders' file watcher and apply from then on, except {@link #enabled}, which is read once when the
- * server starts.
+ * picked up by the loaders' file watcher and apply from then on, except {@link #enabled} and {@link #ftbTeamsSync},
+ * which are read once when the server starts.
  */
 public class TeamClaimsServerConfig {
 
@@ -47,6 +47,7 @@ public class TeamClaimsServerConfig {
     public final ModConfigSpec.IntValue teamForceloadsBase;
     public final ModConfigSpec.IntValue teamForceloadsPerExtraMember;
     public final ModConfigSpec.IntValue overLimitGraceHours;
+    public final ModConfigSpec.BooleanValue ftbTeamsSync;
 
     private TeamClaimsServerConfig(ModConfigSpec.Builder builder) {
         builder.push("teamClaims");
@@ -130,6 +131,18 @@ public class TeamClaimsServerConfig {
                         its limit earlier keeps everything. A running countdown keeps its end time when this option is changed.
                         0 = the excess is removed at the next check (at the latest a minute later).""")
                 .defineInRange("overLimitGraceHours", DEFAULT_OVER_LIMIT_GRACE_HOURS, 0, MAX_OVER_LIMIT_GRACE_HOURS);
+
+        ftbTeamsSync = builder
+                .comment("""
+                        Whether parties are kept in sync with FTB Teams when that mod is installed, so that players only manage
+                        one team: creating, renaming and disbanding a party, members joining, leaving and being kicked, ownership
+                        transfers, ranks (FTB officer = party admin/moderator) and invitations done in either mod happen in both.
+                        Where the two mods disagree (e.g. when this is first enabled), Open Parties and Claims wins.
+                        Allies, the FTB team color and description, and party chat are not synced.
+                        Without FTB Teams this option does nothing. See /teamclaims ftbsync status.
+                        This is read once when the server starts: changing it needs a server restart.""")
+                .worldRestart()
+                .define("ftbTeamsSync", true);
 
         builder.pop();
     }

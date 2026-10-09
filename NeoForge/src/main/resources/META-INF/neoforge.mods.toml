@@ -40,3 +40,11 @@ config = "${mod_id}.create.neoforge.mixins.json"
     versionRange="${create_neoforge_range}"
     ordering="NONE"
     side="BOTH"
+# [Team Claims] optional, any version (an unsupported one only turns the party sync off): loads after FTB Teams,
+# whose party teams the parties are kept in sync with
+[[dependencies.${mod_id}]]
+    modId="ftbteams"
+    type="optional"
+    versionRange="[0,)"
+    ordering="AFTER"
+    side="BOTH"

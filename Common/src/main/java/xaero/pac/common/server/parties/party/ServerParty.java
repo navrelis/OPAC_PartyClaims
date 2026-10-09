@@ -186,8 +186,14 @@ public final class ServerParty extends Party implements IServerParty<PartyMember
 		if(sameNameInvite != null)
 			sameNameInvite.setUsername(sameNameInvite.getUUID() + "");//this player no longer has the name
 		inviteByUsername.put(playerUsernameLowercase, playerInfo);
-		if(managedBy.isLoaded())
+		if(managedBy.isLoaded()) {
 			managedBy.getPartySynchronizer().syncToPartyAddInvite(this, playerInfo);
+			// [Team Claims] invitations are mirrored to the synced FTB Teams party
+			xaero.pac.common.server.claims.TeamClaimsIntegration.TeamClaimsHandler tcHandler =
+					xaero.pac.common.server.claims.TeamClaimsIntegration.getHandler();
+			if(tcHandler != null)
+				tcHandler.onPartyInviteChanged(getId(), playerUUID, true);
+		}
 		return playerInfo;
 	}
 
@@ -205,8 +211,14 @@ public final class ServerParty extends Party implements IServerParty<PartyMember
 		PartyInvite playerInfo = super.removeInvitedPlayer(playerId);
 		if(playerInfo != null)
 			inviteByUsername.remove(playerInfo.getUsername().toLowerCase());
-		if(playerInfo != null && managedBy.isLoaded())
+		if(playerInfo != null && managedBy.isLoaded()) {
 			managedBy.getPartySynchronizer().syncToPartyRemoveInvite(this, playerInfo);
+			// [Team Claims] invitations are mirrored to the synced FTB Teams party
+			xaero.pac.common.server.claims.TeamClaimsIntegration.TeamClaimsHandler tcHandler =
+					xaero.pac.common.server.claims.TeamClaimsIntegration.getHandler();
+			if(tcHandler != null)
+				tcHandler.onPartyInviteChanged(getId(), playerId, false);
+		}
 		return playerInfo;
 	}
 
@@ -236,8 +248,14 @@ public final class ServerParty extends Party implements IServerParty<PartyMember
 		if(!super.setRankTyped(member, rank))
 			return false;
 		setDirty(true);
-		if(managedBy.isLoaded())
+		if(managedBy.isLoaded()) {
 			managedBy.getPartySynchronizer().syncToPartyUpdateMember(this, member);
+			// [Team Claims] ranks are mirrored to the synced FTB Teams party
+			xaero.pac.common.server.claims.TeamClaimsIntegration.TeamClaimsHandler tcHandler =
+					xaero.pac.common.server.claims.TeamClaimsIntegration.getHandler();
+			if(tcHandler != null)
+				tcHandler.onPartyMemberRankChanged(getId(), member.getUUID());
+		}
 		return true;
 	}
 

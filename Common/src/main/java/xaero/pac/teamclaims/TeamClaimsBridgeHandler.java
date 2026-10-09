@@ -15,6 +15,7 @@ import xaero.pac.common.server.claims.TeamClaimsIntegration;
 import xaero.pac.common.server.player.config.api.v2.IPlayerConfigOptionSpecAPI;
 import xaero.pac.teamclaims.config.TeamConfigManager;
 import xaero.pac.teamclaims.config.TeamConfigManager.PartyEventType;
+import xaero.pac.teamclaims.ftbsync.FtbTeamsSync;
 
 import javax.annotation.Nullable;
 import java.util.UUID;
@@ -195,9 +196,32 @@ class TeamClaimsBridgeHandler implements TeamClaimsIntegration.TeamClaimsHandler
         queue(PartyEventType.PARTY_REMOVED, partyId, null);
     }
 
+    @Override
+    public void onPartyInviteChanged(UUID partyId, UUID playerId, boolean invited) {
+        // Only the FTB Teams sync cares about invitations: Team Claims itself only counts members
+        FtbTeamsSync sync = TeamClaimsCommon.getFtbTeamsSync();
+        if (sync != null) sync.onOpacPartyChanged(partyId);
+    }
+
+    @Override
+    public void onPartyMemberRankChanged(UUID partyId, UUID memberId) {
+        // The team roles read the rank when it is needed; only the FTB Teams sync has to hear about a change
+        FtbTeamsSync sync = TeamClaimsCommon.getFtbTeamsSync();
+        if (sync != null) sync.onOpacPartyChanged(partyId);
+    }
+
+    /**
+     * Queues the event for the team config manager and, when the FTB Teams sync runs, tells it that the party
+     * changed. Both only take a note; the work is done at the end of the tick.
+     */
     private static void queue(PartyEventType type, UUID partyId, @Nullable UUID playerId) {
         TeamConfigManager tcm = TeamClaimsCommon.getTeamConfigManager();
         if (tcm != null) tcm.queuePartyEvent(type, partyId, playerId);
+        FtbTeamsSync sync = TeamClaimsCommon.getFtbTeamsSync();
+        if (sync != null) {
+            if (type == PartyEventType.PARTY_REMOVED) sync.onOpacPartyRemoved(partyId);
+            else sync.onOpacPartyChanged(partyId);
+        }
     }
 
     // ==================== Sub-config / forceload events ====================

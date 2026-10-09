@@ -1,0 +1,34 @@
+# Dev/test-only mod: never part of the production NeoForge jar (NeoForge "gametestFtb" source set,
+# loaded only by the ":NeoForge:runTeamClaimsGameTestFtb" run, next to "opac_teamclaims_gametest").
+# It carries the @GameTestHolder wrappers of the FTB Teams sync tests, so those are only registered
+# when FTB Teams is installed. Values are hardcoded on purpose, like in the other test mod.
+modLoader="javafml"
+loaderVersion="[4,)"
+license="GNU Lesser General Public License v3.0 (LGPL-3.0-only)"
+
+[[mods]]
+modId="opac_teamclaims_gametest_ftb"
+version="1.0.0"
+displayName="OPAC Team Claims Gametest (FTB Teams sync)"
+description='''Headless gametests for the FTB Teams party sync of Team Claims (dev/test only).'''
+
+[[dependencies.opac_teamclaims_gametest_ftb]]
+    modId="openpartiesandclaims"
+    type="required"
+    versionRange="[0,)"
+    ordering="AFTER"
+    side="BOTH"
+
+[[dependencies.opac_teamclaims_gametest_ftb]]
+    modId="opac_teamclaims_gametest"
+    type="required"
+    versionRange="[0,)"
+    ordering="AFTER"
+    side="BOTH"
+
+[[dependencies.opac_teamclaims_gametest_ftb]]
+    modId="ftbteams"
+    type="required"
+    versionRange="[0,)"
+    ordering="AFTER"
+    side="BOTH"

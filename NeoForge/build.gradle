@@ -30,6 +30,27 @@ sourceSets {
         compileClasspath += sourceSets.main.output
         runtimeClasspath += sourceSets.main.output
     }
+    // [Team Claims] Second dev/test-only mod "opac_teamclaims_gametest_ftb" (NeoForge/src/gametest/ftb): the
+    // @GameTestHolder wrappers of the FTB Teams sync tests. Their shared bodies are compiled into "gametest" above
+    // (FTB Teams is on the compile classpath of every source set), but they are only registered by this mod,
+    // which only ":NeoForge:runTeamClaimsGameTestFtb" loads, so the default run never touches an FTB class.
+    gametestFtb {
+        java.srcDirs = ["src/gametest/ftb/java"]
+        resources.srcDirs = ["src/gametest/ftb/resources"]
+        inherits.from(sourceSets.main)
+        compileClasspath += sourceSets.main.output + sourceSets.gametest.output
+        runtimeClasspath += sourceSets.main.output + sourceSets.gametest.output
+    }
+}
+
+// [Team Claims] FTB Teams, FTB Library and Architectury as real mods of ":NeoForge:runTeamClaimsGameTestFtb":
+// resolved here and copied into the "mods" folder of that run (see the task configuration below). No other
+// configuration extends this one, so they are on no other classpath and never end up in the jar.
+configurations {
+    ftbGameTestMods {
+        canBeConsumed = false
+        canBeResolved = true
+    }
 }
 
 runs {
@@ -66,6 +87,18 @@ runs {
         systemProperty 'neoforge.enabledGameTestNamespaces', 'opac_teamclaims_gametest'
         shouldExportToIDE false
     }
+
+    // [Team Claims] The same gametests plus the FTB Teams sync tests, with FTB Teams, FTB Library and Architectury
+    // installed: ":NeoForge:runTeamClaimsGameTestFtb". The default run above stays without them, which is what
+    // proves that FTB Teams is optional. Working dir: NeoForge/runs/teamClaimsGameTestFtb.
+    teamClaimsGameTestFtb {
+        runType 'gameTestServer'
+        workingDirectory project.file('runs/teamClaimsGameTestFtb')
+        modSources.add('opac_teamclaims_gametest', project.sourceSets.gametest)
+        modSources.add('opac_teamclaims_gametest_ftb', project.sourceSets.gametestFtb)
+        systemProperty 'neoforge.enabledGameTestNamespaces', 'opac_teamclaims_gametest'
+        shouldExportToIDE false
+    }
 }
 
 sourceSets.main.resources { srcDir 'src/generated/resources' }
@@ -82,8 +115,8 @@ dependencies {
     compileOnly project(":CreateSupportCommon")
 
     compileOnly "curse.maven:ftbranks-314905:6431744"//home: https://www.curseforge.com/minecraft/mc-mods/ftb-ranks-forge
-    compileOnly "curse.maven:architectury-419699:5786327"//home: https://www.curseforge.com/minecraft/mc-mods/architectury-api
-    compileOnly "curse.maven:ftblibrary-404465:7746959"//home: https://www.curseforge.com/minecraft/mc-mods/ftb-library-forge
+    compileOnly("dev.architectury:architectury-neoforge:${architectury_version}") { transitive = false }//source: https://github.com/architectury/architectury-api
+    compileOnly("dev.ftb.mods:ftb-library-neoforge:${ftb_library_version}") { transitive = false }//source: https://github.com/FTBTeam/FTB-Library
 
     compileOnly("com.simibubi.create:create-1.21.1:${neoforge_create_version}:slim"){ transitive = false }
     compileOnly "net.createmod.ponder:Ponder-NeoForge-1.21.1:${neoforge_ponder_version}"
@@ -92,10 +125,14 @@ dependencies {
 
     compileOnly "net.luckperms:api:5.4"//source: https://github.com/LuckPerms/LuckPerms
 
-    compileOnly "curse.maven:ftbteams-404468:7878281"//home: https://www.curseforge.com/minecraft/mc-mods/ftb-teams-forge
+    compileOnly("dev.ftb.mods:ftb-teams-neoforge:${ftb_teams_version}") { transitive = false }//source: https://github.com/FTBTeam/FTB-Teams
     compileOnly "earth.terrarium.prometheus:prometheus-neoforge-1.20.4:1.4.2"//source: https://github.com/terrarium-earth/Prometheus
     compileOnly "earth.terrarium.argonauts:argonauts-neoforge-1.20.4:1.2.4"//source: https://modrinth.com/mod/odyssey-allies
 
+    // [Team Claims] The real mods, only for ":NeoForge:runTeamClaimsGameTestFtb" (see runs.teamClaimsGameTestFtb).
+    ftbGameTestMods("dev.architectury:architectury-neoforge:${architectury_version}") { transitive = false }
+    ftbGameTestMods("dev.ftb.mods:ftb-library-neoforge:${ftb_library_version}") { transitive = false }
+    ftbGameTestMods("dev.ftb.mods:ftb-teams-neoforge:${ftb_teams_version}") { transitive = false }
 }
 
 // NeoGradle compiles the game, but we don't want to add our common code to the game's code
@@ -120,8 +157,10 @@ tasks.named("sourcesJar", Jar) {
 
 // [Team Claims] The root build.gradle copies OPAC's lang files into every ProcessResources task
 // (data/openpartiesandclaims/lang); keep them out of the test mod, they belong to the main mod only.
-tasks.named("processGametestResources", ProcessResources) {
-    eachFile { if (it.path.startsWith("data/${project.mod_id}/")) it.exclude() }
+["processGametestResources", "processGametestFtbResources"].each { String taskName ->
+    tasks.named(taskName, ProcessResources) {
+        eachFile { if (it.path.startsWith("data/${project.mod_id}/")) it.exclude() }
+    }
 }
 
 // [Team Claims] ":NeoForge:runTeamClaimsGameTest" (created by NeoGradle from runs.teamClaimsGameTest):
@@ -132,11 +171,29 @@ tasks.named("processGametestResources", ProcessResources) {
 // - fails the build when no test ran: if the server cannot start (e.g. "No test functions were
 //   given!"), vanilla only logs the error and the JVM still exits 0, so the run additionally
 //   requires vanilla's success line in the log, which is deleted before each run.
-def teamClaimsGameTestDir = file("runs/teamClaimsGameTest")
+//
+// ":NeoForge:runTeamClaimsGameTestFtb" is the same with FTB Teams installed: its doFirst also replaces the "mods"
+// folder of the run with the jars of the ftbGameTestMods configuration (production NeoForge jars are Mojang-named,
+// so FML loads them from there in dev like on a real server).
+def teamClaimsGameTestRuns = [
+        "runTeamClaimsGameTest"   : [dir: file("runs/teamClaimsGameTest"), ftb: false],
+        "runTeamClaimsGameTestFtb": [dir: file("runs/teamClaimsGameTestFtb"), ftb: true]
+]
 tasks.configureEach { Task task ->
-    if (task.name != "runTeamClaimsGameTest") return
+    def teamClaimsRun = teamClaimsGameTestRuns[task.name]
+    if (teamClaimsRun == null) return
+    File teamClaimsGameTestDir = teamClaimsRun.dir
+    boolean withFtbMods = teamClaimsRun.ftb
+    if (withFtbMods) task.inputs.files(configurations.ftbGameTestMods)
     task.doFirst {
-        project.delete(new File(teamClaimsGameTestDir, "world"), new File(teamClaimsGameTestDir, "logs/latest.log"))
+        project.delete(new File(teamClaimsGameTestDir, "world"), new File(teamClaimsGameTestDir, "logs/latest.log"),
+                new File(teamClaimsGameTestDir, "mods"))
+        if (withFtbMods) {
+            project.copy {
+                from configurations.ftbGameTestMods
+                into new File(teamClaimsGameTestDir, "mods")
+            }
+        }
     }
     task.doLast {
         File log = new File(teamClaimsGameTestDir, "logs/latest.log")

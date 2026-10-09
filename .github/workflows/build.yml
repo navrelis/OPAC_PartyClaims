@@ -48,3 +48,18 @@ jobs:
 
       - name: Check NeoForge gametest result
         run: grep -E "All [0-9]+ required tests passed" NeoForge/runs/teamClaimsGameTest/logs/latest.log
+
+      # The runs above are without FTB Teams, which proves that it is optional. These two run the same
+      # tests plus the FTB Teams party sync tests with FTB Teams, FTB Library and Architectury installed.
+      # Both tasks fail on failed tests and themselves require the success line in the log.
+      - name: Fabric boot test with FTB Teams
+        run: ./gradlew :Fabric:runBootTestFtb --console=plain
+
+      - name: Check boot test with FTB Teams result
+        run: grep -E "All [0-9]+ required tests passed" run-boottest-ftb/logs/latest.log
+
+      - name: NeoForge gametests with FTB Teams
+        run: ./gradlew :NeoForge:runTeamClaimsGameTestFtb --console=plain
+
+      - name: Check NeoForge gametest with FTB Teams result
+        run: grep -E "All [0-9]+ required tests passed" NeoForge/runs/teamClaimsGameTestFtb/logs/latest.log

@@ -48,8 +48,8 @@ dependencies {
     modImplementation "net.fabricmc.fabric-api:fabric-gametest-api-v1:2.0.5+6fc22b9919"
 
     modCompileOnly "curse.maven:ftbranks-472659:6431745"//home: https://www.curseforge.com/minecraft/mc-mods/ftb-ranks-fabric
-    modCompileOnly "curse.maven:architectury-419699:5786326"//home: https://www.curseforge.com/minecraft/mc-mods/architectury-api
-    modCompileOnly "curse.maven:ftblibrary-438495:7746958"//home: https://www.curseforge.com/minecraft/mc-mods/ftb-library-fabric
+    modCompileOnly("dev.architectury:architectury-fabric:${architectury_version}") { transitive = false }//source: https://github.com/architectury/architectury-api
+    modCompileOnly("dev.ftb.mods:ftb-library-fabric:${ftb_library_version}") { transitive = false }//source: https://github.com/FTBTeam/FTB-Library
 
     modCompileOnly "net.luckperms:api:5.4"//source: https://github.com/LuckPerms/LuckPerms
     modCompileOnly 'me.lucko:fabric-permissions-api:0.2-SNAPSHOT'//source: https://github.com/lucko/fabric-permissions-api
@@ -57,7 +57,7 @@ dependencies {
     modCompileOnly "earth.terrarium.prometheus:prometheus-fabric-1.20.4:1.4.2"//source: https://github.com/terrarium-earth/Prometheus
     modCompileOnly "earth.terrarium.argonauts:argonauts-fabric-1.20.4:1.2.4"//source: https://modrinth.com/mod/odyssey-allies
 
-    modCompileOnly "curse.maven:ftbteams-438497:7878280"//home: https://www.curseforge.com/minecraft/mc-mods/ftb-teams-fabric
+    modCompileOnly("dev.ftb.mods:ftb-teams-fabric:${ftb_teams_version}") { transitive = false }//source: https://github.com/FTBTeam/FTB-Teams
     modCompileOnly("com.simibubi.create:create-fabric-1.20.1:${fabric_create_version}"){
         exclude(group: "com.jozufozu.flywheel")
         exclude(group: "net.minecraftforge")
@@ -77,6 +77,29 @@ sourceSets {
         compileClasspath += sourceSets.main.compileClasspath + sourceSets.main.output
         runtimeClasspath += sourceSets.main.runtimeClasspath + sourceSets.main.output
     }
+    // [Team Claims] Second dev/test-only mod "opac_teamclaims_gametest_ftb" (Fabric/src/gametest/ftb) for
+    // ":Fabric:runBootTestFtb": its fabric.mod.json registers the wrapper class of the FTB Teams sync tests as a
+    // "fabric-gametest" entrypoint. The shared test bodies are compiled into "gametest" above (FTB Teams is on the
+    // compile classpath of every source set), but nothing in the default run refers to them, so that run never
+    // touches an FTB class. FTB Teams, FTB Library and Architectury are only on this source set's runtime classpath
+    // (see the modGametestFtbRuntimeOnly dependencies below).
+    gametestFtb {
+        java.srcDirs = ["src/gametest/ftb/java"]
+        resources.srcDirs = ["src/gametest/ftb/resources"]
+        compileClasspath += sourceSets.gametest.compileClasspath + sourceSets.gametest.output
+        runtimeClasspath += sourceSets.gametest.runtimeClasspath + sourceSets.gametest.output
+    }
+}
+
+// [Team Claims] Remapped (intermediary -> named) mod dependencies of the "gametestFtb" source set only: the real
+// FTB Teams, FTB Library and Architectury for ":Fabric:runBootTestFtb". Never include()'d, not part of main's
+// runtime classpath, so not in the default boot test and not in the jar.
+loom.createRemapConfigurations(sourceSets.gametestFtb)
+
+dependencies {
+    modGametestFtbRuntimeOnly("dev.architectury:architectury-fabric:${architectury_version}") { transitive = false }
+    modGametestFtbRuntimeOnly("dev.ftb.mods:ftb-library-fabric:${ftb_library_version}") { transitive = false }
+    modGametestFtbRuntimeOnly("dev.ftb.mods:ftb-teams-fabric:${ftb_teams_version}") { transitive = false }
 }
 
 loom {
@@ -107,6 +130,10 @@ loom {
     mods {
         register("opac_teamclaims_gametest") {
             sourceSet(sourceSets.gametest)
+        }
+        // [Team Claims] only on the classpath of the bootTestFtb run
+        register("opac_teamclaims_gametest_ftb") {
+            sourceSet(sourceSets.gametestFtb)
         }
     }
     runs {
@@ -155,6 +182,17 @@ loom {
             vmArg("-Dfabric-api.gametest")
             source(sourceSets.gametest)
         }
+        // [Team Claims] The same boot test with FTB Teams, FTB Library and Architectury installed, which adds
+        // the FTB Teams sync tests of the "gametestFtb" source set: ":Fabric:runBootTestFtb". The default
+        // bootTest run above stays without those mods, which is what proves that FTB Teams is optional.
+        bootTestFtb {
+            server()
+            setConfigName("Fabric Boot Test (FTB Teams)")
+            ideConfigGenerated(false)
+            runDir("../run-boottest-ftb")
+            vmArg("-Dfabric-api.gametest")
+            source(sourceSets.gametestFtb)
+        }
     }
 }
 
@@ -168,6 +206,30 @@ tasks.named('runBootTest') {
     doFirst {
         delete file("${projectDir}/../run-boottest/world")
     }
+}
+
+// [Team Claims] ":Fabric:runBootTestFtb": a fresh world like above, and besides the exit code (failed required
+// tests end the JVM with a non-zero exit, which fails this task) the run requires vanilla's success line in its
+// log, which is deleted before each run, so a run that never got to the tests cannot pass.
+File runDirFtb = rootProject.file("run-boottest-ftb")
+tasks.named('runBootTestFtb') {
+    doFirst {
+        delete new File(runDirFtb, "world"), new File(runDirFtb, "logs/latest.log")
+    }
+    doLast {
+        File log = new File(runDirFtb, "logs/latest.log")
+        def passed = log.exists() ? (log.getText("UTF-8") =~ /All (\d+) required tests passed/) : null
+        if (passed == null || !passed.find()) {
+            throw new GradleException("Team Claims gametests with FTB Teams did not pass: no \"All N required tests passed\" line in ${log}")
+        }
+        logger.lifecycle("Team Claims gametests with FTB Teams: ${passed.group(0)} (log: ${log})")
+    }
+}
+
+// [Team Claims] The root build.gradle copies OPAC's lang files into every ProcessResources task; they belong to
+// the main mod only, not to the FTB test mod.
+tasks.named("processGametestFtbResources", ProcessResources) {
+    eachFile { if (it.path.startsWith("data/${project.mod_id}/")) it.exclude() }
 }
 
 
