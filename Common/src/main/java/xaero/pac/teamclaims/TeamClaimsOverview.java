@@ -145,14 +145,12 @@ public final class TeamClaimsOverview {
         if (team.claimDeadline() != 0 && team.claimsOverLimit() > 0) {
             long left = claimManager.millisUntil(team.claimDeadline());
             send(source, localizer, viewer, KEY + "info_over_limit_claims", ChatFormatting.RED,
-                    value(team.claimsOverLimit(), ChatFormatting.WHITE), value(TeamClaimManager.hoursOf(left), ChatFormatting.WHITE),
-                    value(TeamClaimManager.minutesOf(left), ChatFormatting.WHITE));
+                    value(team.claimsOverLimit(), ChatFormatting.WHITE), TeamClaimManager.durationOf(left));
         }
         if (team.forceloadDeadline() != 0 && team.forceloadsOverLimit() > 0) {
             long left = claimManager.millisUntil(team.forceloadDeadline());
             send(source, localizer, viewer, KEY + "info_over_limit_forceloads", ChatFormatting.RED,
-                    value(team.forceloadsOverLimit(), ChatFormatting.WHITE), value(TeamClaimManager.hoursOf(left), ChatFormatting.WHITE),
-                    value(TeamClaimManager.minutesOf(left), ChatFormatting.WHITE));
+                    value(team.forceloadsOverLimit(), ChatFormatting.WHITE), TeamClaimManager.durationOf(left));
         }
         if (team.forceloads() > 0) {
             switch (claimManager.getForceloadActivity(partyId)) {

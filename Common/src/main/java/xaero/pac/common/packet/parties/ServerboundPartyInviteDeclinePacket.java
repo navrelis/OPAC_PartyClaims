@@ -55,6 +55,10 @@ public class ServerboundPartyInviteDeclinePacket {
 		this.partyId = partyId;
 	}
 
+	public UUID getPartyId() {
+		return partyId;
+	}
+
 	public static class Codec implements BiConsumer<ServerboundPartyInviteDeclinePacket, FriendlyByteBuf>, Function<FriendlyByteBuf, ServerboundPartyInviteDeclinePacket> {
 
 		@Override

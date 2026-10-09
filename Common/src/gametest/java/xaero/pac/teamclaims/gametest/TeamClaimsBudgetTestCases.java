@@ -771,16 +771,19 @@ public final class TeamClaimsBudgetTestCases {
             helper.assertTrue(captureChat(t.server, t.player, () -> t.cm.checkOverLimit(partyId)).isEmpty(),
                     "expected no message for a team within its limit");
 
+            long deadline = now[0] + 72 * HOUR;
             t.cm.setBudgetSettingsOverride(partyId, tight);
             List<String> started = captureChat(t.server, t.player, () -> t.cm.checkOverLimit(partyId));
-            helper.assertTrue(started.equals(List.of(localized(t.server, KEY + "over_limit_claims_started", "2", "1", "72", "0"))),
-                    "expected the warning that 2 team claims are above the limit of 1 with 72 hours left, got " + started);
+            helper.assertTrue(started.equals(List.of(localized(t.server, KEY + "over_limit_claims_started", "2", "1", "3 d 0 h"))),
+                    "expected the warning that 2 team claims are above the limit of 1 with 3 d 0 h left, got " + started);
+            helper.assertTrue(started.get(0).contains("/teamclaims convert topersonal") && started.get(0).startsWith("[Team Claims] "),
+                    "expected the warning to name /teamclaims convert topersonal as a way out, got " + started);
             helper.assertTrue(captureChat(t.server, t.player, () -> t.cm.checkOverLimit(partyId)).isEmpty(),
                     "expected no second warning at the next check");
 
             CapturingCommandSource info = new CapturingCommandSource();
             TeamClaimsOverview.showInfo(commandSource(helper, info), null, t.ownerId, null);
-            helper.assertTrue(info.received(localized(t.server, KEY + "info_over_limit_claims", "2", "72", "0"))
+            helper.assertTrue(info.received(localized(t.server, KEY + "info_over_limit_claims", "2", "3 d 0 h"))
                             && info.received(localized(t.server, KEY + "info_team_budget", "3 / 1", "0 / 10")),
                     "expected /teamclaims info to show the pending deadline, got " + info.all());
 
@@ -788,12 +791,30 @@ public final class TeamClaimsBudgetTestCases {
             helper.assertTrue(captureChat(t.server, t.player, () -> t.cm.checkOverLimit(partyId)).isEmpty(),
                     "expected no reminder before 24 hours have passed");
             List<String> login = captureChat(t.server, t.player, () -> t.cm.onPlayerLogin(t.player));
-            helper.assertTrue(login.equals(List.of(localized(t.server, KEY + "over_limit_claims_reminder", "2", "1", "48", "30"))),
-                    "expected the reminder at login with 48 h 30 min left, got " + login);
+            helper.assertTrue(login.equals(List.of(localized(t.server, KEY + "over_limit_claims_reminder", "2", "1", "2 d 0 h"))),
+                    "expected the reminder at login with 2 d 0 h left (48 h 30 min), got " + login);
             now[0] += 30 * 60_000;
             List<String> reminder = captureChat(t.server, t.player, () -> t.cm.checkOverLimit(partyId));
-            helper.assertTrue(reminder.equals(List.of(localized(t.server, KEY + "over_limit_claims_reminder", "2", "1", "48", "0"))),
-                    "expected the reminder after 24 hours with 48 hours left, got " + reminder);
+            helper.assertTrue(reminder.equals(List.of(localized(t.server, KEY + "over_limit_claims_reminder", "2", "1", "2 d 0 h"))),
+                    "expected the reminder after 24 hours with 2 d 0 h left, got " + reminder);
+
+            // The other two unit ranges, in the reminder at login and in /teamclaims info: hours and minutes, then minutes
+            now[0] = deadline - 5 * HOUR - 10 * 60_000;
+            login = captureChat(t.server, t.player, () -> t.cm.onPlayerLogin(t.player));
+            helper.assertTrue(login.equals(List.of(localized(t.server, KEY + "over_limit_claims_reminder", "2", "1", "5 h 10 min"))),
+                    "expected the reminder at login with 5 h 10 min left, got " + login);
+            info = new CapturingCommandSource();
+            TeamClaimsOverview.showInfo(commandSource(helper, info), null, t.ownerId, null);
+            helper.assertTrue(info.received(localized(t.server, KEY + "info_over_limit_claims", "2", "5 h 10 min")),
+                    "expected /teamclaims info to show 5 h 10 min, got " + info.all());
+            now[0] = deadline - 20 * 60_000;
+            login = captureChat(t.server, t.player, () -> t.cm.onPlayerLogin(t.player));
+            helper.assertTrue(login.equals(List.of(localized(t.server, KEY + "over_limit_claims_reminder", "2", "1", "20 min"))),
+                    "expected the reminder at login with 20 min left, got " + login);
+            info = new CapturingCommandSource();
+            TeamClaimsOverview.showInfo(commandSource(helper, info), null, t.ownerId, null);
+            helper.assertTrue(info.received(localized(t.server, KEY + "info_over_limit_claims", "2", "20 min")),
+                    "expected /teamclaims info to show 20 min, got " + info.all());
 
             t.cm.setBudgetSettingsOverride(partyId, roomy);
             List<String> resolved = captureChat(t.server, t.player, () -> t.cm.checkOverLimit(partyId));
@@ -810,11 +831,57 @@ public final class TeamClaimsBudgetTestCases {
             assertClaim(helper, t.server, x0, 0, t.ownerId, false, "the oldest team claim");
             assertClaim(helper, t.server, x0 + 1, 0, null, false, "the 2nd team claim");
             assertClaim(helper, t.server, x0 + 2, 0, null, false, "the newest team claim");
+
+            assertDurationUnits(helper, t.server);
             helper.succeed();
         } finally {
             t.cm.setClock(null);
             t.cleanup(x0, 0, x0 + 1, 0, x0 + 2, 0);
         }
+    }
+
+    /**
+     * The time left in the over-limit texts is one value in the largest sensible unit pair, with the thresholds and
+     * the rounding (up to the minute, at least one minute) of the party screen: days and hours from one day, hours and
+     * minutes from one hour, else minutes. Checked at and around both thresholds, and that the duration is translated
+     * as the argument of a message, which is how a player without the mod gets it.
+     */
+    private static void assertDurationUnits(GameTestHelper helper, MinecraftServer server) {
+        long minute = 60_000L;
+        long day = 24 * HOUR;
+        assertDuration(helper, server, 7 * day, "7 d 0 h");
+        assertDuration(helper, server, 2 * day + 30 * minute, "2 d 0 h");
+        assertDuration(helper, server, day + HOUR + 59 * minute, "1 d 1 h");
+        assertDuration(helper, server, day, "1 d 0 h");
+        // Rounded up to the minute: a millisecond short of a day is a whole day, a minute and a millisecond short is not
+        assertDuration(helper, server, day - 1, "1 d 0 h");
+        assertDuration(helper, server, day - minute, "23 h 59 min");
+        assertDuration(helper, server, day - minute - 1, "23 h 59 min");
+        assertDuration(helper, server, day - minute + 1, "1 d 0 h");
+        assertDuration(helper, server, 5 * HOUR + 10 * minute, "5 h 10 min");
+        assertDuration(helper, server, 5 * HOUR + 10 * minute + 1, "5 h 11 min");
+        assertDuration(helper, server, HOUR, "1 h 0 min");
+        assertDuration(helper, server, HOUR - 1, "1 h 0 min");
+        assertDuration(helper, server, HOUR - minute, "59 min");
+        assertDuration(helper, server, HOUR - minute - 1, "59 min");
+        assertDuration(helper, server, HOUR - minute + 1, "1 h 0 min");
+        assertDuration(helper, server, 90_000, "2 min");
+        assertDuration(helper, server, minute, "1 min");
+        assertDuration(helper, server, minute + 1, "2 min");
+        assertDuration(helper, server, 1, "1 min");
+        assertDuration(helper, server, 0, "1 min");
+    }
+
+    /** {@code millis} as a nested duration is {@code expected}, alone and as the argument of the over-limit info text. */
+    private static void assertDuration(GameTestHelper helper, MinecraftServer server, long millis, String expected) {
+        Component duration = TeamClaimManager.durationOf(millis);
+        String alone = OpenPACServerAPI.get(server).getAdaptiveTextLocalizer().getFor(null, duration).getString();
+        helper.assertTrue(alone.equals(expected), "expected " + millis + " ms to be shown as '" + expected + "', got '" + alone + "'");
+        String nested = OpenPACServerAPI.get(server).getAdaptiveTextLocalizer()
+                .getFor(null, KEY + "info_over_limit_claims", "2", duration).getString();
+        String literal = localized(server, KEY + "info_over_limit_claims", "2", expected);
+        helper.assertTrue(nested.equals(literal) && nested.contains(" in " + expected + " "),
+                "expected " + millis + " ms nested in the info text to read '" + literal + "', got '" + nested + "'");
     }
 
     /**
@@ -981,7 +1048,7 @@ public final class TeamClaimsBudgetTestCases {
 
     // ==================== Helpers ====================
 
-    private static int teamSub(MinecraftServer server, IServerPartyAPI party, UUID memberId) {
+    static int teamSub(MinecraftServer server, IServerPartyAPI party, UUID memberId) {
         return teamSubIndexOf(server, TeamClaimsCommon.getTeamConfigManager().getTeamConfig(party.getId()).getSubConfigId(), memberId);
     }
 
@@ -1056,7 +1123,7 @@ public final class TeamClaimsBudgetTestCases {
     }
 
     /** Removes the budget override of the party and the party itself; never throws. */
-    private static void cleanupParty(MinecraftServer server, @Nullable IServerPartyAPI party) {
+    static void cleanupParty(MinecraftServer server, @Nullable IServerPartyAPI party) {
         if (party == null) return;
         try {
             TeamClaimsCommon.getClaimManager().setBudgetSettingsOverride(party.getId(), null);
@@ -1116,7 +1183,7 @@ public final class TeamClaimsBudgetTestCases {
      * OPAC's low-level {@code claim} (no checks), so they don't depend on the rules under test. {@link #cleanup}
      * unclaims the given chunks and removes everything again.
      */
-    private static final class Team {
+    static final class Team {
         final GameTestHelper helper;
         final MinecraftServer server;
         final TeamClaimManager cm = TeamClaimsCommon.getClaimManager();
