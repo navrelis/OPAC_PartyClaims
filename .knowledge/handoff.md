@@ -5,14 +5,14 @@ running. (The handoff of the stopped session of 2026-10-09 is in the git history
 
 ## State
 - `v1.2-dev` = origin: budgets, party screen, FTB Teams sync, lang en + de, tests, README, version `1.2.0+opac.0.31.6`.
-- `fabric-port` (v1.1.0, GitHub default) and `main` are untouched. Merging `v1.2-dev` needs the user's word.
-- Release files: `ExportedJars/v1.2.0/` (two jars, not committed; `CURSEFORGE.md` committed). Nothing uploaded.
-- Local only: branch `wip/t3-ftb-sync` (old draft, contained in the T3 commit; can be deleted).
+- `v1.2-dev` is merged into `fabric-port` (GitHub default) and pushed; `main` is untouched.
+- Release files: `ExportedJars/v1.2.0/` (two jars, not committed; `CURSEFORGE.md` committed).
+- CurseForge project 1704256 (Beta): NeoForge 1.2.0 uploaded (file 9106819). Fabric 1.2.0 NOT uploaded yet: the upload tool's relation check (api.cfwidget.com) returns 404 for `forge-config-api-port` and `ftb-teams-fabric`; plan file `curseforge-plan-1704256-1.2.0-fabric.json` in the tool's `local/` folder, changelog text = section "Changelog for this file" of `ExportedJars/v1.2.0/CURSEFORGE.md`.
 - Untracked and to stay untracked: `graphify-out/`, `ExportedJars/opacteamclaimslogo.png`.
 
 ## Open for the user
 1. Manual test checklist in `report.md` (two clients; with and without FTB Teams).
-2. Decide: merge `v1.2-dev` into `fabric-port`, CurseForge upload (suggested type Beta), delete `wip/t3-ftb-sync`.
+2. Fabric upload to CurseForge (see State), then the project description / summary from `ExportedJars/v1.2.0/CURSEFORGE.md`.
 3. Server admins: read "Updating from 1.1.0" in the README (solo teams have a team limit of 0 by default).
 
 ## Commands

@@ -1,9 +1,10 @@
 # Final report — OPAC Team Claims 1.2.0 (Fabric + NeoForge 1.21.1), sessions 2026-10-08 / 2026-10-09
 
-Branch `v1.2-dev` on github.com/navrelis/OPAC_PartyClaims, based on `fabric-port` (v1.1.0). Not merged into
-`fabric-port` or `main` (waits for your word). Release files: `ExportedJars/v1.2.0/`
+Branch `v1.2-dev` on github.com/navrelis/OPAC_PartyClaims, merged into `fabric-port` (GitHub default) on 2026-10-09;
+`main` untouched. Release files: `ExportedJars/v1.2.0/`
 (`opac-team-claims-fabric-1.21.1-v1.2.0.jar`, `opac-team-claims-neoforge-1.21.1-v1.2.0.jar`, `CURSEFORGE.md`; jars are
-not committed). Version `1.2.0+opac.0.31.6`, mod id `openpartiesandclaims`. Nothing was uploaded to CurseForge.
+not committed). Version `1.2.0+opac.0.31.6`, mod id `openpartiesandclaims`. CurseForge (project 1704256, Beta): NeoForge file
+9106819 uploaded; the Fabric file is still open (see `handoff.md`).
 (The v1.1.0 report is in the git history of this file.)
 
 ## Requirements → implementation
@@ -102,6 +103,5 @@ OPAC cannot take is undone and the players concerned are told.
 - The sync uses FTB Teams implementation classes (its public API has almost no writes), so a newer FTB Teams version
   may need an update of the sync; it fails closed (sync off, server keeps running).
 - German covers the fork's own texts; upstream OPAC texts stay English.
-- Local branch `wip/t3-ftb-sync` (the stopped agent's draft, fully contained in the T3 commit) still exists locally and
-  can be deleted. `graphify-out/` was not updated (your instruction).
+- `graphify-out/` was not updated (your instruction).
 - Gradle prints "deprecated features, incompatible with Gradle 9"; a later move needs newer loom / NeoGradle.
