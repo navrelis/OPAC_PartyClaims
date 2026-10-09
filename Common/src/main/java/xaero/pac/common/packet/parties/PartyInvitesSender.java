@@ -21,7 +21,7 @@ package xaero.pac.common.packet.parties;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import xaero.pac.OpenPartiesAndClaims;
-import xaero.pac.client.parties.party.ClientReceivedPartyInvite;
+import xaero.pac.common.parties.party.ReceivedPartyInvite;
 import xaero.pac.common.claims.player.IPlayerChunkClaim;
 import xaero.pac.common.claims.player.IPlayerClaimPosList;
 import xaero.pac.common.claims.player.IPlayerDimensionClaims;
@@ -63,20 +63,20 @@ public final class PartyInvitesSender {
 		IServerData<IServerClaimsManager<IPlayerChunkClaim, IServerPlayerClaimInfo<IPlayerDimensionClaims<IPlayerClaimPosList>>, IServerDimensionClaimsManager<IServerRegionClaims>>, IServerParty<IPartyMember, IPartyPlayerInfo, IPartyAlly>> serverData = ServerData.from(server);
 		if(serverData == null)
 			return;
-		List<ClientReceivedPartyInvite> invites = collect(serverData, player.getUUID());
+		List<ReceivedPartyInvite> invites = collect(serverData, player.getUUID());
 		OpenPartiesAndClaims.INSTANCE.getPacketHandler().sendToPlayer(player, new ClientboundPartyInvitesPacket(invites));
 	}
 
-	private static List<ClientReceivedPartyInvite> collect(IServerData<IServerClaimsManager<IPlayerChunkClaim, IServerPlayerClaimInfo<IPlayerDimensionClaims<IPlayerClaimPosList>>, IServerDimensionClaimsManager<IServerRegionClaims>>, IServerParty<IPartyMember, IPartyPlayerInfo, IPartyAlly>> serverData, UUID playerId) {
+	private static List<ReceivedPartyInvite> collect(IServerData<IServerClaimsManager<IPlayerChunkClaim, IServerPlayerClaimInfo<IPlayerDimensionClaims<IPlayerClaimPosList>>, IServerDimensionClaimsManager<IServerRegionClaims>>, IServerParty<IPartyMember, IPartyPlayerInfo, IPartyAlly>> serverData, UUID playerId) {
 		IPartyManager<IServerParty<IPartyMember, IPartyPlayerInfo, IPartyAlly>> partyManager = serverData.getPartyManager();
 		IPlayerConfigManager playerConfigs = serverData.getPlayerConfigManager();
-		List<ClientReceivedPartyInvite> result = new ArrayList<>();
+		List<ReceivedPartyInvite> result = new ArrayList<>();
 		Iterator<IServerParty<IPartyMember, IPartyPlayerInfo, IPartyAlly>> partyIterator =
 				partyManager.getTypedAllStream().filter(party -> party.isInvited(playerId) && party.getMemberInfo(playerId) == null).iterator();
 		while(partyIterator.hasNext() && result.size() < ClientboundPartyInvitesPacket.MAX_ENTRIES) {
 			IServerParty<IPartyMember, IPartyPlayerInfo, IPartyAlly> party = partyIterator.next();
 			IPartyMember owner = party.getOwner();
-			result.add(new ClientReceivedPartyInvite(party.getId(), getPartyName(playerConfigs, party), owner.getUsername()));
+			result.add(new ReceivedPartyInvite(party.getId(), getPartyName(playerConfigs, party), owner.getUsername()));
 		}
 		return result;
 	}

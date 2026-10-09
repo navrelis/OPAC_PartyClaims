@@ -19,7 +19,9 @@
 package xaero.pac.client.parties.party;
 
 import xaero.pac.client.parties.party.api.IClientPartyStorageAPI;
+import xaero.pac.common.packet.parties.PartyBudgetData;
 import xaero.pac.common.parties.party.IParty;
+import xaero.pac.common.parties.party.ReceivedPartyInvite;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
@@ -72,8 +74,25 @@ public interface IClientPartyStorage
 	 * @return an immutable list of the received invites, not null
 	 */
 	@Nonnull
-	public List<ClientReceivedPartyInvite> getReceivedInvites();
+	public List<ReceivedPartyInvite> getReceivedInvites();
 
-	public void setReceivedInvites(@Nonnull List<ClientReceivedPartyInvite> receivedInvites);
+	public void setReceivedInvites(@Nonnull List<ReceivedPartyInvite> receivedInvites);
+
+	/**
+	 * Gets the claim and forceload budgets that the server last reported for the local player.
+	 *
+	 * @return the budgets, null if the server has not reported any since the last reset
+	 */
+	@Nullable
+	public PartyBudgetData getBudget();
+
+	/**
+	 * Gets the time at which the budgets were received, to count the time left of the over-limit deadlines down.
+	 *
+	 * @return the time in milliseconds as of {@link System#currentTimeMillis()}
+	 */
+	public long getBudgetReceivedTime();
+
+	public void setBudget(@Nullable PartyBudgetData budget, long receivedTime);
 	
 }

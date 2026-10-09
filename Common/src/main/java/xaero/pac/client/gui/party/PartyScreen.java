@@ -36,7 +36,7 @@ import xaero.pac.OpenPartiesAndClaims;
 import xaero.pac.client.controls.keybinding.IKeyBindingHelper;
 import xaero.pac.client.gui.MainMenu;
 import xaero.pac.client.gui.XPACScreen;
-import xaero.pac.client.parties.party.ClientReceivedPartyInvite;
+import xaero.pac.common.parties.party.ReceivedPartyInvite;
 import xaero.pac.client.parties.party.IClientParty;
 import xaero.pac.client.parties.party.IClientPartyAllyInfo;
 import xaero.pac.client.parties.party.IClientPartyMemberDynamicInfoSyncableStorage;
@@ -45,6 +45,7 @@ import xaero.pac.client.world.capability.ClientWorldMainCapability;
 import xaero.pac.client.world.capability.api.ClientWorldCapabilityTypes;
 import xaero.pac.common.packet.config.PlayerConfigOptionValuePacket;
 import xaero.pac.common.packet.config.ServerboundPlayerConfigOptionValuePacket;
+import xaero.pac.common.packet.parties.PartyBudgetData;
 import xaero.pac.common.packet.parties.ServerboundPartyInviteDeclinePacket;
 import xaero.pac.common.packet.parties.ServerboundPartyInvitesRequestPacket;
 import xaero.pac.common.parties.party.IPartyMemberDynamicInfoSyncable;
@@ -81,7 +82,20 @@ public class PartyScreen extends XPACScreen implements PartyEntryList.Actions {
 	private static final int INVALID_TEXT_COLOR = 0xFFFF5555;
 	private static final int VALID_TEXT_COLOR = 0xFFE0E0E0;
 	private static final int VALUE_COLOR = 0xFFAAAAAA;
+	private static final int WARNING_COLOR = 0xFFFF5555;
+	private static final int HINT_COLOR = 0xFFFFCC55;
 	private static final int MAX_PLAYER_NAME_LENGTH = 32;
+	private static final int MIN_LIST_ROWS = 3;
+	private static final int HEADER_LINE_STEP = 10;
+	private static final int HEADER_GAP = 2;
+	private static final int MAX_LINES_PER_ENTRY = 2;
+	private static final int TOOLTIP_WIDTH = 200;
+	private static final int CONTENT_TOP = 14;
+	private static final int NO_PARTY_HEADER_TOP = 16;
+	private static final int NO_PARTY_MAX_HEADER_LINES = 2;
+	private static final long MILLIS_PER_MINUTE = 60_000;
+	private static final long MINUTES_PER_HOUR = 60;
+	private static final long MINUTES_PER_DAY = 24 * MINUTES_PER_HOUR;
 
 	private static final Component TITLE = Component.translatable("gui.xaero_pac_party_screen_title");
 	private static final Component CREATE_TITLE = Component.translatable("gui.xaero_pac_party_screen_create_title");
@@ -106,17 +120,26 @@ public class PartyScreen extends XPACScreen implements PartyEntryList.Actions {
 	/**
 	 * Everything that decides which widgets the screen has. A change of any of it rebuilds the widgets.
 	 */
-	private record LayoutKey(State state, boolean member, boolean canInvite, boolean owner, UUID partyId, UUID ownerId) {
+	private record LayoutKey(State state, boolean member, boolean canInvite, boolean owner, UUID partyId, UUID ownerId, int headerLineCount) {
+	}
+
+	/**
+	 * One line of text above the member list.
+	 *
+	 * @param tooltip  what hovering the line shows, null for nothing
+	 */
+	private record HeaderLine(FormattedCharSequence text, int color, @Nullable Component tooltip) {
 	}
 
 	private State state = State.NO_MOD;
 	private LayoutKey layoutKey;
 	private int contentWidth;
 	private int contentLeft;
+	private int headerTop;
 	private int headerBottom;
 	private int createLabelY;
-	private int infoLineY;
 	private int invitesLabelY;
+	private List<HeaderLine> headerLines = List.of();
 	private int messageY;
 	private int suggestionRowY;
 
@@ -169,12 +192,109 @@ public class PartyScreen extends XPACScreen implements PartyEntryList.Actions {
 		return party.getMemberInfo(minecraft.player.getUUID());
 	}
 
-	private LayoutKey computeLayoutKey(State state) {
+	private LayoutKey computeLayoutKey(State state, List<HeaderLine> headerLines) {
 		if(state != State.IN_PARTY)
-			return new LayoutKey(state, false, false, false, null, null);
+			return new LayoutKey(state, false, false, false, null, null, headerLines.size());
 		IClientParty<IPartyMember, IPartyPlayerInfo, IPartyAlly> party = getPartyStorage().getParty();
 		IPartyMember local = getLocalMember();
-		return new LayoutKey(state, local != null, local != null && PartyRules.canInviteAndKick(local), local != null && PartyRules.canRename(local), party.getId(), party.getOwner().getUUID());
+		return new LayoutKey(state, local != null, local != null && PartyRules.canInviteAndKick(local), local != null && PartyRules.canRename(local), party.getId(), party.getOwner().getUUID(), headerLines.size());
+	}
+
+	// ---- layout of the party view ----
+
+	private int getInPartyHeaderTop(boolean canRename) {
+		return canRename ? CONTENT_TOP + BUTTON_HEIGHT + HEADER_GAP : CONTENT_TOP + font.lineHeight + 5;
+	}
+
+	private int getBottomRowY() {
+		return height - 24;
+	}
+
+	private int getInviteRowY() {
+		return getBottomRowY() - BUTTON_HEIGHT - 3;
+	}
+
+	private int getSuggestionRowY() {
+		return getInviteRowY() - SUGGESTION_HEIGHT - 2;
+	}
+
+	private int getInPartyListBottom(boolean canInvite) {
+		return (canInvite ? getSuggestionRowY() : getBottomRowY()) - 3;
+	}
+
+	/**
+	 * Gets how many lines of text fit above the member list while the list keeps its minimum number of rows.
+	 */
+	private int getMaxHeaderLines(State state, boolean canRename, boolean canInvite) {
+		if(state != State.IN_PARTY)
+			return NO_PARTY_MAX_HEADER_LINES;
+		int availableHeight = getInPartyListBottom(canInvite) - MIN_LIST_ROWS * PartyEntryList.ITEM_HEIGHT - getInPartyHeaderTop(canRename) - HEADER_GAP;
+		return Math.max(1, availableHeight / HEADER_LINE_STEP);
+	}
+
+	// ---- header text ----
+
+	private static String formatLimit(int value) {
+		return value == Integer.MAX_VALUE ? "∞" : String.valueOf(value);
+	}
+
+	private static Component formatBudget(int amount, int limit) {
+		return Component.literal(amount + " / " + formatLimit(limit)).withStyle(s -> s.withColor(VALUE_COLOR));
+	}
+
+	private static Component formatTimeLeft(long millis) {
+		long minutes = Math.max(1, (millis + MILLIS_PER_MINUTE - 1) / MILLIS_PER_MINUTE);
+		if(minutes >= MINUTES_PER_DAY)
+			return Component.translatable("gui.xaero_pac_party_screen_time_days", minutes / MINUTES_PER_DAY, minutes % MINUTES_PER_DAY / MINUTES_PER_HOUR);
+		if(minutes >= MINUTES_PER_HOUR)
+			return Component.translatable("gui.xaero_pac_party_screen_time_hours", minutes / MINUTES_PER_HOUR, minutes % MINUTES_PER_HOUR);
+		return Component.translatable("gui.xaero_pac_party_screen_time_minutes", minutes);
+	}
+
+	private void addHeaderLines(List<HeaderLine> lines, Component text, int color, @Nullable Component tooltip) {
+		List<FormattedCharSequence> split = font.split(text, contentWidth);
+		for(int i = 0; i < split.size() && i < MAX_LINES_PER_ENTRY; i++)
+			lines.add(new HeaderLine(split.get(i), color, tooltip));
+	}
+
+	/**
+	 * Gets the lines of text above the member list: the party info and the claim and forceload budgets that the server
+	 * reported, including the warnings about a running over-limit deadline. The deadlines count down locally from the
+	 * time left that the server reported when it sent the budgets.
+	 */
+	private List<HeaderLine> computeHeaderLines(State state) {
+		if(state != State.NO_PARTY && state != State.IN_PARTY)
+			return List.of();
+		IPartyMember local = state == State.IN_PARTY ? getLocalMember() : null;
+		List<HeaderLine> lines = new ArrayList<>();
+		if(state == State.IN_PARTY)
+			addHeaderLines(lines, getInfoComponent(), -1, null);
+		IClientPartyStorage<?, ?, ?> partyStorage = getPartyStorage();
+		PartyBudgetData budget = partyStorage.getBudget();
+		if(budget != null && budget.available()) {
+			long elapsed = Math.max(0, System.currentTimeMillis() - partyStorage.getBudgetReceivedTime());
+			addHeaderLines(lines, Component.translatable("gui.xaero_pac_party_screen_budget_private",
+					formatBudget(budget.privateClaims(), budget.privateClaimLimit()),
+					formatBudget(budget.privateForceloads(), budget.privateForceloadLimit())), -1, null);
+			if(state == State.IN_PARTY && budget.inTeam()) {
+				Component nextMemberTooltip = budget.nextMemberClaims() > 0 || budget.nextMemberForceloads() > 0
+						? Component.translatable("gui.xaero_pac_party_screen_budget_next_member", budget.nextMemberClaims(), budget.nextMemberForceloads()) : null;
+				if(budget.memberCount() < budget.minMembers())
+					addHeaderLines(lines, Component.translatable("gui.xaero_pac_party_screen_budget_team_too_small", budget.minMembers(), budget.memberCount()), HINT_COLOR, nextMemberTooltip);
+				else
+					addHeaderLines(lines, Component.translatable("gui.xaero_pac_party_screen_budget_team",
+							formatBudget(budget.teamClaims(), budget.teamClaimLimit()),
+							formatBudget(budget.teamForceloads(), budget.teamForceloadLimit())), -1, nextMemberTooltip);
+				if(budget.claimsOverLimit() > 0 && budget.claimMillisLeft() > 0)
+					addHeaderLines(lines, Component.translatable("gui.xaero_pac_party_screen_budget_claims_warning",
+							budget.claimsOverLimit(), formatTimeLeft(budget.claimMillisLeft() - elapsed)), WARNING_COLOR, null);
+				if(budget.forceloadsOverLimit() > 0 && budget.forceloadMillisLeft() > 0)
+					addHeaderLines(lines, Component.translatable("gui.xaero_pac_party_screen_budget_forceloads_warning",
+							budget.forceloadsOverLimit(), formatTimeLeft(budget.forceloadMillisLeft() - elapsed)), WARNING_COLOR, null);
+			}
+		}
+		int maxLines = getMaxHeaderLines(state, local != null && PartyRules.canRename(local), local != null && PartyRules.canInviteAndKick(local));
+		return lines.size() > maxLines ? List.copyOf(lines.subList(0, maxLines)) : lines;
 	}
 
 	private String getCurrentPartyName() {
@@ -186,7 +306,10 @@ public class PartyScreen extends XPACScreen implements PartyEntryList.Actions {
 	protected void init() {
 		super.init();
 		state = computeState();
-		layoutKey = computeLayoutKey(state);
+		contentWidth = Math.min(width - 16, MAX_CONTENT_WIDTH);
+		contentLeft = (width - contentWidth) / 2;
+		headerLines = computeHeaderLines(state);
+		layoutKey = computeLayoutKey(state, headerLines);
 		list = null;
 		displayedRows = null;
 		createBox = null;
@@ -199,14 +322,14 @@ public class PartyScreen extends XPACScreen implements PartyEntryList.Actions {
 		suggestionButtons.clear();
 		displayedSuggestions = List.of();
 		displayedSuggestionFilter = null;
-		contentWidth = Math.min(width - 16, MAX_CONTENT_WIDTH);
-		contentLeft = (width - contentWidth) / 2;
 		if(state == State.NO_PARTY)
 			initNoParty();
 		else if(state == State.IN_PARTY)
 			initInParty();
 		else
 			initMessageOnly();
+		if(state == State.NO_PARTY || state == State.IN_PARTY)
+			maybeRequestInvites();
 		updateWidgets();
 	}
 
@@ -216,7 +339,8 @@ public class PartyScreen extends XPACScreen implements PartyEntryList.Actions {
 	}
 
 	private void initNoParty() {
-		createLabelY = 18;
+		headerTop = NO_PARTY_HEADER_TOP;
+		createLabelY = headerLines.isEmpty() ? 18 : headerTop + headerLines.size() * HEADER_LINE_STEP + 3;
 		int createButtonWidth = font.width(CREATE) + 20;
 		createBox = new EditBox(font, contentLeft, createLabelY + font.lineHeight + 3, contentWidth - createButtonWidth - ROW_GAP, BUTTON_HEIGHT, CREATE_NAME_HINT);
 		createBox.setMaxLength(PartyRules.getPartyNameMaxLength());
@@ -234,7 +358,6 @@ public class PartyScreen extends XPACScreen implements PartyEntryList.Actions {
 		int listBottom = height - 32;
 		list = addRenderableWidget(new PartyEntryList(minecraft, width, Math.max(PartyEntryList.ITEM_HEIGHT, listBottom - listTop), listTop, getListRowWidth(), this));
 		addBackButton(width / 2 - 100, height - 26, 200);
-		maybeRequestInvites();
 	}
 
 	private int getListRowWidth() {
@@ -245,7 +368,7 @@ public class PartyScreen extends XPACScreen implements PartyEntryList.Actions {
 		IPartyMember local = getLocalMember();
 		boolean owner = local != null && PartyRules.canRename(local);
 		boolean canInvite = local != null && PartyRules.canInviteAndKick(local);
-		int y = 14;
+		int y = CONTENT_TOP;
 		if(owner) {
 			int saveWidth = font.width(SAVE) + 20;
 			String currentName = getCurrentPartyName();
@@ -260,21 +383,17 @@ public class PartyScreen extends XPACScreen implements PartyEntryList.Actions {
 			addRenderableWidget(renameBox);
 			renameButton = addRenderableWidget(Button.builder(SAVE, b -> onRenameButton())
 					.bounds(contentLeft + contentWidth - saveWidth, y, saveWidth, BUTTON_HEIGHT).build());
-			y += BUTTON_HEIGHT + ROW_GAP;
+			y += BUTTON_HEIGHT + HEADER_GAP;
 		} else {
-			messageY = y + 4;
-			y += font.lineHeight + 8;
+			messageY = y + 2;
+			y += font.lineHeight + 5;
 		}
-		int infoLines = font.split(getInfoComponent(true), contentWidth).size();
-		infoLineY = y;
-		y += infoLines * (font.lineHeight + 2) + 2;
-		headerBottom = y;
-		int bottomRowY = height - 26;
-		int footerTop = bottomRowY;
+		headerTop = y;
+		headerBottom = headerTop + headerLines.size() * HEADER_LINE_STEP + 1;
+		int bottomRowY = getBottomRowY();
 		if(canInvite) {
-			int inviteRowY = bottomRowY - BUTTON_HEIGHT - ROW_GAP;
-			suggestionRowY = inviteRowY - SUGGESTION_HEIGHT - ROW_GAP;
-			footerTop = suggestionRowY;
+			int inviteRowY = getInviteRowY();
+			suggestionRowY = getSuggestionRowY();
 			int inviteButtonWidth = font.width(INVITE) + 20;
 			inviteBox = new EditBox(font, contentLeft, inviteRowY, contentWidth - inviteButtonWidth - ROW_GAP, BUTTON_HEIGHT, INVITE_HINT);
 			inviteBox.setMaxLength(MAX_PLAYER_NAME_LENGTH);
@@ -288,8 +407,8 @@ public class PartyScreen extends XPACScreen implements PartyEntryList.Actions {
 			inviteButton = addRenderableWidget(Button.builder(INVITE, b -> onInviteButton())
 					.bounds(contentLeft + contentWidth - inviteButtonWidth, inviteRowY, inviteButtonWidth, BUTTON_HEIGHT).build());
 		}
-		int listTop = headerBottom + 2;
-		int listHeight = Math.max(PartyEntryList.ITEM_HEIGHT, footerTop - ROW_GAP - listTop);
+		int listTop = headerBottom + 1;
+		int listHeight = Math.max(PartyEntryList.ITEM_HEIGHT, getInPartyListBottom(canInvite) - listTop);
 		list = addRenderableWidget(new PartyEntryList(minecraft, width, listHeight, listTop, getListRowWidth(), this));
 		int halfWidth = (contentWidth - ROW_GAP) / 2;
 		boolean isOwner = local != null && local.isOwner();
@@ -403,7 +522,7 @@ public class PartyScreen extends XPACScreen implements PartyEntryList.Actions {
 	public void onDeclineClicked(PartyRow.ReceivedInvite invite) {
 		OpenPartiesAndClaims.INSTANCE.getPacketHandler().sendToServer(new ServerboundPartyInviteDeclinePacket(invite.partyId()));
 		IClientPartyStorage<?, ?, ?> partyStorage = getPartyStorage();
-		List<ClientReceivedPartyInvite> remaining = new ArrayList<>(partyStorage.getReceivedInvites());
+		List<ReceivedPartyInvite> remaining = new ArrayList<>(partyStorage.getReceivedInvites());
 		remaining.removeIf(received -> received.partyId().equals(invite.partyId()));
 		partyStorage.setReceivedInvites(remaining);
 	}
@@ -439,7 +558,7 @@ public class PartyScreen extends XPACScreen implements PartyEntryList.Actions {
 	private List<PartyRow> computeRows() {
 		List<PartyRow> rows = new ArrayList<>();
 		if(state == State.NO_PARTY) {
-			for(ClientReceivedPartyInvite invite : getPartyStorage().getReceivedInvites())
+			for(ReceivedPartyInvite invite : getPartyStorage().getReceivedInvites())
 				rows.add(new PartyRow.ReceivedInvite(invite.partyId(), invite.partyName(), invite.ownerName()));
 			if(rows.isEmpty())
 				rows.add(new PartyRow.Message(NO_INVITES));
@@ -562,11 +681,13 @@ public class PartyScreen extends XPACScreen implements PartyEntryList.Actions {
 	public void tick() {
 		super.tick();
 		State currentState = computeState();
-		if(currentState != state || !computeLayoutKey(currentState).equals(layoutKey)) {
+		List<HeaderLine> currentHeaderLines = computeHeaderLines(currentState);
+		if(currentState != state || !computeLayoutKey(currentState, currentHeaderLines).equals(layoutKey)) {
 			rebuildWidgets();
 			return;
 		}
-		if(state == State.NO_PARTY && ++invitesRequestCounter >= INVITES_REQUEST_INTERVAL_TICKS)
+		headerLines = currentHeaderLines;
+		if((state == State.NO_PARTY || state == State.IN_PARTY) && ++invitesRequestCounter >= INVITES_REQUEST_INTERVAL_TICKS)
 			maybeRequestInvites();
 		if(renameBox != null) {
 			String currentName = getCurrentPartyName();
@@ -580,12 +701,12 @@ public class PartyScreen extends XPACScreen implements PartyEntryList.Actions {
 		updateWidgets();
 	}
 
-	private Component getInfoComponent(boolean measuring) {
+	private Component getInfoComponent() {
 		IClientPartyStorage<?, ?, ?> partyStorage = getPartyStorage();
 		IClientParty<IPartyMember, IPartyPlayerInfo, IPartyAlly> party = getPartyStorage().getParty();
 		String ownerName = party == null ? "" : party.getOwner().getUsername();
-		String memberNumbers = measuring ? "00 / 00" : partyStorage.getUIMemberCount() + " / " + partyStorage.getMemberLimit();
-		String inviteNumbers = measuring ? "00 / 00" : partyStorage.getUIInviteCount() + " / " + partyStorage.getInviteLimit();
+		String memberNumbers = partyStorage.getUIMemberCount() + " / " + partyStorage.getMemberLimit();
+		String inviteNumbers = partyStorage.getUIInviteCount() + " / " + partyStorage.getInviteLimit();
 		Component spacing = Component.literal("   ");
 		return Component.empty()
 				.append(Component.translatable("gui.xaero_pac_ui_party_owner", Component.literal(ownerName).withStyle(s -> s.withColor(VALUE_COLOR))))
@@ -605,22 +726,34 @@ public class PartyScreen extends XPACScreen implements PartyEntryList.Actions {
 			case NO_PARTY -> {
 				guiGraphics.drawString(font, CREATE_TITLE, contentLeft, createLabelY, -1);
 				guiGraphics.drawString(font, INVITES_TITLE, contentLeft, invitesLabelY, -1);
+				renderHeaderLines(guiGraphics, mouseX, mouseY);
 			}
-			case IN_PARTY -> renderPartyHeader(guiGraphics);
+			case IN_PARTY -> {
+				renderPartyName(guiGraphics);
+				renderHeaderLines(guiGraphics, mouseX, mouseY);
+			}
 		}
 	}
 
-	private void renderPartyHeader(GuiGraphics guiGraphics) {
+	private void renderPartyName(GuiGraphics guiGraphics) {
 		if(renameBox == null) {
 			String partyName = font.plainSubstrByWidth(getCurrentPartyName(), Math.max(0, contentWidth - 60));
 			Component nameComponent = Component.translatable("gui.xaero_pac_ui_party_name", Component.literal(partyName).withStyle(s -> s.withColor(VALUE_COLOR)));
 			guiGraphics.drawCenteredString(font, nameComponent, width / 2, messageY, -1);
 		}
-		int lineY = infoLineY;
-		for(FormattedCharSequence line : font.split(getInfoComponent(false), contentWidth)) {
-			guiGraphics.drawCenteredString(font, line, width / 2, lineY, -1);
-			lineY += font.lineHeight + 2;
+	}
+
+	private void renderHeaderLines(GuiGraphics guiGraphics, int mouseX, int mouseY) {
+		Component hoveredTooltip = null;
+		int lineY = headerTop;
+		for(HeaderLine line : headerLines) {
+			guiGraphics.drawCenteredString(font, line.text(), width / 2, lineY, line.color());
+			if(line.tooltip() != null && mouseY >= lineY && mouseY < lineY + font.lineHeight && Math.abs(mouseX - width / 2) <= font.width(line.text()) / 2)
+				hoveredTooltip = line.tooltip();
+			lineY += HEADER_LINE_STEP;
 		}
+		if(hoveredTooltip != null)
+			guiGraphics.renderTooltip(font, font.split(hoveredTooltip, TOOLTIP_WIDTH), mouseX, mouseY);
 	}
 
 	private boolean isTextFieldFocused() {

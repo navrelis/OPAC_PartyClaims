@@ -29,7 +29,7 @@ import java.util.function.Function;
 
 /**
  * Sent by a client to request the list of party invitations that the player has received.
- * The server answers with a {@link ClientboundPartyInvitesPacket}.
+ * The server answers with a {@link ClientboundPartyInvitesPacket} and a {@link ClientboundPartyBudgetPacket}.
  */
 public class ServerboundPartyInvitesRequestPacket {
 
@@ -74,6 +74,7 @@ public class ServerboundPartyInvitesRequestPacket {
 				return;
 			playerData.setLastPartyInvitesRequestTick(currentTick);
 			PartyInvitesSender.send(server, serverPlayer);
+			PartyBudgetSender.send(serverPlayer);
 		}
 
 	}
