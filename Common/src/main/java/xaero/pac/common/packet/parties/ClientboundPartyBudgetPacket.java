@@ -41,6 +41,10 @@ public class ClientboundPartyBudgetPacket {
 		this.budget = budget;
 	}
 
+	public PartyBudgetData getBudget() {
+		return budget;
+	}
+
 	public static class Codec implements BiConsumer<ClientboundPartyBudgetPacket, FriendlyByteBuf>, Function<FriendlyByteBuf, ClientboundPartyBudgetPacket> {
 
 		private static int readCount(FriendlyByteBuf input) {

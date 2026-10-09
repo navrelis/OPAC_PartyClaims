@@ -46,6 +46,10 @@ public class ClientboundPartyInvitesPacket {
 		this.invites = invites;
 	}
 
+	public List<ReceivedPartyInvite> getInvites() {
+		return invites;
+	}
+
 	private static String limitLength(String string, int maxLength) {
 		if(string == null)
 			return "";

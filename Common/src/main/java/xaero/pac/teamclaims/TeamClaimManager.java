@@ -7,6 +7,7 @@ import net.minecraft.core.HolderLookup;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.Tag;
+import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.TickTask;
@@ -1265,7 +1266,7 @@ public class TeamClaimManager implements IClaimsManagerListenerAPI {
                 LOGGER.info("[TeamClaims] Party {} is {} above its team {} limit of {}: the newest are removed in {} hour(s) "
                         + "unless it gets back within the limit", partyId, over, what, limit, settings.overLimitGraceHours());
                 tellMembers(party, ChatFormatting.RED, "over_limit_" + what + "_started", String.valueOf(over),
-                        String.valueOf(limit), hoursOf(graceMillis), minutesOf(graceMillis));
+                        String.valueOf(limit), durationOf(graceMillis));
                 return;
             }
             //no grace period: removed right away
@@ -1274,7 +1275,7 @@ public class TeamClaimManager implements IClaimsManagerListenerAPI {
                 teamData.setOverLimit(forceloads, deadline, now);
                 markSavedDataDirty();
                 tellMembers(party, ChatFormatting.RED, "over_limit_" + what + "_reminder", String.valueOf(over),
-                        String.valueOf(limit), hoursOf(deadline - now), minutesOf(deadline - now));
+                        String.valueOf(limit), durationOf(deadline - now));
             }
             return;
         }
@@ -1373,12 +1374,12 @@ public class TeamClaimManager implements IClaimsManagerListenerAPI {
         if (team.claimDeadline() != 0 && team.claimsOverLimit() > 0) {
             long left = Math.max(0, team.claimDeadline() - now);
             tell(player, ChatFormatting.RED, "over_limit_claims_reminder", String.valueOf(team.claimsOverLimit()),
-                    String.valueOf(team.claimLimit()), hoursOf(left), minutesOf(left));
+                    String.valueOf(team.claimLimit()), durationOf(left));
         }
         if (team.forceloadDeadline() != 0 && team.forceloadsOverLimit() > 0) {
             long left = Math.max(0, team.forceloadDeadline() - now);
             tell(player, ChatFormatting.RED, "over_limit_forceloads_reminder", String.valueOf(team.forceloadsOverLimit()),
-                    String.valueOf(team.forceloadLimit()), hoursOf(left), minutesOf(left));
+                    String.valueOf(team.forceloadLimit()), durationOf(left));
         }
     }
 
@@ -1387,14 +1388,22 @@ public class TeamClaimManager implements IClaimsManagerListenerAPI {
         return Math.max(0, deadline - clock.getAsLong());
     }
 
-    /** The whole hours of a time span that is shown as hours and minutes, rounded up to the minute. */
-    static String hoursOf(long millis) {
-        return String.valueOf((millis + 59_999) / 60_000 / 60);
-    }
-
-    /** The minutes beyond the whole hours of a time span that is shown as hours and minutes, rounded up to the minute. */
-    static String minutesOf(long millis) {
-        return String.valueOf((millis + 59_999) / 60_000 % 60);
+    /**
+     * A time span as one translatable component in the largest sensible unit pair, the way the party screen shows its
+     * over-limit countdown ({@code PartyScreen#formatTimeLeft}, same keys, thresholds and rounding): at least one day
+     * is days and hours, at least one hour is hours and minutes, anything else minutes. The span is rounded up to the
+     * minute and is at least one minute. As an argument of a message it is translated like the message itself, also
+     * server-side for a player without the mod ({@code AdaptiveLocalizer}).
+     */
+    public static Component durationOf(long millis) {
+        long minutes = Math.max(1, (millis + 59_999) / 60_000);
+        if (minutes >= 24 * 60)
+            return Component.translatable("gui.xaero_pac_party_screen_time_days", String.valueOf(minutes / (24 * 60)),
+                    String.valueOf(minutes % (24 * 60) / 60));
+        if (minutes >= 60)
+            return Component.translatable("gui.xaero_pac_party_screen_time_hours", String.valueOf(minutes / 60),
+                    String.valueOf(minutes % 60));
+        return Component.translatable("gui.xaero_pac_party_screen_time_minutes", String.valueOf(minutes));
     }
 
     // ==================== Messages ====================
@@ -1402,8 +1411,10 @@ public class TeamClaimManager implements IClaimsManagerListenerAPI {
     /** A localized {@code gui.xaero_pac_team_claims_*} chat line for one player, nothing if {@code player} is null. */
     private void tell(@Nullable ServerPlayer player, ChatFormatting style, String key, Object... args) {
         if (player == null) return;
+        // A copy: the localizer replaces a translatable argument (a duration) in the array it gets with its translation,
+        // which must not reach the next member's message, who may have the mod and translate it themselves
         player.sendSystemMessage(OpenPACServerAPI.get(server).getAdaptiveTextLocalizer()
-                .getFor(player, KEY + key, args).withStyle(style));
+                .getFor(player, KEY + key, args.clone()).withStyle(style));
     }
 
     private void tellMembers(IServerPartyAPI party, ChatFormatting style, String key, Object... args) {
