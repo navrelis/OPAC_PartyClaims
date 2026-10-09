@@ -1,80 +1,107 @@
-# Final report — OPAC Team Claims 1.1.0 (Fabric + NeoForge 1.21.1), session 2026-10-01
+# Final report — OPAC Team Claims 1.2.0 (Fabric + NeoForge 1.21.1), sessions 2026-10-08 / 2026-10-09
 
-Branch `fabric-port` on github.com/navrelis/OPAC_PartyClaims (main untouched). Release files: `ExportedJars/v1.1.0/`
-(`opac-team-claims-fabric-1.21.1-v1.1.0.jar`, `opac-team-claims-neoforge-1.21.1-v1.1.0.jar`, `CURSEFORGE.md`).
-Version `1.1.0+opac.0.31.6`, mod id `openpartiesandclaims` (drop-in replacement for OPAC; client + server).
-
-## Answer to "did you copy over the mod's source?"
-Yes. The previous session had already re-based the fork on upstream OPAC **v0.31.6** (`1.21` branch, commit
-`c0d97b37`, still the newest upstream code for 1.21.1 on 2026-10-01) and ported Team Claims to Fabric — but nothing was
-committed. This session committed that as the baseline (`b6fe205`) and built on it. Verified at the end: `Common`,
-`Fabric`, `NeoForge`, `CreateSupportCommon` differ from upstream only by `[Team Claims]`-marked hooks, entrypoint lines
-and metadata.
+Branch `v1.2-dev` on github.com/navrelis/OPAC_PartyClaims, based on `fabric-port` (v1.1.0). Not merged into
+`fabric-port` or `main` (waits for your word). Release files: `ExportedJars/v1.2.0/`
+(`opac-team-claims-fabric-1.21.1-v1.2.0.jar`, `opac-team-claims-neoforge-1.21.1-v1.2.0.jar`, `CURSEFORGE.md`; jars are
+not committed). Version `1.2.0+opac.0.31.6`, mod id `openpartiesandclaims`. Nothing was uploaded to CurseForge.
+(The v1.1.0 report is in the git history of this file.)
 
 ## Requirements → implementation
-| Requirement | Result |
-|---|---|
-| Fabric 1.21.1 (priority) | Loader 0.19.5 / Fabric API 0.116.17 / FCAP 21.1.6; builds, 44/44 gametests |
-| NeoForge 1.21.1 | Upstream NeoForge module restored unchanged (NeoGradle 7.0.181, NeoForge 21.1.168, range `[21.0.0-beta, 21.2)`) + `TeamClaimsNeoForge` adapter; 44/44 gametests on NeoForge's gametest server |
-| One codebase | All Team Claims logic in `Common/src/main/java/xaero/pac/teamclaims/` (no loader imports); thin adapters `TeamClaimsFabric` / `TeamClaimsNeoForge` |
-| Optimise + improve Team Claims | 17 findings fixed (T4): event-driven membership (party hooks, same tick, no 3 s poll, quick join+leave no longer missed); claim->party and per-owner indexes; O(1) overhead; claim-limit sync batched once per tick; team JSON saved off-thread with dirty set; corrupt files preserved; all admin-set options reach late joiners; team forceloads use OPAC forceTicks (random ticks/natural spawning); one validated create path; unique sub-config ids; null-safety; dead client sync removed |
-| Feature: team server config | `openpartiesandclaims-teamclaims-server.toml`: `enabled`, `maxTeamNameLength`, `forceloadGraceMinutes`, `territoryMessagesDefault`, `convertMaxRadius` |
-| Feature: territory messages | OPAC already had claim welcome messages; now team-aware (one team = one territory) + `/teamclaims territorymessages [on|off]` per player |
-| Feature: `/teamclaims info` + `list` | info [player]: totals, forceload state, per-member `personal + team = count / limit`, remaining budget and who limits it; list [page]: paged claim list with click buttons |
-| Feature: team roles | `/teamclaims roles <claim|unclaim|forceload> <member|claimer|moderator|admin|owner>`; default member = old behaviour; enforced via claim hook + OPAC's claim-action listener API |
-| Feature (lead pick): forceload grace period | team forceloads stay loaded N minutes after the last member left |
-| Feature (lead pick): convert | `/teamclaims convert toteam|topersonal [radius]`, keeps forceloads, respects budget and roles |
+| # | Requirement | Result |
+|---|---|---|
+| 1 | One team for FTB Teams and OPAC | Optional two-way sync (`ftbTeamsSync`, default on, only with FTB Teams installed; tested with FTB Teams 2101.1.11). Mirrored both ways, also for offline players: create, disband, join, leave, kick, owner, name, ranks, invitations. Three-way merge per party pair against a saved baseline; OPAC wins on the first sync and on conflicts; what cannot be mirrored yet stays pending and is retried. `/teamclaims ftbsync status` / `resync` (permission level 2). Nothing of FTB Teams is in the jars and no FTB class is loaded without it. |
+| 2 | Screen instead of `/oparties ...` | Party screen on key `O` (rebindable; `P` is vanilla's Social Interactions) and a "Party" button in the OPAC menu: create, invitations sent to you (accept / decline), members and ranks, invite, cancel invite, kick, make owner, rename, leave, disband, private and team budget lines with the over-limit countdown. English + German. Packets 50–53. |
+| 3 | Separate private and team claims | Private claims count against OPAC's own limit only (500 by default); team claims against the team pool only: 0 below 2 members, 500 with 2, +25 per further member; team forceloads 10, +2 per further member. All values are options of the Team Claims server config. |
+| 4 | "Bulletproof" when a team shrinks | A team above its limit is warned (at once, at login, daily) with the time left and the ways out; after `overLimitGraceHours` (7 days real time, also while the server is off) the newest team claims are unclaimed until the team is within its limit; same for team forceloads (forceload turned off, claim stays). The deadline is cancelled when the team is back within the limit. Shown in chat, `/teamclaims info` and the party screen. |
 
-## Key decisions (full list in decisions.md)
-- Logic in Common + thin loader adapters (7 of 11 classes were already loader-neutral).
-- NeoForge kept on upstream's NeoGradle setup (user choice); worked unchanged with Gradle 8.14.5 + loom 1.11.8.
-- Upstream hooks stay minimal, additive and no-ops without the Team Claims handler; roles use OPAC's official addon API instead of new hooks.
-- Team Claims config is its own SERVER toml registered from the adapters (no upstream change, no file collision).
-- Territory messages extend OPAC's existing welcome messages instead of adding a competing system.
-- Role rules that close bypasses: personal claim over an own-team team claim needs the unclaim role; a forceloaded new team claim (convert) needs the forceload role too.
-- Fork metadata: sources/issues point to the fork repo, homepage stays upstream OPAC.
+## Things you should know (decisions and behaviour)
+- **Solo teams lose their team claims after the update unless something is done.** A team with one member has a team
+  limit of 0 (`teamClaimsMinMembers = 2`). On the first start with 1.2.0 such teams get the warning and, a week later,
+  their team claims are unclaimed. Ways out: a second member joins, `/teamclaims convert topersonal`, or you set
+  `teamClaimsMinMembers = 1`. README and the CurseForge text have an "Updating from 1.1.0" section for this.
+- **Disband:** team claims become private claims of whoever made them only as far as that player has private room; the
+  rest is unclaimed at once, newest first (otherwise disbanding would turn a team pool into extra private land). The
+  confirmation in the party screen says so.
+- **Disbanding in FTB Teams disbands the OPAC party too** (last FTB member leaves, or `force-disband`), with the claim
+  consequences above. Exception (found in review and fixed): if the OPAC party still has members FTB Teams never had
+  (not logged in since FTB Teams was installed, FTB party full, join refused), the party is kept, the FTB party is
+  created again and the former FTB owner is told.
+- The deadline is cancelled as soon as the team is back within its limit, so re-inviting a member resets it.
+- Zero time left reads "1 min" (same rounding as the party screen); the time value loses its white colour for players
+  without the mod on the client.
+- Third-party mods using the OPAC API still see a player's own team claims in `getClaimCount()`.
+- FTB Teams has no events for invitations, declines and rank changes: those are picked up within about a second.
+  The hooks and FTB events do not say who acted, so messages go to the affected player, the party owner or the FTB
+  owner and officers.
+- After a server crash between a disband and the next world save, the disband is read as "one side vanished" and the
+  party is created again from the other mod (the removal note is saved with the world).
+- An OPAC-side owner transfer renames the party to the new owner's party name (OPAC behaviour) and FTB follows.
 
-## Changed files (by area)
-- Common: `xaero/pac/teamclaims/**` (facade, managers, roles, overview, convert, names, config), bridge `common/server/claims/TeamClaimsIntegration.java`; `[Team Claims]` hooks in 14 upstream files (ServerClaimsManager, PlayerClaimInfo, ClaimsManagerSynchronizer, PlayerConfig, PlayerConfigOptions, PlayerSubConfig, ServerboundSubConfigExistencePacket, CreatePartyCommand, ServerParty, PartyManager, PlayerConfigCommonChangeHandlers, ForceLoadTicketManager, ServerPlayerClaimWelcomer, PlayerConfigScreen) + `en_us.json`.
-- Shared tests: `Common/src/gametest/**` (never shipped).
-- Fabric: `teamclaims/fabric/TeamClaimsFabric.java`, entrypoint lines, `fabric.mod.json` (contact.issues), gametest wrappers.
-- NeoForge: restored module, `teamclaims/neoforge/TeamClaimsNeoForge.java`, entrypoint lines, `build.gradle` gametest source set/run, test mod `NeoForge/src/gametest/**`.
-- Build/repo: `settings.gradle` (NeoForge), root `build.gradle` (idea-ext), `gradle.properties` (version, URLs, no local JDK path), CI workflow (both loaders + both gametest runs), `.gitignore`, README, CurseForge listings.
+## What can stay "pending" in the FTB Teams sync (retried, listed by `/teamclaims ftbsync status`)
+A member or owner FTB Teams has never seen (resolved at their first login); FTB party at `max_party_size`; a join,
+ownership transfer, leave, create or disband FTB Teams refuses; a new OPAC owner who is not in the FTB party yet; an FTB
+party whose owner is in another OPAC party; an FTB party OPAC did not create a party for; an unexpected error while
+merging one pair (the other pairs go on). Resolved at once for OPAC instead of pending: an FTB join, invitation or name
+OPAC cannot take is undone and the players concerned are told.
 
-## Checks run (by the lead)
-- After every task: full diff review, both builds, both gametest suites.
-- Final: `gradlew clean :Fabric:build :NeoForge:build :Fabric:runBootTest :NeoForge:runTeamClaimsGameTest` → BUILD SUCCESSFUL; Fabric "All 44 required tests passed", NeoForge "All 44 required tests passed".
-- Production jars: 0 gametest entries; exported jars content-identical (CRC) to the final clean build.
-- Recursive diff vs upstream `c0d97b37`: only the files listed above; every modified upstream Java file carries a `[Team Claims]` marker.
-- Leftover scan: no TODO/FIXME/System.out/printStackTrace in Team Claims code; all 71 Team Claims lang keys used and present.
+## Changed files (88 files, by area; since `fabric-port` 994f95b)
+- **Budgets + grace (T1):** `teamclaims/TeamClaimManager`, `TeamClaimsBridgeHandler`, `TeamClaimsOverview`,
+  `TeamClaimsConvert`, `config/TeamClaimsServerConfig`; marked hooks in `common/server/claims/**` (claims manager,
+  claim/forceload helpers, synchronizer, ticket manager, about/transfer commands, chunk protection), `common/claims/player/**`.
+- **Party screen (T2, T4):** `client/gui/party/**` (5 files), key binding, main menu button, `client/parties/party/**`,
+  packets `common/packet/parties/**` (7 files) + `PacketRegister`, `common/parties/party/ReceivedPartyInvite`,
+  `ServerPlayerData` (request rate limit).
+- **FTB Teams sync (T3):** `teamclaims/ftbsync/**` (7 classes), hooks in `ServerParty` (invite, un-invite, rank) and
+  `TeamClaimsIntegration`, lifecycle in `TeamClaimsCommon`, command node, `ftbTeamsSync` option; build: FTB and
+  Architectury mavens, compile-only dependencies, `gametestFtb` source sets, runs `:Fabric:runBootTestFtb` and
+  `:NeoForge:runTeamClaimsGameTestFtb`, CI workflow; `ftbteams` as suggested / optional dependency in both metadata files.
+- **Texts (T4, T5a, T5b):** `en_us.json`, new `de_de.json` (fork strings: Team Claims, party screen, FTB sync).
+- **Tests:** `Common/src/gametest/**` (budget, packet and FTB sync cases), wrappers in `Fabric/src/gametest/**` and
+  `NeoForge/src/gametest/**`.
+- **Release:** `gradle.properties` (version, description), `README.md`, `ExportedJars/v1.2.0/CURSEFORGE.md`.
 
-## Manual test checklist (cannot be automated headless)
-Setup: `start-all.bat` (Fabric) or `gradlew :NeoForge:runClient` / `runServer`; two accounts in one party.
-1. Join the server with both clients (Fabric, then NeoForge) — no disconnect, no log errors.
-2. `/teamclaims create Test` → party + `team_test` sub-config appear in the OPAC config screen for both players.
-3. Select the team sub-config, claim on Xaero's World Map (drag area) → team claims show in the shared color/name; both players' counters show personal + team.
-4. Teammate unclaims / toggles forceload on your team claim in the map UI; non-member cannot.
-5. Non-admin member: team sub-config options are read-only, delete button disabled.
-6. Walk across team land claimed by both players → no repeated action-bar message; `/teamclaims territorymessages off` silences all.
-7. `/teamclaims roles unclaim admin` → member's unclaim in the map UI is refused and the reason is readable (also on the map mod's UI).
-8. `/teamclaims info`, `/teamclaims list` (click page arrows), `/teamclaims convert toteam 1`.
-9. Forceloaded team chunk keeps a farm running while one member is online; with `forceloadGraceMinutes=2`, stays loaded ~2 min after the last member logs off.
-10. Leave the party → your team claims move to the owner, both get a chat line.
-11. Set `enabled=false`, restart → stock OPAC behaviour, `/teamclaims` unavailable.
+## Checks run by the lead
+- After every task: full diff read, both builds, all test runs (details per task in `log.md`).
+- Corrections sent after review: FTB-side deletion with pending members (T3), stale mod description (T5b).
+- Final run on the release state: `gradlew clean :Fabric:build :NeoForge:build :Fabric:runBootTest :NeoForge:runTeamClaimsGameTest`, then `gradlew :Fabric:runBootTestFtb :NeoForge:runTeamClaimsGameTestFtb` -> BUILD SUCCESSFUL twice; `:Fabric:runBootTest` and
+  `:NeoForge:runTeamClaimsGameTest` without FTB Teams 77/77 each; `:Fabric:runBootTestFtb` and
+  `:NeoForge:runTeamClaimsGameTestFtb` with FTB Teams 111/111 each (77 + 34 sync tests).
+- Jars: no `dev/ftb`, `dev/architectury` or gametest entries; version 1.2.0 in both metadata files; exported jars
+  have the same content as the final build (only the build timestamp in the manifest differs).
+- Lang: `en_us.json` and `de_de.json` valid JSON, same placeholders per key, same key order; every Team Claims,
+  party-screen and FTB-sync key used in code exists in both, none unused.
+- Leftover scan: no TODO / FIXME / System.out / printStackTrace in anything changed since 1.1.0.
 
-## Known limitations / recommendations
-- Not tested in a real multiplayer session (only headless gametests incl. mock players) — use the checklist above.
-- Client and server must run the same version; a 1.0.0 client with a 1.1.0 server is not supported.
-- Going back to stock OPAC: stock caps sub-config ids at 16 chars; longer team sub-configs are not loaded by stock and their claims fall back to the main config (documented in README/listing).
-- The Team Claims config lives in the global `config/` folder (per-world override in `<world>/serverconfig/`), like OPAC's own.
-- `/teamclaims convert` calls OPAC's claim helper directly, so OPAC's own per-claim chat output/result packet is not sent (Team Claims prints its own summary).
-- Map-UI display of addon rejection reasons depends on Xaero's map mods (OPAC forwards them).
-- Gradle prints "deprecated features, incompatible with Gradle 9"; a later Gradle 9 move needs newer loom/NeoGradle.
-- Release type suggestion: Beta (first public NeoForge build).
+## Manual test checklist (needs two clients; cannot be automated)
+1. Key `O` opens the party screen and closes it again when no text field is focused; the key shows in Controls;
+   "Party" button in the OPAC menu (apostrophe key).
+2. No party: create with / without a name (invalid characters turn the box red); a second player's invite appears
+   within about 2 s; Accept joins, Decline removes it.
+3. In a party as owner / admin / moderator / member: Kick, rank button, Make owner (confirm), Invite (text + player
+   suggestions), Cancel invite, Rename, Leave / Disband (confirm) — buttons appear exactly when the server allows it.
+4. Budget lines: private line always; team line in a team; yellow hint with fewer than 2 members; red countdown while
+   over the limit ("d h" / "h min" / "min"), gone after unclaiming.
+5. Window at 320x240 (largest GUI scale): nothing overlaps, at least 3 member rows visible.
+6. German language: no raw keys, long confirmation texts wrap.
+7. Budgets: with 500/500 private claims, team claims still work and vice versa; `/teamclaims info` matches the screen.
+8. Kick a member of a team that uses its whole limit → warning to all online members, again at login and daily; after
+   the deadline (set `overLimitGraceHours` small) the newest team claims are gone.
+9. Disband with more team claims than private room → chat line with kept / unclaimed counts.
+10. With FTB Teams installed: every party action done in OPAC shows in FTB Teams and the other way round (create,
+    invite, accept, decline, leave, kick, transfer, rename, promote / demote, disband); `/teamclaims ftbsync status`.
+11. Server without FTB Teams behaves as before; a 1.1.0 world with a solo team shows the warning after the update.
 
-## Knowledge graph
-Graphify graph of the final code: `graphify-out/` (local, not committed — see decisions.md): `graph.json` (9,520 nodes,
-35,874 edges, 247 communities), `GRAPH_REPORT.md`, `graph.html` (aggregated community view). Core abstractions by
-connectivity: `IServerData`, `IPlayerChunkClaim`, `IPlayerConfig`/`PlayerConfig`, `IServerClaimsManager`, `ServerCore`.
-Health note: 3,191 dangling-endpoint edges point to Minecraft/JDK types outside the indexed corpus (expected for a mod).
-Update later with `/graphify . --update`.
+## Known limitations and recommendations
+- Not tested in a real multiplayer session or with a real client: the party screen and the FTB Teams sync are covered by
+  headless gametests (mock and offline players) only. Use the checklist above before a public release; suggested
+  release type Beta.
+- Client and server must both run 1.2.0.
+- Not covered by an automated test: an FTB Teams version without the classes the sync uses (the sync then turns
+  itself off and says so), a permission mod refusing FTB's party creation, FTB refusals other than "party full",
+  `partyOwnedClaims` together with Team Claims, the rate limit of the sync's log warnings.
+- The sync uses FTB Teams implementation classes (its public API has almost no writes), so a newer FTB Teams version
+  may need an update of the sync; it fails closed (sync off, server keeps running).
+- German covers the fork's own texts; upstream OPAC texts stay English.
+- Local branch `wip/t3-ftb-sync` (the stopped agent's draft, fully contained in the T3 commit) still exists locally and
+  can be deleted. `graphify-out/` was not updated (your instruction).
+- Gradle prints "deprecated features, incompatible with Gradle 9"; a later move needs newer loom / NeoGradle.
