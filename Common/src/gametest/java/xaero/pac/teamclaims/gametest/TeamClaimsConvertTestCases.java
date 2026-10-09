@@ -9,8 +9,11 @@ import xaero.pac.common.claims.player.api.IPlayerChunkClaimAPI;
 import xaero.pac.common.server.ServerData;
 import xaero.pac.common.server.parties.party.api.IServerPartyAPI;
 import xaero.pac.common.server.player.config.api.v2.IPlayerConfigAPI;
+import xaero.pac.common.server.player.config.api.v2.IPlayerConfigOptionSpecAPI;
 import xaero.pac.common.server.player.config.api.v2.PlayerConfigOptions;
 import xaero.pac.teamclaims.TeamClaimManager;
+import xaero.pac.teamclaims.TeamClaimManager.BudgetInfo;
+import xaero.pac.teamclaims.TeamClaimManager.BudgetSettings;
 import xaero.pac.teamclaims.TeamClaimsCommon;
 import xaero.pac.teamclaims.TeamForceLoadHandler;
 import xaero.pac.teamclaims.TeamRoles;
@@ -52,8 +55,8 @@ public final class TeamClaimsConvertTestCases {
      * {@code convert toteam 1}: the player's five personal claims in the 3x3 area become team claims, one of them
      * forceloaded, which keeps its OPAC ticket and is now a team forceload with a team ticket. The player's own team
      * claim there is "already" one, the owner's two claims in the area are skipped and stay as they are, and the
-     * player's claim just outside the area stays personal. Every member's count is their personal claims plus the
-     * team total, before and after.
+     * player's claim just outside the area stays personal. The converted claims (and the forceload) move from the
+     * player's private budget into the team's.
      */
     public static void toTeamConvertsOwnClaims(GameTestHelper helper) {
         Setup s = Setup.create(helper, "T46", 46000);
@@ -70,8 +73,8 @@ public final class TeamClaimsConvertTestCases {
             s.claim(s.playerId, playerTeamSub, x0 - 1, 1, false);//already a team claim
             s.claim(s.ownerId, -1, x0 + 1, 0, false);//a teammate's personal claim
             s.claim(s.ownerId, ownerTeamSub, x0 + 1, 1, false);//a teammate's team claim
-            // personal + team total: the player 6 + 2, the owner 1 + 2
-            s.assertNumbers("before", 2, 0, 8, 3, 1, 0);
+            // the team 2 claims; private: the player 6 claims, 1 of them forceloaded, the owner 1
+            s.assertNumbers("before", 2, 0, 6, 1, 1, 0);
             helper.assertTrue(s.opacTicketEnabled(x0, 0), "test precondition: expected OPAC's ticket of the forceloaded claim to be enabled");
             helper.assertTrue(!s.handler.hasTicket(OVERWORLD, x0, 0), "test precondition: expected no team ticket for a personal claim");
 
@@ -88,8 +91,8 @@ public final class TeamClaimsConvertTestCases {
             s.assertClaim(x0 + 2, 0, s.playerId, -1, false);
             s.assertClaim(x0 + 1, 0, s.ownerId, -1, false);
             s.assertClaim(x0 + 1, 1, s.ownerId, ownerTeamSub, false);
-            // personal + team total: the player 1 + 7, the owner 1 + 7; the forceload moved into the team
-            s.assertNumbers("after", 7, 1, 8, 8, 1, 1);
+            // the team 7 claims, 1 forceloaded; private: the player 1 claim, the owner 1; the forceload moved into the team
+            s.assertNumbers("after", 7, 1, 1, 1, 0, 0);
             TeamClaimManager.TeamData teamData = TeamClaimsCommon.getClaimManager().getTeamData(s.party.getId());
             helper.assertTrue(teamData.isForceloaded(new TeamClaimManager.ClaimPos(OVERWORLD, x0, 0))
                             && teamData.getForceloadCountOf(s.playerId) == 1,
@@ -123,8 +126,8 @@ public final class TeamClaimsConvertTestCases {
             String teamSubId = TeamClaimsCommon.getTeamConfigManager().getTeamConfig(s.party.getId()).getSubConfigId();
             IPlayerConfigAPI.SetResult used = playerConfig.tryToSet(PlayerConfigOptions.USED_SUBCLAIM, teamSubId);
             helper.assertTrue(used == IPlayerConfigAPI.SetResult.SUCCESS, "expected selecting the team sub-claim to work, got " + used);
-            // personal + team total: the player 1 + 4, the owner 0 + 4
-            s.assertNumbers("before", 4, 1, 5, 4, 1, 1);
+            // the team 4 claims, 1 forceloaded; private: the player 1 claim, the owner none
+            s.assertNumbers("before", 4, 1, 1, 0, 0, 0);
             helper.assertTrue(s.handler.hasTicket(OVERWORLD, x0, 0) && s.opacTicketEnabled(x0, 0),
                     "test precondition: expected the forceloaded team claim to have a team ticket and OPAC's ticket");
 
@@ -137,8 +140,8 @@ public final class TeamClaimsConvertTestCases {
 
             for (int dx = -1; dx <= 1; dx++) s.assertClaim(x0 + dx, 0, s.playerId, -1, dx == 0);
             s.assertClaim(x0, -1, s.ownerId, s.teamSub(s.ownerId), false);
-            // personal + team total: the player 4 + 1, the owner 0 + 1; the forceload left the team
-            s.assertNumbers("after", 1, 0, 5, 1, 1, 0);
+            // the team 1 claim; private: the player 4 claims, 1 of them forceloaded; the forceload left the team
+            s.assertNumbers("after", 1, 0, 4, 0, 1, 0);
             helper.assertTrue(!s.handler.hasTicket(OVERWORLD, x0, 0), "expected the team ticket of the converted claim to be gone");
             helper.assertTrue(s.opacTicketEnabled(x0, 0), "expected OPAC's ticket of the converted claim to stay enabled");
             waiting = true;
@@ -161,42 +164,111 @@ public final class TeamClaimsConvertTestCases {
     }
 
     /**
-     * The owner can only take 2 more claims: {@code convert toteam 1} converts the two claims nearest to the player
-     * (the centre first), then stops at the budget, and the remaining two claims count as over the budget without
-     * being tried. The owner ends up exactly at the limit.
+     * The team can only take 2 more team claims: {@code convert toteam 1} converts the two claims nearest to the player
+     * (the centre first), then stops at the team claim limit, and the remaining two claims count as over the limit
+     * without being tried. The team ends up exactly at its limit. The player's private budget does not matter for it:
+     * the conversion works although the player is above a private claim limit of 0.
      */
-    public static void toTeamStopsAtBudget(GameTestHelper helper) {
+    public static void toTeamStopsAtTeamLimit(GameTestHelper helper) {
         Setup s = Setup.create(helper, "T48", 48000);
         int x0 = s.x0;
-        IPlayerConfigAPI ownerConfig = configManager(s.server).getLoadedConfig(s.ownerId);
+        TeamClaimManager cm = TeamClaimsCommon.getClaimManager();
         try {
+            cm.setBudgetSettingsOverride(s.party.getId(), new BudgetSettings(2, 2, 0, 10, 0, 168));
             s.claim(s.playerId, -1, x0, 0, false);
             s.claim(s.playerId, -1, x0 - 1, -1, false);
             s.claim(s.playerId, -1, x0 - 1, 0, false);
             s.claim(s.playerId, -1, x0 + 1, 1, false);
-            int ownerLimit = claimsAPI(s.server).getPlayerFullClaimLimit(s.ownerId);
-            IPlayerConfigAPI.SetResult bonus = ownerConfig.tryToSet(PlayerConfigOptions.BONUS_CHUNK_CLAIMS, 2 - ownerLimit);
-            helper.assertTrue(bonus == IPlayerConfigAPI.SetResult.SUCCESS && claimsAPI(s.server).getPlayerFullClaimLimit(s.ownerId) == 2,
-                    "expected the owner's claim limit to be set to 2, got " + bonus);
+            s.setPrivateLimit(PlayerConfigOptions.BONUS_CHUNK_CLAIMS, claimsAPI(s.server).getPlayerFullClaimLimit(s.playerId), 0);
 
             CapturingCommandSource out = run(s.server, s.player, 0, "teamclaims convert toteam 1");
             helper.assertTrue(out.received(localized(s.server, KEY + "convert_done_team", "2", "0"))
                             && out.received(localized(s.server, KEY + "convert_skipped_budget", "2"))
-                            && out.received(localized(s.server, KEY + "convert_stopped_budget")),
-                    "expected 2 conversions, then a stop at the budget with 2 claims over it, got " + out.all());
+                            && out.received(localized(s.server, KEY + "convert_stopped_team_limit", "2", "2")),
+                    "expected 2 conversions, then a stop at the team claim limit with 2 claims over it, got " + out.all());
             int playerTeamSub = s.teamSub(s.playerId);
             s.assertClaim(x0, 0, s.playerId, playerTeamSub, false);
             s.assertClaim(x0 - 1, -1, s.playerId, playerTeamSub, false);
             s.assertClaim(x0 - 1, 0, s.playerId, -1, false);
             s.assertClaim(x0 + 1, 1, s.playerId, -1, false);
-            int ownerCount = claimsAPI(s.server).getPlayerInfo(s.ownerId).getClaimCount();
-            helper.assertTrue(ownerCount == 2, "expected the owner to be exactly at their limit of 2, got " + ownerCount);
+            BudgetInfo budget = cm.getBudgetInfo(s.playerId);
+            helper.assertTrue(budget.teamClaims() == 2 && budget.teamClaimLimit() == 2 && budget.privateClaims() == 2,
+                    "expected the team to be exactly at its limit of 2 and 2 private claims to be left, got " + budget);
             helper.succeed();
         } finally {
-            try {
-                ownerConfig.tryToReset(PlayerConfigOptions.BONUS_CHUNK_CLAIMS);
-            } catch (Exception ignored) {
-            }
+            s.cleanup();
+        }
+    }
+
+    /**
+     * {@code convert topersonal} needs room in the converting player's private budget, whatever the team's is: with a
+     * private claim limit of 2 (one private claim already there) and a private forceload limit of 0, the forceloaded
+     * team claim in the centre is skipped for the forceload limit (it would become a private forceload), the next team
+     * claim is converted, and the one after that stops the conversion at the private claim limit.
+     */
+    public static void toPersonalStopsAtPrivateLimit(GameTestHelper helper) {
+        Setup s = Setup.create(helper, "T52", 52000);
+        int x0 = s.x0;
+        TeamClaimManager cm = TeamClaimsCommon.getClaimManager();
+        try {
+            int playerTeamSub = s.teamSub(s.playerId);
+            s.claim(s.playerId, playerTeamSub, x0, 0, true);
+            s.claim(s.playerId, playerTeamSub, x0 - 1, 0, false);
+            s.claim(s.playerId, playerTeamSub, x0 + 1, 0, false);
+            s.claim(s.playerId, -1, x0, 1, false);//already personal
+            s.setPrivateLimit(PlayerConfigOptions.BONUS_CHUNK_CLAIMS, claimsAPI(s.server).getPlayerFullClaimLimit(s.playerId), 2);
+            s.setPrivateLimit(PlayerConfigOptions.BONUS_CHUNK_FORCELOADS, claimsAPI(s.server).getPlayerFullForceloadLimit(s.playerId), 0);
+
+            CapturingCommandSource out = run(s.server, s.player, 0, "teamclaims convert topersonal 1");
+            helper.assertTrue(out.received(localized(s.server, KEY + "convert_done_personal", "1", "0", "main"))
+                            && out.received(localized(s.server, KEY + "convert_skipped_already_personal", "1"))
+                            && out.received(localized(s.server, KEY + "convert_skipped_budget", "2")),
+                    "expected 1 conversion, 1 claim already personal and 2 over a limit, got " + out.all());
+            helper.assertTrue(out.received(localized(s.server, KEY + "convert_stopped_private_limit", "2", "2"))
+                            && out.received(localized(s.server, KEY + "convert_forceload_private_limit", "0", "0")),
+                    "expected the stop at the private claim limit and the private forceload limit to be reported, got " + out.all());
+            s.assertClaim(x0, 0, s.playerId, playerTeamSub, true);
+            s.assertClaim(x0 - 1, 0, s.playerId, -1, false);
+            s.assertClaim(x0 + 1, 0, s.playerId, playerTeamSub, false);
+            BudgetInfo budget = cm.getBudgetInfo(s.playerId);
+            helper.assertTrue(budget.privateClaims() == 2 && budget.privateForceloads() == 0 && budget.teamClaims() == 2
+                            && budget.teamForceloads() == 1,
+                    "expected 2 private claims without a forceload and 2 team claims, 1 of them forceloaded, got " + budget);
+            helper.succeed();
+        } finally {
+            s.cleanup();
+        }
+    }
+
+    /**
+     * {@code convert toteam} of a forceloaded claim needs room in the team's forceload budget: with a team forceload
+     * limit of 0 the forceloaded claim stays private and forceloaded, while the plain claim next to it still becomes a
+     * team claim (the forceload limit only stands in the way of forceloaded claims).
+     */
+    public static void toTeamSkipsForceloadedAtTeamForceloadLimit(GameTestHelper helper) {
+        Setup s = Setup.create(helper, "T53", 53000);
+        int x0 = s.x0;
+        TeamClaimManager cm = TeamClaimsCommon.getClaimManager();
+        try {
+            cm.setBudgetSettingsOverride(s.party.getId(), new BudgetSettings(2, 10, 0, 0, 0, 168));
+            s.claim(s.playerId, -1, x0, 0, true);
+            s.claim(s.playerId, -1, x0 + 1, 0, false);
+
+            CapturingCommandSource out = run(s.server, s.player, 0, "teamclaims convert toteam 1");
+            helper.assertTrue(out.received(localized(s.server, KEY + "convert_done_team", "1", "0"))
+                            && out.received(localized(s.server, KEY + "convert_skipped_budget", "1"))
+                            && out.received(localized(s.server, KEY + "convert_forceload_team_limit", "0", "0")),
+                    "expected the plain claim to convert and the forceloaded one to be skipped for the team forceload limit, got "
+                            + out.all());
+            helper.assertTrue(!out.received(localized(s.server, KEY + "convert_stopped_team_limit", "1", "10")),
+                    "expected no stop at the team claim limit, got " + out.all());
+            s.assertClaim(x0, 0, s.playerId, -1, true);
+            s.assertClaim(x0 + 1, 0, s.playerId, s.teamSub(s.playerId), false);
+            BudgetInfo budget = cm.getBudgetInfo(s.playerId);
+            helper.assertTrue(budget.teamClaims() == 1 && budget.teamForceloads() == 0 && budget.privateForceloads() == 1,
+                    "expected 1 team claim, no team forceload and the private forceload to be kept, got " + budget);
+            helper.succeed();
+        } finally {
             s.cleanup();
         }
     }
@@ -372,23 +444,30 @@ public final class TeamClaimsConvertTestCases {
                             : claim.getPlayerId() + " with sub-config " + claim.getSubConfigIndex() + ", forceloaded " + claim.isForceloadable()));
         }
 
-        /** The tracked team totals and both members' claim counts (personal + team total) and forceload counts. */
+        /**
+         * The team's totals and both members' private claims and private forceloads (their own claims that are not
+         * team claims), as the budget info reports them.
+         */
         void assertNumbers(String stage, int teamClaims, int teamForceloads, int playerClaims, int ownerClaims,
                 int playerForceloads, int ownerForceloads) {
-            TeamClaimManager.TeamData teamData = TeamClaimsCommon.getClaimManager().getTeamData(party.getId());
-            int actualTeamClaims = teamData == null ? 0 : teamData.getClaimCount();
-            int actualTeamForceloads = teamData == null ? 0 : teamData.getForceloadCount();
-            int actualPlayerClaims = claimsAPI(server).getPlayerInfo(playerId).getClaimCount();
-            int actualOwnerClaims = claimsAPI(server).getPlayerInfo(ownerId).getClaimCount();
-            int actualPlayerForceloads = claimsAPI(server).getPlayerInfo(playerId).getForceloadCount();
-            int actualOwnerForceloads = claimsAPI(server).getPlayerInfo(ownerId).getForceloadCount();
-            helper.assertTrue(actualTeamClaims == teamClaims && actualTeamForceloads == teamForceloads
-                            && actualPlayerClaims == playerClaims && actualOwnerClaims == ownerClaims
-                            && actualPlayerForceloads == playerForceloads && actualOwnerForceloads == ownerForceloads,
+            BudgetInfo playerBudget = TeamClaimsCommon.getClaimManager().getBudgetInfo(playerId);
+            BudgetInfo ownerBudget = TeamClaimsCommon.getClaimManager().getBudgetInfo(ownerId);
+            helper.assertTrue(playerBudget.teamClaims() == teamClaims && playerBudget.teamForceloads() == teamForceloads
+                            && ownerBudget.teamClaims() == teamClaims && ownerBudget.teamForceloads() == teamForceloads
+                            && playerBudget.privateClaims() == playerClaims && ownerBudget.privateClaims() == ownerClaims
+                            && playerBudget.privateForceloads() == playerForceloads
+                            && ownerBudget.privateForceloads() == ownerForceloads,
                     stage + ": expected team " + teamClaims + "/" + teamForceloads + ", player " + playerClaims + "/" + playerForceloads
-                            + ", owner " + ownerClaims + "/" + ownerForceloads + " (claims/forceloads), got team " + actualTeamClaims
-                            + "/" + actualTeamForceloads + ", player " + actualPlayerClaims + "/" + actualPlayerForceloads
-                            + ", owner " + actualOwnerClaims + "/" + actualOwnerForceloads);
+                            + ", owner " + ownerClaims + "/" + ownerForceloads + " (claims/forceloads, the members' private ones),"
+                            + " got player " + playerBudget + ", owner " + ownerBudget);
+        }
+
+        /** Moves the full private limit of the mock player from {@code current} to {@code target} with the matching bonus option. */
+        void setPrivateLimit(IPlayerConfigOptionSpecAPI<Integer> bonusOption, int current, int target) {
+            IPlayerConfigAPI config = configManager(server).getLoadedConfig(playerId);
+            IPlayerConfigAPI.SetResult result = config.tryToSet(bonusOption, config.getEffective(bonusOption) + target - current);
+            helper.assertTrue(result == IPlayerConfigAPI.SetResult.SUCCESS,
+                    "test setup: expected setting " + bonusOption.getId() + " to succeed, got " + result);
         }
 
         boolean opacTicketEnabled(int x, int z) {
@@ -396,9 +475,17 @@ public final class TeamClaimsConvertTestCases {
         }
 
         void cleanup() {
+            for (IPlayerConfigOptionSpecAPI<Integer> bonusOption : List.of(PlayerConfigOptions.BONUS_CHUNK_CLAIMS,
+                    PlayerConfigOptions.BONUS_CHUNK_FORCELOADS)) {
+                try {
+                    configManager(server).getLoadedConfig(playerId).tryToReset(bonusOption);
+                } catch (Exception ignored) {
+                }
+            }
             for (int x = x0 - 2; x <= x0 + 2; x++)
                 for (int z = -2; z <= 2; z++)
                     unclaimQuiet(server, x, z);
+            TeamClaimsCommon.getClaimManager().setBudgetSettingsOverride(party.getId(), null);
             try {
                 TeamClaimsCommon.getClaimManager().deactivateTeamForceLoads(party.getId());
             } catch (Exception ignored) {

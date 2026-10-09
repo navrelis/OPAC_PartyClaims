@@ -28,8 +28,18 @@ public final class TeamClaimsConvertTestNeoForge {
     }
 
     @GameTest(template = TeamClaimsGameTestMod.EMPTY_STRUCTURE)
-    public static void toTeamStopsAtBudget(GameTestHelper helper) {
-        TeamClaimsConvertTestCases.toTeamStopsAtBudget(helper);
+    public static void toTeamStopsAtTeamLimit(GameTestHelper helper) {
+        TeamClaimsConvertTestCases.toTeamStopsAtTeamLimit(helper);
+    }
+
+    @GameTest(template = TeamClaimsGameTestMod.EMPTY_STRUCTURE)
+    public static void toPersonalStopsAtPrivateLimit(GameTestHelper helper) {
+        TeamClaimsConvertTestCases.toPersonalStopsAtPrivateLimit(helper);
+    }
+
+    @GameTest(template = TeamClaimsGameTestMod.EMPTY_STRUCTURE)
+    public static void toTeamSkipsForceloadedAtTeamForceloadLimit(GameTestHelper helper) {
+        TeamClaimsConvertTestCases.toTeamSkipsForceloadedAtTeamForceloadLimit(helper);
     }
 
     @GameTest(template = TeamClaimsGameTestMod.EMPTY_STRUCTURE)

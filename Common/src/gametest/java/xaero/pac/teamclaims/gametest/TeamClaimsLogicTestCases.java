@@ -205,10 +205,12 @@ public final class TeamClaimsLogicTestCases {
     }
 
     /**
-     * 2) The owner makes 2 team claims + 1 personal claim; the member's displayed claim count only
-     * reflects the team claims as overhead. Unclaiming one team claim updates both counts.
+     * 2) The owner makes 2 team claims + 1 private claim: the team claims count in the team's budget, the same for
+     * both members, the private claim only in the owner's private budget, and the member's private budget stays
+     * empty. OPAC's own claim count stays what a player technically owns. Unclaiming one team claim updates the team
+     * total for both.
      */
-    public static void teamClaimCountsAsOverhead(GameTestHelper helper) {
+    public static void teamClaimsCountInTeamBudgetOnly(GameTestHelper helper) {
         MinecraftServer server = helper.getLevel().getServer();
         GameProfile ownerProfile = profile("T2_Owner");
         GameProfile memberProfile = profile("T2_Member");
@@ -229,25 +231,37 @@ public final class TeamClaimsLogicTestCases {
                     "expected owner's 2nd team claim to succeed, got " + c2.getResultType());
             ClaimResult<IPlayerChunkClaimAPI> c3 = doClaim(server, ownerId, -1, x0 + 2, 0);
             helper.assertTrue(c3.getResultType() == ClaimResult.Type.SUCCESSFUL_CLAIM,
-                    "expected owner's personal claim to succeed, got " + c3.getResultType());
+                    "expected owner's private claim to succeed, got " + c3.getResultType());
 
+            TeamClaimManager cm = TeamClaimsCommon.getClaimManager();
+            TeamClaimManager.BudgetInfo owner = cm.getBudgetInfo(ownerId);
+            TeamClaimManager.BudgetInfo member = cm.getBudgetInfo(memberId);
+            helper.assertTrue(owner.teamClaims() == 2 && member.teamClaims() == 2,
+                    "expected both members to see 2 team claims, got owner=" + owner.teamClaims() + " member="
+                            + member.teamClaims());
+            helper.assertTrue(owner.privateClaims() == 1 && owner.ownedTeamClaims() == 2,
+                    "expected the owner to have 1 private claim and to own 2 team claims, got " + owner);
+            helper.assertTrue(member.privateClaims() == 0 && member.ownedTeamClaims() == 0,
+                    "expected the member to have no private claims and to own no team claims, got " + member);
+            helper.assertTrue(party.getId().equals(owner.partyId()) && owner.memberCount() == 2 && owner.inTeam(),
+                    "expected the owner's budget info to name the party with 2 members, got " + owner);
             int ownerCount = claimsAPI(server).getPlayerInfo(ownerId).getClaimCount();
             helper.assertTrue(ownerCount == 3,
-                    "expected owner claim count (2 team + 1 personal) to be 3, got " + ownerCount);
+                    "expected OPAC's own claim count of the owner (2 team + 1 private) to be 3, got " + ownerCount);
             int memberCount = claimsAPI(server).getPlayerInfo(memberId).getClaimCount();
-            helper.assertTrue(memberCount == 2,
-                    "expected member claim count (overhead from owner's 2 team claims) to be 2, got " + memberCount);
+            helper.assertTrue(memberCount == 0,
+                    "expected OPAC's own claim count of the member to stay 0 (no overhead any more), got " + memberCount);
 
             ClaimResult<IPlayerChunkClaimAPI> u1 = doUnclaim(server, ownerId, x0, 0);
             helper.assertTrue(u1.getResultType() == ClaimResult.Type.SUCCESSFUL_UNCLAIM,
                     "expected unclaiming one team claim to succeed, got " + u1.getResultType());
 
-            int ownerCountAfter = claimsAPI(server).getPlayerInfo(ownerId).getClaimCount();
-            helper.assertTrue(ownerCountAfter == 2,
-                    "expected owner claim count after unclaiming 1 team claim to be 2, got " + ownerCountAfter);
-            int memberCountAfter = claimsAPI(server).getPlayerInfo(memberId).getClaimCount();
-            helper.assertTrue(memberCountAfter == 1,
-                    "expected member claim count after owner unclaimed 1 team claim to be 1, got " + memberCountAfter);
+            owner = cm.getBudgetInfo(ownerId);
+            member = cm.getBudgetInfo(memberId);
+            helper.assertTrue(owner.teamClaims() == 1 && member.teamClaims() == 1 && owner.privateClaims() == 1
+                            && member.privateClaims() == 0,
+                    "expected 1 team claim for both and unchanged private claims after the unclaim, got owner=" + owner
+                            + " member=" + member);
 
             helper.succeed();
         } finally {
@@ -258,56 +272,64 @@ public final class TeamClaimsLogicTestCases {
     }
 
     /**
-     * 3) A team claim is rejected with CLAIM_LIMIT_REACHED if it would push a teammate over their
-     * own full claim limit, but the owner's personal claim still succeeds.
+     * 3) Private limits never block team claims: with both members at a private claim limit of 0, the owner's
+     * private claim is rejected with CLAIM_LIMIT_REACHED, but team claims still succeed (they only need room in the
+     * team's budget), and they use up nothing of anybody's private budget.
      */
-    public static void teamClaimRejectedWhenTeammateAtLimit(GameTestHelper helper) {
+    public static void privateLimitDoesNotBlockTeamClaims(GameTestHelper helper) {
         MinecraftServer server = helper.getLevel().getServer();
         GameProfile ownerProfile = profile("T3_Owner");
         GameProfile memberProfile = profile("T3_Member");
         UUID ownerId = ownerProfile.getId();
         UUID memberId = memberProfile.getId();
         IServerPartyAPI party = null;
-        IPlayerConfigAPI memberMainCfg = null;
         int x0 = 3000;
         try {
             party = createPartyWithTeam(server, ownerProfile, List.of(memberProfile));
             String subId = TeamClaimsCommon.getTeamConfigManager().getTeamConfig(party.getId()).getSubConfigId();
             int ownerTeamSub = teamSubIndexOf(server, subId, ownerId);
+            int memberTeamSub = teamSubIndexOf(server, subId, memberId);
 
-            memberMainCfg = configManager(server).getLoadedConfig(memberId);
-            int memberLimitBefore = claimsAPI(server).getPlayerFullClaimLimit(memberId);
-            SetResult bonusSet = memberMainCfg.tryToSet(PlayerConfigOptions.BONUS_CHUNK_CLAIMS, -memberLimitBefore);
-            helper.assertTrue(bonusSet == SetResult.SUCCESS,
-                    "expected setting the member's BONUS_CHUNK_CLAIMS to bring them to their limit to succeed, got "
-                            + bonusSet);
-            int memberLimitAfter = claimsAPI(server).getPlayerFullClaimLimit(memberId);
-            helper.assertTrue(memberLimitAfter == 0,
-                    "expected member's full claim limit to be reduced to 0, got " + memberLimitAfter);
+            for (UUID id : List.of(ownerId, memberId)) {
+                int limitBefore = claimsAPI(server).getPlayerFullClaimLimit(id);
+                SetResult bonusSet = configManager(server).getLoadedConfig(id)
+                        .tryToSet(PlayerConfigOptions.BONUS_CHUNK_CLAIMS, -limitBefore);
+                helper.assertTrue(bonusSet == SetResult.SUCCESS && claimsAPI(server).getPlayerFullClaimLimit(id) == 0,
+                        "expected the private claim limit of " + id + " to be reduced to 0, got " + bonusSet + " and "
+                                + claimsAPI(server).getPlayerFullClaimLimit(id));
+            }
+
+            ClaimResult<IPlayerChunkClaimAPI> privateResult = doClaim(server, ownerId, -1, x0 + 2, 0);
+            helper.assertTrue(privateResult.getResultType() == ClaimResult.Type.CLAIM_LIMIT_REACHED,
+                    "expected the owner's private claim to be rejected with CLAIM_LIMIT_REACHED at a private limit of 0, "
+                            + "got " + privateResult.getResultType());
 
             ClaimResult<IPlayerChunkClaimAPI> teamResult = doClaim(server, ownerId, ownerTeamSub, x0, 0);
-            helper.assertTrue(teamResult.getResultType() == ClaimResult.Type.CLAIM_LIMIT_REACHED,
-                    "expected owner's team claim to be rejected with CLAIM_LIMIT_REACHED while the teammate is at "
-                            + "their limit, got " + teamResult.getResultType());
-            IPlayerChunkClaimAPI stateAtX0 = claimsAPI(server).get(OVERWORLD, x0, 0);
-            helper.assertTrue(stateAtX0 == null,
-                    "expected the chunk to remain unclaimed after the rejected team claim, got owner="
-                            + (stateAtX0 == null ? null : stateAtX0.getPlayerId()));
+            helper.assertTrue(teamResult.getResultType() == ClaimResult.Type.SUCCESSFUL_CLAIM,
+                    "expected the owner's team claim to succeed although both members are at their private limit, got "
+                            + teamResult.getResultType());
+            ClaimResult<IPlayerChunkClaimAPI> memberTeamResult = doClaim(server, memberId, memberTeamSub, x0 + 1, 0);
+            helper.assertTrue(memberTeamResult.getResultType() == ClaimResult.Type.SUCCESSFUL_CLAIM,
+                    "expected the member's team claim to succeed at a private limit of 0, got "
+                            + memberTeamResult.getResultType());
 
-            ClaimResult<IPlayerChunkClaimAPI> personalResult = doClaim(server, ownerId, -1, x0 + 1, 0);
-            helper.assertTrue(personalResult.getResultType() == ClaimResult.Type.SUCCESSFUL_CLAIM,
-                    "expected owner's personal claim to still succeed while the teammate is at their team-claim "
-                            + "limit, got " + personalResult.getResultType());
+            TeamClaimManager.BudgetInfo owner = TeamClaimsCommon.getClaimManager().getBudgetInfo(ownerId);
+            helper.assertTrue(owner.teamClaims() == 2 && owner.privateClaims() == 0 && owner.privateClaimLimit() == 0,
+                    "expected 2 team claims and still 0 / 0 private claims for the owner, got " + owner);
+            ClaimResult<IPlayerChunkClaimAPI> privateAgain = doClaim(server, ownerId, -1, x0 + 2, 0);
+            helper.assertTrue(privateAgain.getResultType() == ClaimResult.Type.CLAIM_LIMIT_REACHED,
+                    "expected the owner's private claim to still be rejected with CLAIM_LIMIT_REACHED (not as being over "
+                            + "the limit: team claims are not private claims), got " + privateAgain.getResultType());
 
             helper.succeed();
         } finally {
-            if (memberMainCfg != null) {
+            for (UUID id : List.of(ownerId, memberId)) {
                 try {
-                    memberMainCfg.tryToReset(PlayerConfigOptions.BONUS_CHUNK_CLAIMS);
+                    configManager(server).getLoadedConfig(id).tryToReset(PlayerConfigOptions.BONUS_CHUNK_CLAIMS);
                 } catch (Exception ignored) {
                 }
             }
-            unclaimQuiet(server, x0, 0, x0 + 1, 0);
+            unclaimQuiet(server, x0, 0, x0 + 1, 0, x0 + 2, 0);
             if (party != null)
                 disbandPartyQuiet(server, party.getId());
         }
@@ -410,10 +432,14 @@ public final class TeamClaimsLogicTestCases {
 
             int ownerForceloadCount = claimsAPI(server).getPlayerInfo(ownerId).getForceloadCount();
             helper.assertTrue(ownerForceloadCount == 1,
-                    "expected owner's forceload count to be 1, got " + ownerForceloadCount);
-            int memberForceloadCount = claimsAPI(server).getPlayerInfo(memberId).getForceloadCount();
-            helper.assertTrue(memberForceloadCount == 1,
-                    "expected member's forceload count (overhead) to be 1, got " + memberForceloadCount);
+                    "expected OPAC's own forceload count of the owner (who owns the claim) to be 1, got " + ownerForceloadCount);
+            TeamClaimManager.BudgetInfo ownerBudget = TeamClaimsCommon.getClaimManager().getBudgetInfo(ownerId);
+            TeamClaimManager.BudgetInfo memberBudget = TeamClaimsCommon.getClaimManager().getBudgetInfo(memberId);
+            helper.assertTrue(ownerBudget.teamForceloads() == 1 && memberBudget.teamForceloads() == 1,
+                    "expected 1 team forceload for both members, got owner=" + ownerBudget + " member=" + memberBudget);
+            helper.assertTrue(ownerBudget.privateForceloads() == 0 && memberBudget.privateForceloads() == 0,
+                    "expected the team forceload to count as nobody's private forceload, got owner=" + ownerBudget
+                            + " member=" + memberBudget);
 
             ClaimResult<IPlayerChunkClaimAPI> res2 = doForceload(server, memberId, x0, 0, false);
             helper.assertTrue(res2.getResultType() == ClaimResult.Type.SUCCESSFUL_UNFORCELOAD,

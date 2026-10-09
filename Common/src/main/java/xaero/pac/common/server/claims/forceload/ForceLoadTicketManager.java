@@ -169,18 +169,30 @@ public final class ForceLoadTicketManager {
 		int forceloadLimit = claimsManager.getPlayerFullForceloadLimit(id);//for when the bonus forceload count is changed without a restart
 		int enableSuccessCount = 0;
 		boolean withinLimit = true;
+		// [Team Claims] the player's forceload limit is for their private forceloads only: the ticket of a
+		// team forceload is neither counted against it nor held back by it (the team has its own limit)
+		xaero.pac.common.server.claims.TeamClaimsIntegration.TeamClaimsHandler tcHandler =
+				isServer ? null : xaero.pac.common.server.claims.TeamClaimsIntegration.getHandler();
 		for(ClaimTicket ticket : playerTickets.values()) {
-			if(shouldBeEnabled && !isServer)
+			boolean tcTeamTicket = tcHandler != null && tcHandler.isTeamSubConfigIndex(id, ticket.getSubConfigIndex());
+			if(shouldBeEnabled && !isServer && !tcTeamTicket)
 				withinLimit = withinLimit && enableSuccessCount < forceloadLimit;
-			boolean shouldEnableTicket = shouldBeEnabled && withinLimit;
-			if(updateTicket(shouldEnableTicket, ticket) && shouldEnableTicket)
+			boolean shouldEnableTicket = shouldBeEnabled && (withinLimit || tcTeamTicket);
+			if(updateTicket(shouldEnableTicket, ticket) && shouldEnableTicket && !tcTeamTicket)
 				enableSuccessCount++;
 		}
 		playerTickets.setFailedToEnableSome(!withinLimit);
 	}
 
 	public void addTicket(ResourceLocation dimension, UUID id, int x, int z) {
+		// [Team Claims] kept for callers that don't know the sub-config of the claim
+		addTicket(dimension, id, x, z, -1);
+	}
+
+	// [Team Claims] with the sub-config index of the claim, which tells a team forceload from a private one
+	public void addTicket(ResourceLocation dimension, UUID id, int x, int z, int subConfigIndex) {
 		ClaimTicket ticket = new ClaimTicket(id, dimension, x, z);
+		ticket.setSubConfigIndex(subConfigIndex);
 		PlayerForceloadTicketManager playerTickets = getPlayerTickets(id);
 		playerTickets.add(ticket);
 		IPlayerConfig ownerConfig = playerConfigManager.getLoadedConfig(id);
@@ -188,9 +200,26 @@ public final class ForceLoadTicketManager {
 		if(shouldBeEnabled) {
 			boolean isServer = PlayerConfig.SERVER_CLAIM_UUID.equals(id);
 			int forceloadLimit = isServer ? 0 : claimsManager.getPlayerFullForceloadLimit(id);
-			if(isServer || playerTickets.getCount() <= forceloadLimit)
+			if(isServer || playerTickets.getCount() <= forceloadLimit || isWithinPrivateForceloadLimit(ticket, playerTickets, forceloadLimit))
 				updateTicket(true, ticket);
 		}
+	}
+
+	// [Team Claims] the same rule as in updateTicketsFor, for a ticket that doesn't fit by the plain ticket
+	// count: a team forceload is always fine, a private one if the private tickets alone are within the limit
+	private boolean isWithinPrivateForceloadLimit(ClaimTicket ticket, PlayerForceloadTicketManager playerTickets, int forceloadLimit) {
+		xaero.pac.common.server.claims.TeamClaimsIntegration.TeamClaimsHandler tcHandler =
+				xaero.pac.common.server.claims.TeamClaimsIntegration.getHandler();
+		if(tcHandler == null)
+			return false;
+		UUID id = ticket.getPlayerId();
+		if(tcHandler.isTeamSubConfigIndex(id, ticket.getSubConfigIndex()))
+			return true;
+		int privateTicketCount = 0;
+		for(ClaimTicket playerTicket : playerTickets.values())
+			if(!tcHandler.isTeamSubConfigIndex(id, playerTicket.getSubConfigIndex()))
+				privateTicketCount++;
+		return privateTicketCount <= forceloadLimit;
 	}
 
 	public void removeTicket(ResourceLocation dimension, UUID id, int x, int z) {

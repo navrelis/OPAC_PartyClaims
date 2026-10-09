@@ -40,6 +40,7 @@
       "forgeconfigapiport" : "${forgeconfigapiport_fabric_range}"
     },
     "suggests": {
+      "ftbteams": "*"
     },
     "breaks" : {
       "opaccreatesupport": "${fabric_extension_create_breaks_range}"

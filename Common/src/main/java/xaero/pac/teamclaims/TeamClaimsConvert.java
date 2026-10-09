@@ -30,6 +30,7 @@ import xaero.pac.common.server.player.config.api.v2.IPlayerConfigAPI;
 import xaero.pac.common.server.player.config.api.v2.PlayerConfigOptions;
 import xaero.pac.common.server.player.data.ServerPlayerData;
 import xaero.pac.common.server.player.localization.AdaptiveLocalizer;
+import xaero.pac.teamclaims.TeamClaimManager.BudgetInfo;
 import xaero.pac.teamclaims.config.TeamAction;
 import xaero.pac.teamclaims.config.TeamClaimsServerConfig;
 import xaero.pac.teamclaims.config.TeamConfigManager;
@@ -47,15 +48,21 @@ import java.util.UUID;
  * <p>
  * Every conversion is a normal non-forced, non-server CLAIM through OPAC's {@code tryToClaimHelper} by the claim owner
  * over their own claim, so everything that applies to claiming applies here too: the claim action listeners of
- * addons, the team role and the shared team budget ({@link TeamClaimsBridgeHandler#interceptClaim}: the claim level
- * and budget for {@code toteam}, plus the forceload level for a forceloaded claim, the unclaim level for
- * {@code topersonal}), and OPAC's own checks. A claim over the
- * owner's own claim does not change their claim count, so OPAC's limit check passes, and the claims tracker callbacks
- * ({@link TeamClaimManager#onChunkChange}) move the team tracking, the team forceload tickets and the counts. OPAC's
- * own forceload ticket of the claim is removed and added again by the replacement itself.
+ * addons, the team roles and both budgets, and OPAC's own checks. A conversion moves a claim from one budget into the
+ * other, so it needs room in the one it moves into:
+ * <ul>
+ *     <li>{@code toteam}: the claim level (plus the forceload level for a forceloaded claim) and the <b>team's</b>
+ *     budget, the team claim limit and, for a forceloaded claim, the team forceload limit
+ *     ({@link TeamClaimsBridgeHandler#interceptClaim}). The player's private numbers don't matter;</li>
+ *     <li>{@code topersonal}: the unclaim level and the converting player's <b>private</b> budget, their own claim
+ *     limit (OPAC's limit check, on their private claim count) and, for a forceloaded claim, their own forceload limit
+ *     ({@link TeamClaimsBridgeHandler#interceptClaim}). The team's numbers don't matter.</li>
+ * </ul>
+ * The claims tracker callbacks ({@link TeamClaimManager#onChunkChange}) move the team tracking, the team forceload
+ * tickets and the counts. OPAC's own forceload ticket of the claim is removed and added again by the replacement itself.
  * <p>
  * The player is the one OPAC's claim commands would claim for: the impersonated player while impersonating. OPAC's
- * admin mode is deliberately not used: it only makes OPAC force a claim, which would skip the team budget and roles,
+ * admin mode is deliberately not used: it only makes OPAC force a claim, which would skip the budgets and roles,
  * and a conversion only ever replaces the player's own claims, so there is nothing admin mode would be needed for.
  * <p>
  * Server-thread only.
@@ -69,14 +76,16 @@ public final class TeamClaimsConvert {
 
     /**
      * What one conversion did. A chunk without a claim counts nowhere. After a rejection that stops the conversion
-     * (e.g. the team budget), the remaining claims that would have been converted count under the same reason.
+     * (e.g. the claim limit of the budget the claims move into), the remaining claims that would have been converted
+     * count under the same reason.
      *
      * @param converted    claims converted
      * @param forceloaded  how many of the converted claims are forceloaded
      * @param notYours     claims of anybody else (teammates, other players, the server)
      * @param alreadyDone  own claims that already were in the target state
      * @param roleDenied   own claims the player's team rank does not allow converting
-     * @param overBudget   own claims that did not fit into the team's claim or forceload budget
+     * @param overBudget   own claims that did not fit into the claim or forceload limit of the budget they would move
+     *                     into: the team's for {@code toteam}, the player's private one for {@code topersonal}
      * @param other        own claims rejected for any other reason (an addon, OPAC)
      */
     public record Summary(int converted, int forceloaded, int notYours, int alreadyDone, int roleDenied, int overBudget,
@@ -200,75 +209,99 @@ public final class TeamClaimsConvert {
         Component roleReason = null;
         Component otherMessage = null;
         ClaimResult.Type stoppedBy = null;
-        // Ring by ring from the centre, so that the claims nearest to the player come first when the budget runs out
-        for (int ring = 0; ring <= radius; ring++) {
-            for (int dx = -ring; dx <= ring; dx++) {
-                // Inside the ring only its first and last row
-                int dzStep = Math.abs(dx) == ring ? 1 : 2 * ring;
-                for (int dz = -ring; dz <= ring; dz += dzStep) {
-                    int x = centerX + dx;
-                    int z = centerZ + dz;
-                    IPlayerChunkClaimAPI claim = claimsManager.get(dimension, x, z);
-                    if (claim == null) continue;
-                    if (!playerId.equals(claim.getPlayerId())) {
-                        notYours++;
-                        continue;
+        boolean forceloadLimitReached = false;
+        // The summary below says what did not fit, instead of one chat line per rejected claim
+        claimManager.setBudgetMessagesSuppressed(true);
+        try {
+            // Ring by ring from the centre, so that the claims nearest to the player come first when the budget runs out
+            for (int ring = 0; ring <= radius; ring++) {
+                for (int dx = -ring; dx <= ring; dx++) {
+                    // Inside the ring only its first and last row
+                    int dzStep = Math.abs(dx) == ring ? 1 : 2 * ring;
+                    for (int dz = -ring; dz <= ring; dz += dzStep) {
+                        int x = centerX + dx;
+                        int z = centerZ + dz;
+                        IPlayerChunkClaimAPI claim = claimsManager.get(dimension, x, z);
+                        if (claim == null) continue;
+                        if (!playerId.equals(claim.getPlayerId())) {
+                            notYours++;
+                            continue;
+                        }
+                        if (claimManager.isTeamClaim(claim) == toTeam) {
+                            alreadyDone++;
+                            continue;
+                        }
+                        if (stoppedBy != null) {
+                            //would be rejected the same way
+                            if (isClaimLimit(stoppedBy)) overBudget++;
+                            else other++;
+                            continue;
+                        }
+                        boolean claimForceloaded = claim.isForceloadable();
+                        if (claimForceloaded && forceloadLimitReached) {
+                            //the forceload limit of the target budget is reached, claims that are not forceloaded may still fit
+                            overBudget++;
+                            continue;
+                        }
+                        ClaimResult<PlayerChunkClaim> result = claimsManager.tryToClaimHelper(dimension, playerId, targetSubIndex,
+                                centerX, centerZ, x, z, claimForceloaded, false, false, claimLimit, ClaimingAction.CLAIM);
+                        ClaimResult.Type type = result.getResultType();
+                        if (type.success) {
+                            converted++;
+                            if (claimForceloaded) forceloaded++;
+                            continue;
+                        }
+                        if (type == ClaimResult.Type.FORCELOAD_LIMIT_REACHED) {
+                            // The forceload limit of the budget the claim would move into (the team's or the player's
+                            // private one), which only stands in the way of the forceloaded claims
+                            overBudget++;
+                            forceloadLimitReached = true;
+                            continue;
+                        }
+                        if (isClaimLimit(type)) {
+                            // The claim limit of the budget the claim would move into
+                            overBudget++;
+                        } else if ((type == ClaimResult.Type.ADDON_FORBIDS || type == ClaimResult.Type.ADDON_INTERRUPTS)
+                                && (TeamRoles.denyReason(server, playerId, toTeam ? null : playerId, roleAction) != null
+                                // a forceloaded team claim also needs the forceload level (TeamRoles.checkClaim)
+                                || toTeam && claimForceloaded
+                                && TeamRoles.denyReason(server, playerId, null, TeamAction.FORCELOAD) != null)) {
+                            roleDenied++;
+                            if (roleReason == null) roleReason = result.getCustomReason();
+                        } else {
+                            other++;
+                            if (otherMessage == null) otherMessage = result.getMessage();
+                        }
+                        // Like OPAC's area claims: a rejection that would be the same for every further claim ends it
+                        if (type.interruptsAreaAction) stoppedBy = type;
                     }
-                    if (claimManager.isTeamClaim(claim) == toTeam) {
-                        alreadyDone++;
-                        continue;
-                    }
-                    if (stoppedBy != null) {
-                        //would be rejected the same way
-                        if (stoppedBy == ClaimResult.Type.CLAIM_LIMIT_REACHED) overBudget++;
-                        else other++;
-                        continue;
-                    }
-                    boolean claimForceloaded = claim.isForceloadable();
-                    ClaimResult<PlayerChunkClaim> result = claimsManager.tryToClaimHelper(dimension, playerId, targetSubIndex,
-                            centerX, centerZ, x, z, claimForceloaded, false, false, claimLimit, ClaimingAction.CLAIM);
-                    ClaimResult.Type type = result.getResultType();
-                    if (type.success) {
-                        converted++;
-                        if (claimForceloaded) forceloaded++;
-                        continue;
-                    }
-                    if (type == ClaimResult.Type.CLAIM_LIMIT_REACHED) {
-                        // Only the team budget gives this for a claim over the own claim; it already told the player
-                        // who is at the limit
-                        overBudget++;
-                    } else if ((type == ClaimResult.Type.ADDON_FORBIDS || type == ClaimResult.Type.ADDON_INTERRUPTS)
-                            && (TeamRoles.denyReason(server, playerId, toTeam ? null : playerId, roleAction) != null
-                            // a forceloaded team claim also needs the forceload level (TeamRoles.checkClaim)
-                            || toTeam && claimForceloaded
-                            && TeamRoles.denyReason(server, playerId, null, TeamAction.FORCELOAD) != null)) {
-                        roleDenied++;
-                        if (roleReason == null) roleReason = result.getCustomReason();
-                    } else {
-                        other++;
-                        if (otherMessage == null) otherMessage = result.getMessage();
-                    }
-                    // Like OPAC's area claims: a rejection that would be the same for every further claim ends it
-                    if (type.interruptsAreaAction) stoppedBy = type;
                 }
             }
+        } finally {
+            claimManager.setBudgetMessagesSuppressed(false);
         }
 
         Summary summary = new Summary(converted, forceloaded, notYours, alreadyDone, roleDenied, overBudget, other);
         report(source, localizer, viewer, summary, toTeam, targetSubId, roleReason, otherMessage,
-                stoppedBy == ClaimResult.Type.CLAIM_LIMIT_REACHED);
+                stoppedBy != null && isClaimLimit(stoppedBy), forceloadLimitReached, claimManager.getBudgetInfo(playerId));
         LOGGER.info("[TeamClaims] {} converted {} claim(s) of {} around [{}, {}] in {} to {} claims ({})", source.getTextName(),
                 converted, playerId, centerX, centerZ, dimension, toTeam ? "team" : "personal", summary);
         return summary;
     }
 
+    /** OPAC's two rejections for a claim limit: at the limit, and already above it. */
+    private static boolean isClaimLimit(ClaimResult.Type type) {
+        return type == ClaimResult.Type.CLAIM_LIMIT_REACHED || type == ClaimResult.Type.OVER_CLAIM_LIMIT;
+    }
+
     /**
-     * The summary for the player: what was converted, what was skipped and why (only the reasons that occurred), and the
-     * first role reason or other rejection message. Two to four lines.
+     * The summary for the player: what was converted, what was skipped and why (only the reasons that occurred), which
+     * limit of the target budget stood in the way (with its numbers after the conversion), and the first role reason or
+     * other rejection message. Two to five lines.
      */
     private static void report(CommandSourceStack source, AdaptiveLocalizer localizer, @Nullable ServerPlayer viewer,
             Summary summary, boolean toTeam, @Nullable String targetSubId, @Nullable Component roleReason,
-            @Nullable Component otherMessage, boolean stoppedAtBudget) {
+            @Nullable Component otherMessage, boolean stoppedAtClaimLimit, boolean forceloadLimitReached, BudgetInfo budget) {
         ChatFormatting doneStyle = summary.converted() > 0 ? ChatFormatting.GREEN : ChatFormatting.YELLOW;
         if (toTeam)
             send(source, localizer.getFor(viewer, KEY + "convert_done_team", String.valueOf(summary.converted()),
@@ -292,8 +325,22 @@ public final class TeamClaimsConvert {
             send(source, localizer.getFor(viewer, KEY + "convert_skipped", list).withStyle(ChatFormatting.GRAY));
         }
 
-        if (stoppedAtBudget)
-            send(source, localizer.getFor(viewer, KEY + "convert_stopped_budget").withStyle(ChatFormatting.RED));
+        if (stoppedAtClaimLimit) {
+            if (toTeam)
+                send(source, localizer.getFor(viewer, KEY + "convert_stopped_team_limit", String.valueOf(budget.teamClaims()),
+                        String.valueOf(budget.teamClaimLimit())).withStyle(ChatFormatting.RED));
+            else
+                send(source, localizer.getFor(viewer, KEY + "convert_stopped_private_limit", String.valueOf(budget.privateClaims()),
+                        String.valueOf(budget.privateClaimLimit())).withStyle(ChatFormatting.RED));
+        }
+        if (forceloadLimitReached) {
+            if (toTeam)
+                send(source, localizer.getFor(viewer, KEY + "convert_forceload_team_limit", String.valueOf(budget.teamForceloads()),
+                        String.valueOf(budget.teamForceloadLimit())).withStyle(ChatFormatting.RED));
+            else
+                send(source, localizer.getFor(viewer, KEY + "convert_forceload_private_limit", String.valueOf(budget.privateForceloads()),
+                        String.valueOf(budget.privateForceloadLimit())).withStyle(ChatFormatting.RED));
+        }
         if (roleReason != null)
             send(source, localizer.getFor(viewer, KEY + "convert_reason", roleReason).withStyle(ChatFormatting.RED));
         if (otherMessage != null)

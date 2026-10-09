@@ -53,6 +53,13 @@ public final class TeamClaimsConfigTestCases {
                 "expected the default of 'maxTeamNameLength' to be 24, got " + config.maxTeamNameLength.getDefault());
         helper.assertTrue(config.forceloadGraceMinutes.getDefault() == 0,
                 "expected the default of 'forceloadGraceMinutes' to be 0, got " + config.forceloadGraceMinutes.getDefault());
+        helper.assertTrue(config.teamClaimsMinMembers.getDefault() == 2 && config.teamClaimsBase.getDefault() == 500
+                        && config.teamClaimsPerExtraMember.getDefault() == 25 && config.teamForceloadsBase.getDefault() == 10
+                        && config.teamForceloadsPerExtraMember.getDefault() == 2 && config.overLimitGraceHours.getDefault() == 168,
+                "expected the team budget defaults 2 / 500 / 25 / 10 / 2 and a grace period of 168 hours, got "
+                        + config.teamClaimsMinMembers.getDefault() + " / " + config.teamClaimsBase.getDefault() + " / "
+                        + config.teamClaimsPerExtraMember.getDefault() + " / " + config.teamForceloadsBase.getDefault() + " / "
+                        + config.teamForceloadsPerExtraMember.getDefault() + " and " + config.overLimitGraceHours.getDefault());
         helper.assertTrue(TeamClaimsCommon.isActive() && TeamClaimsIntegration.isActive(),
                 "expected Team Claims to be active (managers created, bridge handler installed) with 'enabled' = true");
         helper.assertTrue(TeamClaimsServerConfig.SPEC.isLoaded(), "expected the config file to be loaded (and so generated)");

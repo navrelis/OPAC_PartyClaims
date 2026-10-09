@@ -12,8 +12,8 @@ import net.minecraft.gametest.framework.GameTestHelper;
 public class TeamClaimsOverviewTest implements FabricGameTest {
 
     @GameTest(template = FabricGameTest.EMPTY_STRUCTURE)
-    public void infoShowsTeamNumbersAndBudget(GameTestHelper helper) {
-        TeamClaimsOverviewTestCases.infoShowsTeamNumbersAndBudget(helper);
+    public void infoShowsTeamAndPrivateBudgets(GameTestHelper helper) {
+        TeamClaimsOverviewTestCases.infoShowsTeamAndPrivateBudgets(helper);
     }
 
     @GameTest(template = FabricGameTest.EMPTY_STRUCTURE)

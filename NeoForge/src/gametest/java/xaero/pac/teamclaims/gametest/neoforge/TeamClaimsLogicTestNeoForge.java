@@ -27,13 +27,13 @@ public final class TeamClaimsLogicTestNeoForge {
     }
 
     @GameTest(template = TeamClaimsGameTestMod.EMPTY_STRUCTURE)
-    public static void teamClaimCountsAsOverhead(GameTestHelper helper) {
-        TeamClaimsLogicTestCases.teamClaimCountsAsOverhead(helper);
+    public static void teamClaimsCountInTeamBudgetOnly(GameTestHelper helper) {
+        TeamClaimsLogicTestCases.teamClaimsCountInTeamBudgetOnly(helper);
     }
 
     @GameTest(template = TeamClaimsGameTestMod.EMPTY_STRUCTURE)
-    public static void teamClaimRejectedWhenTeammateAtLimit(GameTestHelper helper) {
-        TeamClaimsLogicTestCases.teamClaimRejectedWhenTeammateAtLimit(helper);
+    public static void privateLimitDoesNotBlockTeamClaims(GameTestHelper helper) {
+        TeamClaimsLogicTestCases.privateLimitDoesNotBlockTeamClaims(helper);
     }
 
     @GameTest(template = TeamClaimsGameTestMod.EMPTY_STRUCTURE)

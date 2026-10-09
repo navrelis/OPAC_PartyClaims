@@ -215,7 +215,7 @@ public final class ServerClaimsManager extends ClaimsManager<ServerPlayerClaimIn
 				}
 			}
 		}
-		// [Team Claims] a new team claim must fit into the shared budget of every party member.
+		// [Team Claims] the team roles, and the team's own budget for a new team claim.
 		// Only for actual new claims: the forceload/unforceload re-entry below already went
 		// through the team forceload budget check and must not be counted a second time.
 		if(!force && !isServer && action == ClaimingAction.CLAIM) {
@@ -236,13 +236,24 @@ public final class ServerClaimsManager extends ClaimsManager<ServerPlayerClaimIn
 			return new ClaimResult<>(null, ClaimResult.Type.TRANSFER_IN_PROGRESS);
 		if(!force && playerClaimInfo.isReplacementInProgress())
 			return new ClaimResult<>(null, ClaimResult.Type.REPLACEMENT_IN_PROGRESS);
+		// [Team Claims] private and team claims are two separate budgets. A team claim only has to fit
+		// into the team's budget, which interceptClaim above checked (the forceload/unforceload re-entry
+		// never adds a claim), so the stock limit check must neither block nor allow it. For a private
+		// claim the stock check runs on the player's private claim count, and the player's own team
+		// claim becoming a private claim does add to that count.
+		TeamClaimsIntegration.TeamClaimsHandler tcBudgetHandler = isServer ? null : TeamClaimsIntegration.getHandler();
+		boolean tcTeamClaim = tcBudgetHandler != null && tcBudgetHandler.isTeamSubConfigIndex(playerId, subConfigIndex);
+		boolean tcTeamToPrivate = tcBudgetHandler != null && !tcTeamClaim && claimCountUnaffected && tcBudgetHandler.isTeamClaim(currentClaim);
 		int claimCount = 0;
 		if(!isServer){
 			claimCount = playerClaimInfo.getClaimCount();
-			if(!force && claimCount > claimLimit)
+			if(tcBudgetHandler != null)
+				claimCount -= tcBudgetHandler.getOwnedTeamClaimCount(playerId);
+			if(!force && !tcTeamClaim && claimCount > claimLimit)
 				return new ClaimResult<>(currentClaim, ClaimResult.Type.OVER_CLAIM_LIMIT);
 		}
-		boolean withinLimit = force || claimCountUnaffected || isServer || claimCount < claimLimit;
+		boolean withinLimit = force || claimCountUnaffected && !tcTeamToPrivate || isServer ||
+				(tcTeamClaim ? action == ClaimingAction.CLAIM : claimCount < claimLimit);
 		if(withinLimit) {
 			if(!claimCountUnaffected && !force && !canReclaim(currentClaim, playerId, dimension)){
 				return new ClaimResult<>(currentClaim, currentClaim == null ?
@@ -364,30 +375,29 @@ public final class ServerClaimsManager extends ClaimsManager<ServerPlayerClaimIn
 		if(currentClaim != null && (force || tcTeamForceload || Objects.equals(currentClaim.getPlayerId(), id))) {
 			if(currentClaim.isForceloadable() == enable)
 				return new ClaimResult<>(currentClaim, enable ? ClaimResult.Type.ALREADY_FORCELOADABLE : ClaimResult.Type.ALREADY_UNFORCELOADED);
-			// [Team Claims] an additional team forceload must fit into the shared budget of every party member
-			if(enable && !force && !isServer) {
-				TeamClaimsIntegration.TeamClaimsHandler tcForceloadHandler = TeamClaimsIntegration.getHandler();
-				if(tcForceloadHandler != null) {
-					ClaimResult<PlayerChunkClaim> tcResult =
-							tcForceloadHandler.interceptForceload(this, dimension, id, x, z, currentClaim);
-					if(tcResult != null)
-						return tcResult;
-				}
+			// [Team Claims] private and team forceloads are two separate budgets. The forceload of a team
+			// claim only has to fit into the team's forceload budget, whoever toggles it, so the stock
+			// limit check is skipped for it. For a private claim the stock check runs on the player's
+			// private forceload count.
+			TeamClaimsIntegration.TeamClaimsHandler tcForceloadHandler = isServer ? null : TeamClaimsIntegration.getHandler();
+			boolean tcTeamClaim = tcForceloadHandler != null && tcForceloadHandler.isTeamClaim(currentClaim);
+			if(tcTeamClaim && enable && !force) {
+				ClaimResult<PlayerChunkClaim> tcResult =
+						tcForceloadHandler.interceptForceload(this, dimension, id, x, z, currentClaim);
+				if(tcResult != null)
+					return tcResult;
 			}
 			ServerPlayerClaimInfo playerClaimInfo = getPlayerInfo(id);
-			// [Team Claims] when a party member toggles someone else's team claim, the forceload stays
-			// attributed to the claim owner, so the requesting player's own limit doesn't apply here.
-			// The team budget check above already validated every member's limit, including both of theirs.
-			boolean withinLimit = force || isServer || !enable || tcTeamForceload ||
-					playerClaimInfo.getForceloadCount() < forceloadLimit;
+			int tcPrivateForceloadCount = playerClaimInfo.getForceloadCount();
+			if(tcForceloadHandler != null)
+				tcPrivateForceloadCount -= tcForceloadHandler.getOwnedTeamForceloadCount(id);
+			boolean withinLimit = force || isServer || !enable || tcTeamClaim ||
+					tcPrivateForceloadCount < forceloadLimit;
 			if(!withinLimit)
 				return new ClaimResult<>(currentClaim, ClaimResult.Type.FORCELOAD_LIMIT_REACHED);
 
 			ClaimingAction action = enable ? ClaimingAction.FORCELOAD : ClaimingAction.UNFORCELOAD;
-			// [Team Claims] same reason: the re-entry below is a claim by the claim owner, so it has to
-			// be checked against the claim owner's claim limit rather than the requesting player's
-			int effectiveClaimLimit = tcTeamForceload ? getPlayerFullClaimLimit(currentClaim.getPlayerId()) : claimLimit;
-			return tryToClaimHelper(dimension, currentClaim.getPlayerId(), currentClaim.getSubConfigIndex(), fromX, fromZ, x, z, enable, force, isServer, effectiveClaimLimit, action);
+			return tryToClaimHelper(dimension, currentClaim.getPlayerId(), currentClaim.getSubConfigIndex(), fromX, fromZ, x, z, enable, force, isServer, claimLimit, action);
 		} else
 		 	return new ClaimResult<>(currentClaim, ClaimResult.Type.NOT_CLAIMED_BY_USER_FORCELOAD);
 	}

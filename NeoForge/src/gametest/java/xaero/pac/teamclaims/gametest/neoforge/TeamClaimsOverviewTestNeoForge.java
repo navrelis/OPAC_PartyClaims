@@ -18,8 +18,8 @@ public final class TeamClaimsOverviewTestNeoForge {
     private TeamClaimsOverviewTestNeoForge() {}
 
     @GameTest(template = TeamClaimsGameTestMod.EMPTY_STRUCTURE)
-    public static void infoShowsTeamNumbersAndBudget(GameTestHelper helper) {
-        TeamClaimsOverviewTestCases.infoShowsTeamNumbersAndBudget(helper);
+    public static void infoShowsTeamAndPrivateBudgets(GameTestHelper helper) {
+        TeamClaimsOverviewTestCases.infoShowsTeamAndPrivateBudgets(helper);
     }
 
     @GameTest(template = TeamClaimsGameTestMod.EMPTY_STRUCTURE)

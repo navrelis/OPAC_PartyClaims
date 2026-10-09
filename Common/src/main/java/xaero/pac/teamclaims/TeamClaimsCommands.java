@@ -25,6 +25,7 @@ import xaero.pac.common.server.player.config.api.v2.PlayerConfigOptions;
 import xaero.pac.common.server.player.data.ServerPlayerData;
 import xaero.pac.common.server.player.localization.AdaptiveLocalizer;
 import xaero.pac.teamclaims.config.TeamConfigManager;
+import xaero.pac.teamclaims.ftbsync.FtbSyncCommands;
 
 import javax.annotation.Nullable;
 import java.util.function.Predicate;
@@ -41,7 +42,8 @@ public class TeamClaimsCommands {
         // or the player they impersonate, not in a party yet), "territorymessages" is for everybody, "info" and "list" are
         // read-only overviews of the caller's team ("info <player>" of any player's, for permission level 2), "roles"
         // shows the team roles to any member and lets the party owner and admins change them, "convert" turns the
-        // caller's own claims around them into team claims or back.
+        // caller's own claims around them into team claims or back, "ftbsync" (permission level 2) reports on and
+        // triggers the optional sync with FTB Teams.
         Predicate<CommandSourceStack> nonMemberRequirement = new CommandRequirementProvider().getNonMemberRequirement(p -> true, false);
         dispatcher.register(
                 Commands.literal("teamclaims")
@@ -60,6 +62,7 @@ public class TeamClaimsCommands {
                         .then(TeamClaimsOverview.listNode())
                         .then(TeamRoles.rolesNode())
                         .then(TeamClaimsConvert.convertNode())
+                        .then(FtbSyncCommands.ftbSyncNode())
         );
         LOGGER.info("Registered /teamclaims commands");
     }

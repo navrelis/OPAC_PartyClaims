@@ -135,12 +135,12 @@ public final class ClaimsManagerSynchronizer implements IClaimsManagerSynchroniz
 		int maxClaimDistance = ServerConfig.CONFIG.maxClaimDistance.get();
 		boolean alwaysUseLoadingValues = ServerConfig.CONFIG.claimsSynchronization.get() == ServerConfig.ClaimsSyncType.NOT_SYNCED;
 		// [Team Claims] the client normally counts the player's own claims from the synced claim data,
-		// which can't know about team claims owned by other party members, so the server-computed
-		// counts have to win while the player has any team overhead
+		// which would count the player's own team claims as private ones and can't know about the team
+		// claims of other party members, so the server-computed counts have to win for a team member
 		if(!alwaysUseLoadingValues) {
 			xaero.pac.common.server.claims.TeamClaimsIntegration.TeamClaimsHandler tcHandler =
 					xaero.pac.common.server.claims.TeamClaimsIntegration.getHandler();
-			if(tcHandler != null && tcHandler.hasTeamOverhead(player.getUUID()))
+			if(tcHandler != null && tcHandler.usesServerSideClaimCounts(player.getUUID()))
 				alwaysUseLoadingValues = true;
 		}
 		sendToClient(
@@ -159,6 +159,12 @@ public final class ClaimsManagerSynchronizer implements IClaimsManagerSynchroniz
 
 		int lastForceloadLimit = playerData.getLastSyncedForceloadLimit();
 		Collection<ClaimingModeLimits> limits = getLimits(player);
+		// [Team Claims] while the player uses their team sub-config, the synced player mode limits are the
+		// team's, so a change of the player's own forceload limit doesn't show in them and is checked here
+		xaero.pac.common.server.claims.TeamClaimsIntegration.TeamClaimsHandler tcHandler =
+				xaero.pac.common.server.claims.TeamClaimsIntegration.getHandler();
+		if(tcHandler != null && tcHandler.hasPrivateForceloadLimitChangedUnnoticed(player.getUUID(), claimsManager.getPlayerFullForceloadLimit(player)))
+			serverData.getForceLoadManager().updateTicketsFor(player.getUUID(), false);
 		if(!playerData.checkAndSetClaimLimitsSync(limits))
 			return;
 		syncClaimLimits(player, limits);

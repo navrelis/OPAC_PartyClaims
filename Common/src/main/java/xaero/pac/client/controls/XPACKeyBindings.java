@@ -33,10 +33,12 @@ public class XPACKeyBindings implements OPACKeyBindingsAPI {
 	
 	private final List<KeyMapping> keyBindings;
 	public final KeyMapping openModMenu;
+	public final KeyMapping openPartyMenu;
 
 	public XPACKeyBindings() {
 		keyBindings = new ArrayList<>();
 		keyBindings.add(openModMenu = new KeyMapping("gui.xaero_pac_key_open_menu", GLFW.GLFW_KEY_APOSTROPHE, "Open Parties and Claims"));
+		keyBindings.add(openPartyMenu = new KeyMapping("gui.xaero_pac_key_open_party_menu", GLFW.GLFW_KEY_O, "Open Parties and Claims"));
 	}
 	
 	public void register() {

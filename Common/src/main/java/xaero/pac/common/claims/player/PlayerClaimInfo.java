@@ -92,28 +92,12 @@ public abstract class PlayerClaimInfo
 
 	@Override
 	public int getClaimCount() {
-		int base = getDimensionClaimCountStream().mapToInt(e -> e.getValue().getCount()).sum();
-		// [Team Claims] Add team claim overhead (team claims by other party members)
-		xaero.pac.common.server.claims.TeamClaimsIntegration.TeamClaimsHandler tcHandler =
-				xaero.pac.common.server.claims.TeamClaimsIntegration.getHandler();
-		if(tcHandler != null && !tcHandler.isComputingOverhead()) {
-			int overhead = tcHandler.getTeamClaimOverheadForPlayer(this.playerId);
-			if(overhead > 0) base += overhead;
-		}
-		return base;
+		return getDimensionClaimCountStream().mapToInt(e -> e.getValue().getCount()).sum();
 	}
 
 	@Override
 	public int getForceloadCount() {
-		int base = getDimensionForceloadCountStream().mapToInt(e -> e.getValue().getForceloadableCount()).sum();
-		// [Team Claims] Add team forceload overhead (team forceloads by other party members)
-		xaero.pac.common.server.claims.TeamClaimsIntegration.TeamClaimsHandler tcHandler =
-				xaero.pac.common.server.claims.TeamClaimsIntegration.getHandler();
-		if(tcHandler != null && !tcHandler.isComputingOverhead()) {
-			int overhead = tcHandler.getTeamForceloadOverheadForPlayer(this.playerId);
-			if(overhead > 0) base += overhead;
-		}
-		return base;
+		return getDimensionForceloadCountStream().mapToInt(e -> e.getValue().getForceloadableCount()).sum();
 	}
 
 	@Nonnull

@@ -41,7 +41,7 @@ import java.util.stream.Stream;
 import static xaero.pac.teamclaims.gametest.TeamClaimsLogicTestCases.*;
 
 /**
- * Dev/test-only, loader-neutral test bodies for the event-driven membership handling, the overhead
+ * Dev/test-only, loader-neutral test bodies for the event-driven membership handling, the budget
  * bookkeeping and the hardening of Team Claims (team name validation, option persistence, unique
  * sub-config IDs, corrupt config files, forceload ticket balance). Same conventions as
  * {@link TeamClaimsLogicTestCases} (shared helpers, offline players, a chunk offset of 1000 per test
@@ -93,18 +93,34 @@ public final class TeamClaimsHardeningTestCases {
         }
     }
 
+    /**
+     * The team total (tracked, and as both members' budget info reports it), each member's private claims and how
+     * many of the team claims each of them technically owns.
+     */
     private static void assertCounts(GameTestHelper helper, MinecraftServer server, UUID partyId, String stage,
-            UUID ownerId, int ownerExpected, UUID memberId, int memberExpected, int teamTotalExpected) {
-        int ownerCount = claimsAPI(server).getPlayerInfo(ownerId).getClaimCount();
-        int memberCount = claimsAPI(server).getPlayerInfo(memberId).getClaimCount();
-        TeamClaimManager.TeamData teamData = TeamClaimsCommon.getClaimManager().getTeamData(partyId);
+            int teamTotalExpected, UUID ownerId, int ownerPrivateExpected, int ownerOwnedExpected,
+            UUID memberId, int memberPrivateExpected, int memberOwnedExpected) {
+        TeamClaimManager cm = TeamClaimsCommon.getClaimManager();
+        TeamClaimManager.TeamData teamData = cm.getTeamData(partyId);
         int teamTotal = teamData == null ? 0 : teamData.getClaimCount();
-        helper.assertTrue(teamTotal == teamTotalExpected,
-                stage + ": expected " + teamTotalExpected + " tracked team claims, got " + teamTotal);
-        helper.assertTrue(ownerCount == ownerExpected,
-                stage + ": expected the owner's claim count to be " + ownerExpected + ", got " + ownerCount);
-        helper.assertTrue(memberCount == memberExpected,
-                stage + ": expected the member's claim count to be " + memberExpected + ", got " + memberCount);
+        TeamClaimManager.BudgetInfo owner = cm.getBudgetInfo(ownerId);
+        TeamClaimManager.BudgetInfo member = cm.getBudgetInfo(memberId);
+        helper.assertTrue(teamTotal == teamTotalExpected && owner.teamClaims() == teamTotalExpected
+                        && member.teamClaims() == teamTotalExpected,
+                stage + ": expected " + teamTotalExpected + " team claims (tracked and for both members), got " + teamTotal
+                        + ", owner=" + owner.teamClaims() + ", member=" + member.teamClaims());
+        helper.assertTrue(owner.privateClaims() == ownerPrivateExpected && owner.ownedTeamClaims() == ownerOwnedExpected,
+                stage + ": expected the owner to have " + ownerPrivateExpected + " private claim(s) and to own "
+                        + ownerOwnedExpected + " team claim(s), got " + owner);
+        helper.assertTrue(member.privateClaims() == memberPrivateExpected && member.ownedTeamClaims() == memberOwnedExpected,
+                stage + ": expected the member to have " + memberPrivateExpected + " private claim(s) and to own "
+                        + memberOwnedExpected + " team claim(s), got " + member);
+        int ownerRaw = claimsAPI(server).getPlayerInfo(ownerId).getClaimCount();
+        int memberRaw = claimsAPI(server).getPlayerInfo(memberId).getClaimCount();
+        helper.assertTrue(ownerRaw == ownerPrivateExpected + ownerOwnedExpected
+                        && memberRaw == memberPrivateExpected + memberOwnedExpected,
+                stage + ": expected OPAC's own claim counts to be private + owned team claims, got owner=" + ownerRaw
+                        + " member=" + memberRaw);
     }
 
     /** The ticket level of a chunk, or Integer.MAX_VALUE when the chunk has no chunk holder at all. */
@@ -170,7 +186,7 @@ public final class TeamClaimsHardeningTestCases {
                             "expected the quick leaver's team sub-config to be removed");
                     int leaverCount = claimsAPI(server).getPlayerInfo(memberId).getClaimCount();
                     helper.assertTrue(leaverCount == 0,
-                            "expected the quick leaver to have no claims and no team overhead left, got " + leaverCount);
+                            "expected the quick leaver to have no claims left, got " + leaverCount);
                     helper.succeed();
                 } finally {
                     cleanup.run();
@@ -180,11 +196,12 @@ public final class TeamClaimsHardeningTestCases {
     }
 
     /**
-     * 10) Every member's displayed count stays {@code own personal claims + team total} through many
-     * claim/unclaim operations by both members, including a 3x3 area claim and an area unclaim (one
-     * batch of chunk changes each), and a teammate forceload.
+     * 10) The two budgets stay right through many claim/unclaim operations by both members, including a
+     * 3x3 area claim and an area unclaim (one batch of chunk changes each), and a teammate forceload: the
+     * team total is the same for both members, a member's private claims are only their own claims that
+     * are not team claims, and the team claims each of them technically owns add up to the team total.
      */
-    public static void overheadStaysCorrectAfterManyChanges(GameTestHelper helper) {
+    public static void budgetsStayCorrectAfterManyChanges(GameTestHelper helper) {
         MinecraftServer server = helper.getLevel().getServer();
         GameProfile ownerProfile = profile("T10_Owner");
         GameProfile memberProfile = profile("T10_Member");
@@ -215,7 +232,7 @@ public final class TeamClaimsHardeningTestCases {
             AtomicReference<AreaClaimResult> areaUnclaim = new AtomicReference<>();
             try {
                 helper.assertTrue(areaClaim.get() != null, "expected the area claim to have finished within 3 ticks");
-                assertCounts(helper, server, partyId, "after the 3x3 area claim", ownerId, 9, memberId, 9, 9);
+                assertCounts(helper, server, partyId, "after the 3x3 area claim", 9, ownerId, 0, 9, memberId, 0, 0);
 
                 for (int i = 0; i < 2; i++) {
                     ClaimResult<IPlayerChunkClaimAPI> r = doClaim(server, memberId, memberTeamSub, x0 + 4 + i, 0);
@@ -225,7 +242,7 @@ public final class TeamClaimsHardeningTestCases {
                 ClaimResult<IPlayerChunkClaimAPI> personal = doClaim(server, ownerId, -1, x0 + 7, 0);
                 helper.assertTrue(personal.getResultType() == ClaimResult.Type.SUCCESSFUL_CLAIM,
                         "expected the owner's personal claim to succeed, got " + personal.getResultType());
-                assertCounts(helper, server, partyId, "after single claims", ownerId, 12, memberId, 11, 11);
+                assertCounts(helper, server, partyId, "after single claims", 11, ownerId, 1, 9, memberId, 0, 2);
 
                 // The member unclaims 3 of the owner's area team claims, the owner one of the member's
                 for (int z = 0; z < 3; z++) {
@@ -236,7 +253,7 @@ public final class TeamClaimsHardeningTestCases {
                 ClaimResult<IPlayerChunkClaimAPI> u = doUnclaim(server, ownerId, x0 + 4, 0);
                 helper.assertTrue(u.getResultType() == ClaimResult.Type.SUCCESSFUL_UNCLAIM,
                         "expected the owner to unclaim the member's team claim, got " + u.getResultType());
-                assertCounts(helper, server, partyId, "after teammate unclaims", ownerId, 8, memberId, 7, 7);
+                assertCounts(helper, server, partyId, "after teammate unclaims", 7, ownerId, 1, 6, memberId, 0, 1);
 
                 // Claim/unclaim churn by alternating members: the totals must come back to the same numbers
                 for (int i = 0; i < 6; i++) {
@@ -250,17 +267,19 @@ public final class TeamClaimsHardeningTestCases {
                     helper.assertTrue(r.getResultType() == ClaimResult.Type.SUCCESSFUL_UNCLAIM,
                             "expected churn unclaim " + i + " to succeed, got " + r.getResultType());
                 }
-                assertCounts(helper, server, partyId, "after claim/unclaim churn", ownerId, 8, memberId, 7, 7);
+                assertCounts(helper, server, partyId, "after claim/unclaim churn", 7, ownerId, 1, 6, memberId, 0, 1);
 
-                // The owner forceloads the member's remaining team claim: it counts for both
+                // The owner forceloads the member's remaining team claim: a team forceload for both, a private one for nobody
                 ClaimResult<IPlayerChunkClaimAPI> f = doForceload(server, ownerId, x0 + 5, 0, true);
                 helper.assertTrue(f.getResultType() == ClaimResult.Type.SUCCESSFUL_FORCELOAD,
                         "expected the owner to forceload the member's team claim, got " + f.getResultType());
-                int ownerForceloads = claimsAPI(server).getPlayerInfo(ownerId).getForceloadCount();
-                int memberForceloads = claimsAPI(server).getPlayerInfo(memberId).getForceloadCount();
-                helper.assertTrue(ownerForceloads == 1 && memberForceloads == 1,
-                        "expected both members' forceload counts to be 1, got owner=" + ownerForceloads
-                                + " member=" + memberForceloads);
+                TeamClaimManager.BudgetInfo ownerBudget = TeamClaimsCommon.getClaimManager().getBudgetInfo(ownerId);
+                TeamClaimManager.BudgetInfo memberBudget = TeamClaimsCommon.getClaimManager().getBudgetInfo(memberId);
+                helper.assertTrue(ownerBudget.teamForceloads() == 1 && memberBudget.teamForceloads() == 1
+                                && ownerBudget.privateForceloads() == 0 && memberBudget.privateForceloads() == 0
+                                && ownerBudget.ownedTeamForceloads() == 0 && memberBudget.ownedTeamForceloads() == 1,
+                        "expected 1 team forceload for both, owned by the member, and no private forceloads, got owner="
+                                + ownerBudget + " member=" + memberBudget);
 
                 // Area unclaim by the owner: removes the owner's 6 remaining area team claims in one batch
                 claimsAPI(server).tryToUnclaimArea(OVERWORLD, ownerId, OVERWORLD, x0 + 1, 1, x0, 0, x0 + 2, 2,
@@ -272,12 +291,7 @@ public final class TeamClaimsHardeningTestCases {
             helper.runAfterDelay(3, () -> {
                 try {
                     helper.assertTrue(areaUnclaim.get() != null, "expected the area unclaim to have finished within 3 ticks");
-                    assertCounts(helper, server, partyId, "after the area unclaim", ownerId, 2, memberId, 1, 1);
-                    TeamClaimManager cm = TeamClaimsCommon.getClaimManager();
-                    int ownerOverhead = cm.getTeamClaimOverheadForPlayer(ownerId);
-                    int memberOverhead = cm.getTeamClaimOverheadForPlayer(memberId);
-                    helper.assertTrue(ownerOverhead == 1 && memberOverhead == 0,
-                            "expected claim overheads owner=1 member=0, got owner=" + ownerOverhead + " member=" + memberOverhead);
+                    assertCounts(helper, server, partyId, "after the area unclaim", 1, ownerId, 1, 0, memberId, 0, 1);
                     helper.succeed();
                 } finally {
                     cleanup.run();

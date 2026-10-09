@@ -30,6 +30,8 @@ public class ClaimTicket {
 	private final int x;
 	private final int z;
 	private boolean enabled;
+	// [Team Claims] the sub-config index of the claim this ticket is for, which tells a team forceload from a private one
+	private int subConfigIndex = -1;
 	
 	public ClaimTicket(UUID playerId, ResourceLocation dimension, int x, int z) {
 		super();
@@ -76,6 +78,16 @@ public class ClaimTicket {
 	
 	public void setEnabled(boolean enabled) {
 		this.enabled = enabled;
+	}
+
+	// [Team Claims]
+	public int getSubConfigIndex() {
+		return subConfigIndex;
+	}
+
+	// [Team Claims]
+	public void setSubConfigIndex(int subConfigIndex) {
+		this.subConfigIndex = subConfigIndex;
 	}
 
 }

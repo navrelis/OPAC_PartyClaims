@@ -21,6 +21,8 @@ import xaero.pac.common.server.player.config.api.v2.IPlayerConfigAPI;
 import xaero.pac.common.server.player.config.api.v2.IPlayerConfigOptionSpecAPI;
 import xaero.pac.common.server.player.config.api.v2.PlayerConfigOptions;
 import xaero.pac.teamclaims.TeamClaimManager;
+import xaero.pac.teamclaims.TeamClaimManager.BudgetInfo;
+import xaero.pac.teamclaims.TeamClaimManager.BudgetSettings;
 import xaero.pac.teamclaims.TeamClaimManager.ForceloadActivity;
 import xaero.pac.teamclaims.TeamClaimsCommon;
 import xaero.pac.teamclaims.TeamClaimsOverview;
@@ -58,11 +60,13 @@ public final class TeamClaimsOverviewTestCases {
 
     /**
      * A 3 member team (owner, admin, member) with 5 team claims (3 of the owner, 2 of the admin, one of the owner's
-     * forceloaded) and a personal claim of the owner: the team totals, every member line ({@code personal + team =
-     * count / limit}, in the order owner, admin, member), the red line of the member who is at their claim limit, and the
-     * budget with the member who limits it (claims: the member, 0 left; forceloads: the admin, with the lowest limit).
+     * forceloaded) and a private claim of the owner: the team's budget line (team claims and team forceloads against
+     * the limits for 3 members), the member count with what a 4th member would add, every member line (private claims
+     * and forceloads against the member's own limits plus the team claims they own, in the order owner, admin,
+     * member), and the red line of the member who is at their private claim limit. No over-limit line, as the team
+     * is within its limits.
      */
-    public static void infoShowsTeamNumbersAndBudget(GameTestHelper helper) {
+    public static void infoShowsTeamAndPrivateBudgets(GameTestHelper helper) {
         MinecraftServer server = helper.getLevel().getServer();
         GameProfile ownerProfile = profile("T30_Owner");
         GameProfile adminProfile = profile("T30_Admin");
@@ -81,13 +85,13 @@ public final class TeamClaimsOverviewTestCases {
             int adminSub = teamSubIndexOf(server, subId, adminId);
             for (int i = 0; i < 3; i++) assertClaimed(helper, doClaim(server, ownerId, ownerSub, x0 + i, 0), "owner team claim " + i);
             for (int i = 3; i < 5; i++) assertClaimed(helper, doClaim(server, adminId, adminSub, x0 + i, 0), "admin team claim " + i);
-            assertClaimed(helper, doClaim(server, ownerId, -1, x0 + 10, 0), "owner personal claim");
+            assertClaimed(helper, doClaim(server, ownerId, -1, x0 + 10, 0), "owner private claim");
             ClaimResult<?> forceload = doForceload(server, ownerId, x0, 0, true);
             helper.assertTrue(forceload.getResultType() == ClaimResult.Type.SUCCESSFUL_FORCELOAD,
                     "expected the forceload to succeed, got " + forceload.getResultType());
 
-            // The member's claim limit goes down to exactly their count (5), the admin's forceload limit to 4
-            int memberClaimLimit = 5;
+            // The member's private claim limit goes down to their private count (0), the admin's forceload limit to 4
+            int memberClaimLimit = 0;
             int adminForceloadLimit = 4;
             setLimit(helper, server, memberId, PlayerConfigOptions.BONUS_CHUNK_CLAIMS, claimsAPI(server).getPlayerFullClaimLimit(memberId), memberClaimLimit);
             setLimit(helper, server, adminId, PlayerConfigOptions.BONUS_CHUNK_FORCELOADS, claimsAPI(server).getPlayerFullForceloadLimit(adminId), adminForceloadLimit);
@@ -95,6 +99,7 @@ public final class TeamClaimsOverviewTestCases {
             int ownerForceloadLimit = claimsAPI(server).getPlayerFullForceloadLimit(ownerId);
             int adminClaimLimit = claimsAPI(server).getPlayerFullClaimLimit(adminId);
             int memberForceloadLimit = claimsAPI(server).getPlayerFullForceloadLimit(memberId);
+            BudgetSettings settings = BudgetSettings.fromConfig();
 
             CapturingCommandSource capture = new CapturingCommandSource();
             int result = TeamClaimsOverview.showInfo(commandSource(helper, capture), null, ownerId, null);
@@ -106,27 +111,39 @@ public final class TeamClaimsOverviewTestCases {
                     ? TeamClaimsCommon.getTeamConfigManager().resolvePartyName(party) : teamConfig.getTeamName();
             List<String> lines = lines(capture);
             assertLine(helper, lines, localized(server, "gui.xaero_pac_team_claims_info_header", teamName, "T30_Owner"));
-            assertLine(helper, lines, localized(server, "gui.xaero_pac_team_claims_info_totals", "5", "1"));
+            assertLine(helper, lines, localized(server, "gui.xaero_pac_team_claims_info_team_budget",
+                    "5 / " + settings.claimLimit(3), "1 / " + settings.forceloadLimit(3)));
+            assertLine(helper, lines, localized(server, "gui.xaero_pac_team_claims_info_members", "3",
+                    String.valueOf(settings.claimLimit(4) - settings.claimLimit(3)),
+                    String.valueOf(settings.forceloadLimit(4) - settings.forceloadLimit(3))));
+            helper.assertTrue(lines.stream().noneMatch(line -> line.contains("above the limit")),
+                    "expected no over-limit line for a team within its limits, got " + lines);
             ForceloadActivity activity = TeamClaimsCommon.getClaimManager().getForceloadActivity(partyId);
             assertLine(helper, lines, localized(server, activity == ForceloadActivity.ACTIVE
                     ? "gui.xaero_pac_team_claims_info_forceload_active" : "gui.xaero_pac_team_claims_info_forceload_inactive"));
 
-            String ownerLine = memberLine(server, "T30_Owner", "owner", "1 + 5 = 6 / " + ownerClaimLimit, "0 + 1 = 1 / " + ownerForceloadLimit);
-            String adminLine = memberLine(server, "T30_Admin", "admin", "0 + 5 = 5 / " + adminClaimLimit, "0 + 1 = 1 / " + adminForceloadLimit);
-            String memberLine = memberLine(server, "T30_Member", "member", "0 + 5 = 5 / " + memberClaimLimit, "0 + 1 = 1 / " + memberForceloadLimit);
+            String ownerLine = memberLine(server, "T30_Owner", "owner", "1 / " + ownerClaimLimit, "0 / " + ownerForceloadLimit, "3");
+            String adminLine = memberLine(server, "T30_Admin", "admin", "0 / " + adminClaimLimit, "0 / " + adminForceloadLimit, "2");
+            String memberLine = memberLine(server, "T30_Member", "member", "0 / " + memberClaimLimit, "0 / " + memberForceloadLimit, "0");
             int ownerAt = assertLine(helper, lines, ownerLine);
             int adminAt = assertLine(helper, lines, adminLine);
             int memberAt = assertLine(helper, lines, memberLine);
             helper.assertTrue(ownerAt < adminAt && adminAt < memberAt,
                     "expected the member lines in the order owner, admin, member, got " + lines);
             helper.assertTrue(!isRed(capture.messages().get(ownerAt)) && !isRed(capture.messages().get(adminAt)),
-                    "expected the lines of members below their limits not to be red");
+                    "expected the lines of members below their private limits not to be red");
             helper.assertTrue(isRed(capture.messages().get(memberAt)),
-                    "expected the line of the member at their claim limit to be red");
+                    "expected the line of the member at their private claim limit to be red");
 
-            assertLine(helper, lines, localized(server, "gui.xaero_pac_team_claims_info_budget_claims", "0", "T30_Member"));
-            assertLine(helper, lines, localized(server, "gui.xaero_pac_team_claims_info_budget_forceloads",
-                    String.valueOf(adminForceloadLimit - 1), "T30_Admin"));
+            // The same numbers through the read API
+            BudgetInfo owner = TeamClaimsCommon.getClaimManager().getBudgetInfo(ownerId);
+            helper.assertTrue(owner.privateClaims() == 1 && owner.privateClaimLimit() == ownerClaimLimit
+                            && owner.privateForceloads() == 0 && owner.privateForceloadLimit() == ownerForceloadLimit
+                            && partyId.equals(owner.partyId()) && owner.memberCount() == 3 && owner.teamClaims() == 5
+                            && owner.teamClaimLimit() == settings.claimLimit(3) && owner.teamForceloads() == 1
+                            && owner.teamForceloadLimit() == settings.forceloadLimit(3) && owner.overLimitDeadline() == 0
+                            && owner.claimsOverLimit() == 0 && owner.ownedTeamClaims() == 3 && owner.ownedTeamForceloads() == 1,
+                    "expected the owner's budget info to have the numbers /teamclaims info shows, got " + owner);
             helper.succeed();
         } finally {
             resetLimitQuiet(server, memberId, PlayerConfigOptions.BONUS_CHUNK_CLAIMS);
@@ -148,7 +165,8 @@ public final class TeamClaimsOverviewTestCases {
         GameProfile ownerProfile = profile("T31_Owner");
         TeamClaimManager cm = TeamClaimsCommon.getClaimManager();
         int x0 = 31000;
-        IServerPartyAPI party = createPartyWithTeam(server, ownerProfile, List.of());
+        // Two members: a team needs that many to make team claims
+        IServerPartyAPI party = createPartyWithTeam(server, ownerProfile, List.of(profile("T31_Member")));
         UUID partyId = party.getId();
         UUID ownerId = ownerProfile.getId();
         try {
@@ -189,14 +207,18 @@ public final class TeamClaimsOverviewTestCases {
         IServerPartyAPI party = null;
         int x0 = 32000;
         try {
-            party = createPartyWithTeam(server, player.getGameProfile(), List.of());
+            // Two members: a team needs that many to make team claims
+            party = createPartyWithTeam(server, player.getGameProfile(), List.of(profile("T32_Member")));
             String subId = TeamClaimsCommon.getTeamConfigManager().getTeamConfig(party.getId()).getSubConfigId();
             assertClaimed(helper, doClaim(server, player.getUUID(), teamSubIndexOf(server, subId, player.getUUID()), x0, 0), "team claim");
             String name = player.getGameProfile().getName();
+            BudgetSettings settings = BudgetSettings.fromConfig();
+            String teamBudgetLine = localized(server, "gui.xaero_pac_team_claims_info_team_budget", "1 / " + settings.claimLimit(2),
+                    "0 / " + settings.forceloadLimit(2));
 
             CapturingCommandSource info = run(server, player, 0, "teamclaims info");
-            helper.assertTrue(info.received(localized(server, "gui.xaero_pac_team_claims_info_totals", "1", "0")),
-                    "expected /teamclaims info to show the team totals, got " + info.all());
+            helper.assertTrue(info.received(teamBudgetLine),
+                    "expected /teamclaims info to show the team budget, got " + info.all());
             CapturingCommandSource list = run(server, player, 0, "teamclaims list");
             helper.assertTrue(list.received(localized(server, "gui.xaero_pac_team_claims_list_entry", "overworld", String.valueOf(x0), "0",
                             String.valueOf(x0 * 16 + 8), "8", name)),
@@ -215,7 +237,7 @@ public final class TeamClaimsOverviewTestCases {
             helper.assertTrue(canRun(server, player, 0, "teamclaims info") && canRun(server, player, 0, "teamclaims list 1"),
                     "expected /teamclaims info and list to need no permission");
             CapturingCommandSource other = run(server, player, 2, "teamclaims info @p");
-            helper.assertTrue(other.received(localized(server, "gui.xaero_pac_team_claims_info_totals", "1", "0")),
+            helper.assertTrue(other.received(teamBudgetLine),
                     "expected /teamclaims info <player> to show the team of that player, got " + other.all());
             helper.succeed();
         } finally {
@@ -362,8 +384,9 @@ public final class TeamClaimsOverviewTestCases {
         }
     }
 
-    private static String memberLine(MinecraftServer server, String name, String rank, String claims, String forceloads) {
-        return localized(server, "gui.xaero_pac_team_claims_info_member", name, rank, "○", claims, forceloads);
+    private static String memberLine(MinecraftServer server, String name, String rank, String claims, String forceloads,
+            String ownedTeamClaims) {
+        return localized(server, "gui.xaero_pac_team_claims_info_member", name, rank, "○", claims, forceloads, ownedTeamClaims);
     }
 
     static List<String> lines(CapturingCommandSource capture) {
