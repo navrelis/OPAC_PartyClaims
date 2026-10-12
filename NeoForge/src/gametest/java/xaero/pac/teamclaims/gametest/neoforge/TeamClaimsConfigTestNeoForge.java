@@ -23,6 +23,11 @@ public final class TeamClaimsConfigTestNeoForge {
     }
 
     @GameTest(template = TeamClaimsGameTestMod.EMPTY_STRUCTURE)
+    public static void overLimitEnforcementOptionReachesBudgetSettings(GameTestHelper helper) {
+        TeamClaimsConfigTestCases.overLimitEnforcementOptionReachesBudgetSettings(helper);
+    }
+
+    @GameTest(template = TeamClaimsGameTestMod.EMPTY_STRUCTURE)
     public static void maxTeamNameLengthIsConfigurable(GameTestHelper helper) {
         TeamClaimsConfigTestCases.maxTeamNameLengthIsConfigurable(helper);
     }

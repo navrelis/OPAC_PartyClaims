@@ -47,6 +47,7 @@ public class TeamClaimsServerConfig {
     public final ModConfigSpec.IntValue teamForceloadsBase;
     public final ModConfigSpec.IntValue teamForceloadsPerExtraMember;
     public final ModConfigSpec.IntValue overLimitGraceHours;
+    public final ModConfigSpec.BooleanValue overLimitEnforcement;
     public final ModConfigSpec.BooleanValue ftbTeamsSync;
 
     private TeamClaimsServerConfig(ModConfigSpec.Builder builder) {
@@ -131,6 +132,17 @@ public class TeamClaimsServerConfig {
                         its limit earlier keeps everything. A running countdown keeps its end time when this option is changed.
                         0 = the excess is removed at the next check (at the latest a minute later).""")
                 .defineInRange("overLimitGraceHours", DEFAULT_OVER_LIMIT_GRACE_HOURS, 0, MAX_OVER_LIMIT_GRACE_HOURS);
+
+        overLimitEnforcement = builder
+                .comment("""
+                        Whether a team above its team claim or team forceload limit (e.g. after a member left) loses the excess
+                        when overLimitGraceHours are up. When false, the team keeps everything: no countdown starts, nothing is
+                        unclaimed or turned off by the limit, and there are no warnings or countdowns in chat, in /teamclaims info
+                        or on the party screen. The limits themselves stay: a team above them can make no new team claims or
+                        team forceloads until it is back within them. A countdown that is running when this is set to false is
+                        dropped at the next check; setting it to true again starts a fresh one for a team that is still above
+                        its limit.""")
+                .define("overLimitEnforcement", true);
 
         ftbTeamsSync = builder
                 .comment("""

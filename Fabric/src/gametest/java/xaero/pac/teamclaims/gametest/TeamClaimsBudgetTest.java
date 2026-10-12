@@ -77,6 +77,31 @@ public class TeamClaimsBudgetTest implements FabricGameTest {
     }
 
     @GameTest(template = FabricGameTest.EMPTY_STRUCTURE)
+    public void overLimitEnforcementOffKeepsEverything(GameTestHelper helper) {
+        TeamClaimsBudgetTestCases.overLimitEnforcementOffKeepsEverything(helper);
+    }
+
+    @GameTest(template = FabricGameTest.EMPTY_STRUCTURE)
+    public void overLimitEnforcementOffStillRefusesNewClaims(GameTestHelper helper) {
+        TeamClaimsBudgetTestCases.overLimitEnforcementOffStillRefusesNewClaims(helper);
+    }
+
+    @GameTest(template = FabricGameTest.EMPTY_STRUCTURE)
+    public void overLimitEnforcementSwitchedOffDropsRunningDeadline(GameTestHelper helper) {
+        TeamClaimsBudgetTestCases.overLimitEnforcementSwitchedOffDropsRunningDeadline(helper);
+    }
+
+    @GameTest(template = FabricGameTest.EMPTY_STRUCTURE)
+    public void overLimitEnforcementSwitchedOnStartsFreshDeadline(GameTestHelper helper) {
+        TeamClaimsBudgetTestCases.overLimitEnforcementSwitchedOnStartsFreshDeadline(helper);
+    }
+
+    @GameTest(template = FabricGameTest.EMPTY_STRUCTURE)
+    public void overLimitEnforcementOffInfoShowsNoCountdown(GameTestHelper helper) {
+        TeamClaimsBudgetTestCases.overLimitEnforcementOffInfoShowsNoCountdown(helper);
+    }
+
+    @GameTest(template = FabricGameTest.EMPTY_STRUCTURE)
     public void oldFormatSavedDataLoads(GameTestHelper helper) {
         TeamClaimsBudgetTestCases.oldFormatSavedDataLoads(helper);
     }

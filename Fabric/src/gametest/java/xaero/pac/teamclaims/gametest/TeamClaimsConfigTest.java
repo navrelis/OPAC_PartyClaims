@@ -17,6 +17,11 @@ public class TeamClaimsConfigTest implements FabricGameTest {
     }
 
     @GameTest(template = FabricGameTest.EMPTY_STRUCTURE)
+    public void overLimitEnforcementOptionReachesBudgetSettings(GameTestHelper helper) {
+        TeamClaimsConfigTestCases.overLimitEnforcementOptionReachesBudgetSettings(helper);
+    }
+
+    @GameTest(template = FabricGameTest.EMPTY_STRUCTURE)
     public void maxTeamNameLengthIsConfigurable(GameTestHelper helper) {
         TeamClaimsConfigTestCases.maxTeamNameLengthIsConfigurable(helper);
     }

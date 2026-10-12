@@ -67,6 +67,31 @@ public final class TeamClaimsConfigTestCases {
     }
 
     /**
+     * 'overLimitEnforcement' defaults to true, and the budget settings that are read from the config (what a party
+     * without a test override uses) follow its value right away. The original value is restored afterwards.
+     */
+    public static void overLimitEnforcementOptionReachesBudgetSettings(GameTestHelper helper) {
+        TeamClaimsServerConfig config = TeamClaimsServerConfig.CONFIG;
+        helper.assertTrue(config.overLimitEnforcement.getDefault() && config.overLimitEnforcement.get(),
+                "expected 'overLimitEnforcement' to default to true and be true, got " + config.overLimitEnforcement.get());
+        boolean original = config.overLimitEnforcement.get();
+        try {
+            helper.assertTrue(TeamClaimManager.BudgetSettings.fromConfig().overLimitEnforcement(),
+                    "expected the budget settings of the config to have enforcement on by default");
+            config.overLimitEnforcement.set(false);
+            helper.assertTrue(!TeamClaimManager.BudgetSettings.fromConfig().overLimitEnforcement()
+                            && !TeamClaimsCommon.getClaimManager().getBudgetSettings(UUID.randomUUID()).overLimitEnforcement(),
+                    "expected the budget settings to have enforcement off once the option is false");
+            config.overLimitEnforcement.set(true);
+            helper.assertTrue(TeamClaimManager.BudgetSettings.fromConfig().overLimitEnforcement(),
+                    "expected the budget settings to have enforcement on again once the option is true");
+        } finally {
+            config.overLimitEnforcement.set(original);
+        }
+        helper.succeed();
+    }
+
+    /**
      * 'maxTeamNameLength' is what limits a team name, and the message names the configured limit. The original
      * value is restored afterwards.
      */

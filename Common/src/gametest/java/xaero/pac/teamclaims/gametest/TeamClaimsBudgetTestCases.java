@@ -1001,6 +1001,243 @@ public final class TeamClaimsBudgetTestCases {
         }
     }
 
+    // ==================== Tests: over-limit enforcement switched off ====================
+
+    /** Five team claims of the owner at x0..x0+4, the first three forceloaded, made with OPAC's low-level claim. */
+    private static void claimFiveWithThreeForceloads(Team t) {
+        int ownerSub = t.teamSub(t.ownerId);
+        for (int i = 0; i < 5; i++) t.claim(t.ownerId, ownerSub, t.x0 + i, 0, i < 3);
+    }
+
+    /**
+     * With {@code overLimitEnforcement} off, a team 2 team claims and 2 team forceloads above its limits (the limits
+     * were lowered, as a config change or a member leaving would) keeps everything: no deadline is stored, the online
+     * member is told nothing at the check, at a later one a very long time after, or at login, and nothing is
+     * unclaimed or turned off.
+     */
+    public static void overLimitEnforcementOffKeepsEverything(GameTestHelper helper) {
+        Team t = Team.create(helper, "T150", 150000);
+        int x0 = t.x0;
+        long[] now = {System.currentTimeMillis()};
+        try {
+            UUID partyId = t.party.getId();
+            t.cm.setBudgetSettingsOverride(partyId, new BudgetSettings(2, 5, 0, 3, 0, 72, false));
+            t.cm.setClock(() -> now[0]);
+            claimFiveWithThreeForceloads(t);
+
+            t.cm.setBudgetSettingsOverride(partyId, new BudgetSettings(2, 3, 0, 1, 0, 72, false));
+            helper.assertTrue(captureChat(t.server, t.player, () -> t.cm.checkOverLimit(partyId)).isEmpty(),
+                    "expected no message for a team above its limits with enforcement off");
+            assertKeepsEverythingWithoutDeadline(helper, t, "right after going over");
+
+            now[0] += 1000 * HOUR;
+            helper.assertTrue(captureChat(t.server, t.player, () -> t.cm.checkOverLimit(partyId)).isEmpty(),
+                    "expected no message at a later check either");
+            helper.assertTrue(captureChat(t.server, t.player, () -> t.cm.onPlayerLogin(t.player)).isEmpty(),
+                    "expected no reminder at login");
+            assertKeepsEverythingWithoutDeadline(helper, t, "a thousand hours later");
+            helper.succeed();
+        } finally {
+            t.cm.setClock(null);
+            t.cleanup(x0, 0, x0 + 1, 0, x0 + 2, 0, x0 + 3, 0, x0 + 4, 0);
+        }
+    }
+
+    /** The team of {@link #claimFiveWithThreeForceloads} is 2 / 2 above 3 / 1, has all of it, and no deadline anywhere. */
+    private static void assertKeepsEverythingWithoutDeadline(GameTestHelper helper, Team t, String stage) {
+        UUID partyId = t.party.getId();
+        TeamData teamData = t.cm.getTeamData(partyId);
+        helper.assertTrue(teamData.getClaimCount() == 5 && teamData.getForceloadCount() == 3
+                        && teamData.getClaimDeadline() == 0 && teamData.getForceloadDeadline() == 0,
+                stage + ": expected 5 team claims, 3 team forceloads and no deadline stored, got " + teamData.getClaimCount() + " / "
+                        + teamData.getForceloadCount() + " and " + teamData.getClaimDeadline() + " / " + teamData.getForceloadDeadline());
+        TeamClaimManager.TeamBudget budget = t.cm.getTeamBudget(partyId);
+        helper.assertTrue(budget.claimsOverLimit() == 2 && budget.forceloadsOverLimit() == 2 && budget.claimDeadline() == 0
+                        && budget.forceloadDeadline() == 0,
+                stage + ": expected the team budget to report 2 claims and 2 forceloads above the limits without a deadline, got " + budget);
+        for (int i = 0; i < 5; i++)
+            assertClaim(helper, t.server, t.x0 + i, 0, t.ownerId, i < 3, stage + ": team claim t" + (i + 1));
+    }
+
+    /**
+     * Only the removal and the warnings stop with {@code overLimitEnforcement} off, the limits stay: a team above its
+     * limits is refused new team claims and new team forceloads, with the same result as with enforcement on, and
+     * nothing is claimed or forceloaded by the refused attempts.
+     */
+    public static void overLimitEnforcementOffStillRefusesNewClaims(GameTestHelper helper) {
+        Team t = Team.create(helper, "T151", 151000);
+        int x0 = t.x0;
+        try {
+            UUID partyId = t.party.getId();
+            int ownerSub = t.teamSub(t.ownerId);
+            for (int i = 0; i < 3; i++) t.claim(t.ownerId, ownerSub, x0 + i, 0, i < 2);
+            for (boolean enforcement : new boolean[] {true, false}) {
+                t.cm.setBudgetSettingsOverride(partyId, new BudgetSettings(2, 2, 0, 1, 0, 72, enforcement));
+                String stage = "with enforcement " + (enforcement ? "on" : "off");
+                assertResult(helper, doClaim(t.server, t.ownerId, ownerSub, x0 + 3, 0), ClaimResult.Type.CLAIM_LIMIT_REACHED,
+                        "a new team claim of a team above its claim limit " + stage);
+                assertResult(helper, doForceload(t.server, t.ownerId, x0 + 2, 0, true), ClaimResult.Type.FORCELOAD_LIMIT_REACHED,
+                        "a new team forceload of a team above its forceload limit " + stage);
+                assertClaim(helper, t.server, x0 + 3, 0, null, false, "the refused team claim " + stage);
+                assertClaim(helper, t.server, x0 + 2, 0, t.ownerId, false, "the claim of the refused team forceload " + stage);
+            }
+            TeamData teamData = t.cm.getTeamData(partyId);
+            helper.assertTrue(teamData.getClaimCount() == 3 && teamData.getForceloadCount() == 2,
+                    "expected the team to still have exactly its 3 claims and 2 forceloads, got " + teamData.getClaimCount() + " / "
+                            + teamData.getForceloadCount());
+            helper.succeed();
+        } finally {
+            t.cleanup(x0, 0, x0 + 1, 0, x0 + 2, 0, x0 + 3, 0);
+        }
+    }
+
+    /**
+     * A deadline that is running when the option is switched off is dropped at the next check, silently: the stored
+     * deadlines go to 0, the online member is told nothing (not at the check, not at login), nothing is removed when
+     * the old deadline passes, and the team budget and budget info show no deadline (they already do before the check,
+     * with the old deadline still stored).
+     */
+    public static void overLimitEnforcementSwitchedOffDropsRunningDeadline(GameTestHelper helper) {
+        Team t = Team.create(helper, "T152", 152000);
+        int x0 = t.x0;
+        long[] now = {System.currentTimeMillis()};
+        try {
+            UUID partyId = t.party.getId();
+            t.cm.setBudgetSettingsOverride(partyId, new BudgetSettings(2, 5, 0, 3, 0, 72));
+            t.cm.setClock(() -> now[0]);
+            claimFiveWithThreeForceloads(t);
+            t.cm.setBudgetSettingsOverride(partyId, new BudgetSettings(2, 3, 0, 1, 0, 72));
+            t.cm.checkOverLimit(partyId);
+            long deadline = now[0] + 72 * HOUR;
+            helper.assertTrue(t.cm.getTeamData(partyId).getClaimDeadline() == deadline
+                            && t.cm.getTeamData(partyId).getForceloadDeadline() == deadline,
+                    "test setup: expected both deadlines 72 hours from now");
+
+            now[0] += 10 * HOUR;
+            t.cm.setBudgetSettingsOverride(partyId, new BudgetSettings(2, 3, 0, 1, 0, 72, false));
+            TeamData teamData = t.cm.getTeamData(partyId);
+            BudgetInfo info = t.cm.getBudgetInfo(t.ownerId);
+            helper.assertTrue(teamData.getClaimDeadline() == deadline && info.overLimitDeadline() == 0
+                            && info.forceloadOverLimitDeadline() == 0 && info.claimsOverLimit() == 2 && info.forceloadsOverLimit() == 2,
+                    "expected the budget info to show no deadline right after the switch, with the stored one still there before "
+                            + "the check, got " + info);
+
+            helper.assertTrue(captureChat(t.server, t.player, () -> t.cm.checkOverLimit(partyId)).isEmpty(),
+                    "expected the dropped deadline not to be announced");
+            helper.assertTrue(teamData.getClaimDeadline() == 0 && teamData.getForceloadDeadline() == 0
+                            && !teamData.hasOverLimitDeadline(),
+                    "expected both stored deadlines to be dropped at the check, got " + teamData.getClaimDeadline() + " / "
+                            + teamData.getForceloadDeadline());
+            helper.assertTrue(captureChat(t.server, t.player, () -> t.cm.onPlayerLogin(t.player)).isEmpty(),
+                    "expected no reminder at login");
+
+            now[0] = deadline + HOUR;
+            helper.assertTrue(captureChat(t.server, t.player, () -> t.cm.checkOverLimit(partyId)).isEmpty(),
+                    "expected no message when the old deadline would have passed");
+            assertKeepsEverythingWithoutDeadline(helper, t, "after the old deadline");
+            helper.succeed();
+        } finally {
+            t.cm.setClock(null);
+            t.cleanup(x0, 0, x0 + 1, 0, x0 + 2, 0, x0 + 3, 0, x0 + 4, 0);
+        }
+    }
+
+    /**
+     * Switching the option back on while the team is still above its limits starts a fresh deadline of the normal
+     * grace period from that moment (not from when the team went over), with the usual warnings, and enforcement
+     * happens at the end of it: the 2 newest claims are unclaimed and, as the claims removed were not forceloaded, the
+     * 2 newest forceloads are turned off.
+     */
+    public static void overLimitEnforcementSwitchedOnStartsFreshDeadline(GameTestHelper helper) {
+        Team t = Team.create(helper, "T153", 153000);
+        int x0 = t.x0;
+        long[] now = {System.currentTimeMillis()};
+        try {
+            UUID partyId = t.party.getId();
+            t.cm.setBudgetSettingsOverride(partyId, new BudgetSettings(2, 5, 0, 3, 0, 72, false));
+            t.cm.setClock(() -> now[0]);
+            claimFiveWithThreeForceloads(t);
+            t.cm.setBudgetSettingsOverride(partyId, new BudgetSettings(2, 3, 0, 1, 0, 72, false));
+            t.cm.checkOverLimit(partyId);
+            now[0] += 500 * HOUR;
+            t.cm.checkOverLimit(partyId);
+            assertKeepsEverythingWithoutDeadline(helper, t, "while the option is off");
+
+            t.cm.setBudgetSettingsOverride(partyId, new BudgetSettings(2, 3, 0, 1, 0, 72, true));
+            long deadline = now[0] + 72 * HOUR;
+            List<String> started = captureChat(t.server, t.player, () -> t.cm.checkOverLimit(partyId));
+            helper.assertTrue(started.equals(List.of(localized(t.server, KEY + "over_limit_claims_started", "2", "3", "3 d 0 h"),
+                            localized(t.server, KEY + "over_limit_forceloads_started", "2", "1", "3 d 0 h"))),
+                    "expected the two warnings with 3 d 0 h left, got " + started);
+            TeamData teamData = t.cm.getTeamData(partyId);
+            BudgetInfo info = t.cm.getBudgetInfo(t.ownerId);
+            helper.assertTrue(teamData.getClaimDeadline() == deadline && teamData.getForceloadDeadline() == deadline
+                            && info.overLimitDeadline() == deadline && info.forceloadOverLimitDeadline() == deadline,
+                    "expected fresh deadlines 72 hours from the switch, got " + teamData.getClaimDeadline() + " / "
+                            + teamData.getForceloadDeadline() + " and " + info);
+
+            now[0] = deadline - 1;
+            t.cm.checkOverLimit(partyId);//the daily reminder is due by now
+            helper.assertTrue(t.cm.getTeamData(partyId).getClaimCount() == 5 && t.cm.getTeamData(partyId).getForceloadCount() == 3
+                            && t.cm.getTeamData(partyId).getClaimDeadline() == deadline,
+                    "expected nothing to be removed before the fresh deadline");
+            now[0] = deadline;
+            List<String> enforced = captureChat(t.server, t.player, () -> t.cm.checkOverLimit(partyId));
+            helper.assertTrue(enforced.equals(List.of(localized(t.server, KEY + "over_limit_claims_enforced", "2", "3"),
+                            localized(t.server, KEY + "over_limit_forceloads_enforced", "2", "1"))),
+                    "expected the messages that 2 team claims were unclaimed and 2 forceloads turned off, got " + enforced);
+            assertClaim(helper, t.server, x0, 0, t.ownerId, true, "t1 (the oldest, the oldest forceload)");
+            assertClaim(helper, t.server, x0 + 1, 0, t.ownerId, false, "t2 (its forceload was turned off)");
+            assertClaim(helper, t.server, x0 + 2, 0, t.ownerId, false, "t3 (its forceload was turned off)");
+            assertClaim(helper, t.server, x0 + 3, 0, null, false, "t4 (unclaimed)");
+            assertClaim(helper, t.server, x0 + 4, 0, null, false, "t5 (unclaimed)");
+            helper.succeed();
+        } finally {
+            t.cm.setClock(null);
+            t.cleanup(x0, 0, x0 + 1, 0, x0 + 2, 0, x0 + 3, 0, x0 + 4, 0);
+        }
+    }
+
+    /**
+     * {@code /teamclaims info} with the option off shows no countdown, also while the old deadline is still stored: the
+     * team budget line (with the numbers above the limit) and the rest are there, but none of the "above the limit,
+     * unclaimed in" lines that are shown with enforcement on.
+     */
+    public static void overLimitEnforcementOffInfoShowsNoCountdown(GameTestHelper helper) {
+        Team t = Team.create(helper, "T154", 154000);
+        int x0 = t.x0;
+        long[] now = {System.currentTimeMillis()};
+        try {
+            UUID partyId = t.party.getId();
+            t.cm.setBudgetSettingsOverride(partyId, new BudgetSettings(2, 5, 0, 3, 0, 72));
+            t.cm.setClock(() -> now[0]);
+            claimFiveWithThreeForceloads(t);
+            t.cm.setBudgetSettingsOverride(partyId, new BudgetSettings(2, 3, 0, 1, 0, 72));
+            t.cm.checkOverLimit(partyId);
+
+            CapturingCommandSource on = new CapturingCommandSource();
+            TeamClaimsOverview.showInfo(commandSource(helper, on), null, t.ownerId, null);
+            helper.assertTrue(on.received(localized(t.server, KEY + "info_over_limit_claims", "2", "3 d 0 h"))
+                            && on.received(localized(t.server, KEY + "info_over_limit_forceloads", "2", "3 d 0 h")),
+                    "test setup: expected /teamclaims info to show both countdowns with enforcement on, got " + on.all());
+
+            t.cm.setBudgetSettingsOverride(partyId, new BudgetSettings(2, 3, 0, 1, 0, 72, false));
+            for (String stage : new String[] {"before the check", "after the check"}) {
+                if (stage.startsWith("after")) t.cm.checkOverLimit(partyId);
+                CapturingCommandSource off = new CapturingCommandSource();
+                TeamClaimsOverview.showInfo(commandSource(helper, off), null, t.ownerId, null);
+                helper.assertTrue(off.received(localized(t.server, KEY + "info_team_budget", "5 / 3", "3 / 1"))
+                                && !off.all().contains("above the limit") && !off.all().contains("unclaimed")
+                                && !off.all().contains("turned off"),
+                        "expected /teamclaims info with enforcement off to show the numbers and no countdown " + stage + ", got " + off.all());
+            }
+            helper.succeed();
+        } finally {
+            t.cm.setClock(null);
+            t.cleanup(x0, 0, x0 + 1, 0, x0 + 2, 0, x0 + 3, 0, x0 + 4, 0);
+        }
+    }
+
     /**
      * Saved data in the format of the version with one shared budget (two position lists per team, nothing else)
      * loads: the positions in their stored order, no deadlines. Written again it has the same lists in the same order

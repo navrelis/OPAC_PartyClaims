@@ -99,4 +99,9 @@ public class TeamClaimsPacketTest implements FabricGameTest {
     public void budgetPacketShowsTimeLeftOfOverLimitDeadline(GameTestHelper helper) {
         TeamClaimsPacketTestCases.budgetPacketShowsTimeLeftOfOverLimitDeadline(helper, RECORDERS);
     }
+
+    @GameTest(template = FabricGameTest.EMPTY_STRUCTURE)
+    public void budgetPacketShowsNoTimeLeftWithoutOverLimitEnforcement(GameTestHelper helper) {
+        TeamClaimsPacketTestCases.budgetPacketShowsNoTimeLeftWithoutOverLimitEnforcement(helper, RECORDERS);
+    }
 }

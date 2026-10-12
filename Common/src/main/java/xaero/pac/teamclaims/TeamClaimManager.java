@@ -844,16 +844,26 @@ public class TeamClaimManager implements IClaimsManagerListenerAPI {
      *     <li>fewer than {@code minMembers} members: both team limits are 0;</li>
      *     <li>else {@code base + (members - minMembers) * perExtraMember}.</li>
      * </ul>
+     * With {@code overLimitEnforcement} off a team above a limit keeps everything: no deadline, no warning, nothing
+     * unclaimed (the limit itself still refuses new team claims and team forceloads).
      */
     public record BudgetSettings(int minMembers, int claimsBase, int claimsPerExtraMember, int forceloadsBase,
-            int forceloadsPerExtraMember, int overLimitGraceHours) {
+            int forceloadsPerExtraMember, int overLimitGraceHours, boolean overLimitEnforcement) {
+
+        /** The settings with over-limit enforcement on, the behaviour before the option existed. */
+        public BudgetSettings(int minMembers, int claimsBase, int claimsPerExtraMember, int forceloadsBase,
+                int forceloadsPerExtraMember, int overLimitGraceHours) {
+            this(minMembers, claimsBase, claimsPerExtraMember, forceloadsBase, forceloadsPerExtraMember,
+                    overLimitGraceHours, true);
+        }
 
         /** The current values of the Team Claims server config. */
         public static BudgetSettings fromConfig() {
             TeamClaimsServerConfig config = TeamClaimsServerConfig.CONFIG;
             return new BudgetSettings(config.teamClaimsMinMembers.get(), config.teamClaimsBase.get(),
                     config.teamClaimsPerExtraMember.get(), config.teamForceloadsBase.get(),
-                    config.teamForceloadsPerExtraMember.get(), config.overLimitGraceHours.get());
+                    config.teamForceloadsPerExtraMember.get(), config.overLimitGraceHours.get(),
+                    config.overLimitEnforcement.get());
         }
 
         public int claimLimit(int members) {
@@ -921,7 +931,8 @@ public class TeamClaimManager implements IClaimsManagerListenerAPI {
     /**
      * The team budget of a party as it is enforced: the team totals, the limits for its current member count (the
      * owner included, invited players not), what one more member would add, and the pending over-limit deadlines
-     * (epoch milliseconds, 0 = none). Null if the party does not exist.
+     * (epoch milliseconds, 0 = none; always 0 with {@code overLimitEnforcement} off, even for a deadline that is
+     * still stored). Null if the party does not exist.
      */
     @Nullable
     public TeamBudget getTeamBudget(UUID partyId) {
@@ -940,7 +951,8 @@ public class TeamClaimManager implements IClaimsManagerListenerAPI {
                 teamData == null ? 0 : teamData.getClaimCount(), claimLimit,
                 teamData == null ? 0 : teamData.getForceloadCount(), forceloadLimit,
                 settings.claimLimit(members + 1) - claimLimit, settings.forceloadLimit(members + 1) - forceloadLimit,
-                teamData == null ? 0 : teamData.getClaimDeadline(), teamData == null ? 0 : teamData.getForceloadDeadline());
+                teamData == null || !settings.overLimitEnforcement() ? 0 : teamData.getClaimDeadline(),
+                teamData == null || !settings.overLimitEnforcement() ? 0 : teamData.getForceloadDeadline());
     }
 
     /**
@@ -1239,6 +1251,9 @@ public class TeamClaimManager implements IClaimsManagerListenerAPI {
      *     unclaimed, or the newest team forceloads turned off, until the team is within its limit, and the online
      *     members are told how many.</li>
      * </ul>
+     * With {@code overLimitEnforcement} off none of this happens: a team above its limit keeps everything, is never
+     * warned, and a deadline it still has (stored, or running when the option was switched off) is dropped silently.
+     * <p>
      * Called on every membership change, at server start, once a minute, and at the end of a tick in which a team with
      * a running deadline lost a team claim or forceload. Does nothing for a party without team claims or one that no
      * longer exists.
@@ -1263,6 +1278,15 @@ public class TeamClaimManager implements IClaimsManagerListenerAPI {
         int count = forceloads ? teamData.getForceloadCount() : teamData.getClaimCount();
         int over = count - limit;
         long deadline = forceloads ? teamData.getForceloadDeadline() : teamData.getClaimDeadline();
+        if (!settings.overLimitEnforcement()) {
+            // The team keeps everything and nobody is told anything: a deadline stored while it was on is just dropped
+            if (deadline == 0) return;
+            teamData.setOverLimit(forceloads, 0, 0);
+            markSavedDataDirty();
+            LOGGER.info("[TeamClaims] Over-limit enforcement is off: the deadline of party {} for its team {} is dropped",
+                    partyId, what);
+            return;
+        }
         if (over <= 0) {
             if (deadline == 0) return;
             teamData.setOverLimit(forceloads, 0, 0);
@@ -1384,7 +1408,10 @@ public class TeamClaimManager implements IClaimsManagerListenerAPI {
         return false;
     }
 
-    /** At login: a member of a team with a running over-limit deadline is told about it. */
+    /**
+     * At login: a member of a team with a running over-limit deadline is told about it. With enforcement off the team
+     * budget carries no deadline, so nobody is.
+     */
     private void remindOfOverLimit(IServerPartyAPI party, ServerPlayer player) {
         TeamData teamData = teams().get(party.getId());
         if (teamData == null || !teamData.hasOverLimitDeadline()) return;

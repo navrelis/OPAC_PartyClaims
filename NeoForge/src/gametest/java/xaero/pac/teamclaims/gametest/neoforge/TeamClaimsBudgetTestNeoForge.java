@@ -83,6 +83,31 @@ public final class TeamClaimsBudgetTestNeoForge {
     }
 
     @GameTest(template = TeamClaimsGameTestMod.EMPTY_STRUCTURE)
+    public static void overLimitEnforcementOffKeepsEverything(GameTestHelper helper) {
+        TeamClaimsBudgetTestCases.overLimitEnforcementOffKeepsEverything(helper);
+    }
+
+    @GameTest(template = TeamClaimsGameTestMod.EMPTY_STRUCTURE)
+    public static void overLimitEnforcementOffStillRefusesNewClaims(GameTestHelper helper) {
+        TeamClaimsBudgetTestCases.overLimitEnforcementOffStillRefusesNewClaims(helper);
+    }
+
+    @GameTest(template = TeamClaimsGameTestMod.EMPTY_STRUCTURE)
+    public static void overLimitEnforcementSwitchedOffDropsRunningDeadline(GameTestHelper helper) {
+        TeamClaimsBudgetTestCases.overLimitEnforcementSwitchedOffDropsRunningDeadline(helper);
+    }
+
+    @GameTest(template = TeamClaimsGameTestMod.EMPTY_STRUCTURE)
+    public static void overLimitEnforcementSwitchedOnStartsFreshDeadline(GameTestHelper helper) {
+        TeamClaimsBudgetTestCases.overLimitEnforcementSwitchedOnStartsFreshDeadline(helper);
+    }
+
+    @GameTest(template = TeamClaimsGameTestMod.EMPTY_STRUCTURE)
+    public static void overLimitEnforcementOffInfoShowsNoCountdown(GameTestHelper helper) {
+        TeamClaimsBudgetTestCases.overLimitEnforcementOffInfoShowsNoCountdown(helper);
+    }
+
+    @GameTest(template = TeamClaimsGameTestMod.EMPTY_STRUCTURE)
     public static void oldFormatSavedDataLoads(GameTestHelper helper) {
         TeamClaimsBudgetTestCases.oldFormatSavedDataLoads(helper);
     }

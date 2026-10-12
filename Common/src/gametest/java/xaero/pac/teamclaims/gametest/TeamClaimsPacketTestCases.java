@@ -675,6 +675,45 @@ public final class TeamClaimsPacketTestCases {
         }
     }
 
+    /**
+     * The same team above its limits with {@code overLimitEnforcement} off: the packet still carries how many team
+     * claims and forceloads are above the limits, but no time left (the party screen only shows a countdown for a
+     * time above 0), also right after the switch, while the old deadlines are still stored, and after the check
+     * dropped them.
+     */
+    public static void budgetPacketShowsNoTimeLeftWithoutOverLimitEnforcement(GameTestHelper helper, RecorderFactory recorders) {
+        Team t = Team.create(helper, "T155", 95000);
+        int x0 = t.x0;
+        long[] now = {System.currentTimeMillis()};
+        try {
+            UUID partyId = t.party.getId();
+            t.cm.setBudgetSettingsOverride(partyId, new BudgetSettings(2, 3, 4, 2, 3, 72));
+            int ownerSub = t.teamSub(t.ownerId);
+            for (int i = 0; i < 3; i++) t.claim(t.ownerId, ownerSub, x0 + i, 0, i < 2);
+            t.cm.setClock(() -> now[0]);
+            t.cm.setBudgetSettingsOverride(partyId, new BudgetSettings(2, 1, 4, 1, 3, 72));
+            capture(t.server, t.player, recorders, () -> t.cm.checkOverLimit(partyId));
+            int privateClaimLimit = claimsAPI(t.server).getPlayerFullClaimLimit(t.playerId);
+            int privateForceloadLimit = claimsAPI(t.server).getPlayerFullForceloadLimit(t.playerId);
+            assertOverLimitBudget(helper, budgetSentTo(t.server, t.player, recorders), privateClaimLimit, privateForceloadLimit,
+                    72 * HOUR, "with enforcement on");
+
+            t.cm.setBudgetSettingsOverride(partyId, new BudgetSettings(2, 1, 4, 1, 3, 72, false));
+            helper.assertTrue(t.cm.getTeamData(partyId).getClaimDeadline() != 0, "test setup: expected the deadline to still be stored");
+            assertOverLimitBudget(helper, budgetSentTo(t.server, t.player, recorders), privateClaimLimit, privateForceloadLimit,
+                    0, "right after switching enforcement off");
+            capture(t.server, t.player, recorders, () -> t.cm.checkOverLimit(partyId));
+            helper.assertTrue(!t.cm.getTeamData(partyId).hasOverLimitDeadline(), "expected the check to drop the deadlines");
+            now[0] += 100 * HOUR;
+            assertOverLimitBudget(helper, budgetSentTo(t.server, t.player, recorders), privateClaimLimit, privateForceloadLimit,
+                    0, "after the check, a long time later");
+            helper.succeed();
+        } finally {
+            t.cm.setClock(null);
+            t.cleanup(x0, 0, x0 + 1, 0, x0 + 2, 0);
+        }
+    }
+
     private static void assertOverLimitBudget(GameTestHelper helper, PartyBudgetData budget, int privateClaimLimit,
             int privateForceloadLimit, long millisLeft, String stage) {
         PartyBudgetData expected = new PartyBudgetData(true, 0, privateClaimLimit, 0, privateForceloadLimit, true, 2, 2, 3, 1, 2, 1,

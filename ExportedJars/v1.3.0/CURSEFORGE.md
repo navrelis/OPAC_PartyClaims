@@ -32,7 +32,7 @@ Open Parties and Claims 0.32.7 with real team bases: a team claim pool per party
 
 If CurseForge limits the number of additional categories, keep them in the order listed above.
 
-Suggested release type: **Beta** for both files. 1.3.0 is covered by 81 automated game tests on each loader (115 with FTB Teams installed), but the upstream update (anchor-based claiming together with team claims), the party screen and the FTB Teams sync have not had a long run on real servers yet, so both stay Beta until they have.
+Suggested release type: **Beta** for both files. 1.3.0 is covered by 100 automated game tests on each loader (134 with FTB Teams installed, plus 4 that load the world data of a 1.2.0 server), but the upstream update (anchor-based claiming together with team claims), the party screen and the FTB Teams sync have not had a long run on real servers yet, so both stay Beta until they have.
 
 ## Changelog for this file
 
@@ -47,9 +47,10 @@ New since 1.2.0:
 - Anchor-based claiming (upstream feature, OFF by default): server option anchorBasedClaiming, options maxPlayerClaimingAnchors (3), claimingAnchorRange (16), claimingAnchorBonusPerPartyMember, claimingAnchorBonusForPartyOwner and two permission options, player config options for bonus anchors and bonus anchor range, the commands /oclaims anchor and /oclaims unanchor, and anchor buttons in the OPAC menu.
 - Team claims with anchors: anchors stay per player. A team claim has to be in range of an anchor of the member who makes it. Removing an anchor removes that player's claims in its range, team claims included (whatever rank the team requires to unclaim), never other members' claims. Nobody can unclaim a chunk with an anchor. When a member leaves, their team claims go to the party owner only where the owner has (or receives with the claim) an anchor covering them; the rest stays a private claim of the leaver. Automatic unclaims (team over its limit, removed party) skip chunks with an anchor, so a team can stay above its limit on anchor chunks.
 - While anchorBasedClaiming is off, Team Claims behaves exactly as in 1.2.0 (budgets, limits, over-limit unclaim, FTB Teams sync, party screen).
-- 81 automated game tests on both loaders (115 with FTB Teams installed), including tests for team claims together with anchors.
+- New server option overLimitEnforcement in the Team Claims server config (default true, which is the behaviour of 1.2.0). Set to false, a team above its team claim or team forceload limit keeps everything: no deadline, nothing is unclaimed or turned off, no warnings and no countdown in chat, /teamclaims info or the party screen. New team claims and team forceloads above the limit are still refused. A running deadline is dropped when the option is switched off; switching it back on starts a fresh one for a team that is still above its limit.
+- 100 automated game tests on both loaders (134 with FTB Teams installed), including tests for team claims together with anchors, plus 4 tests per loader that load the world data of a 1.2.0 server.
 
-IMPORTANT when updating from 1.2.0: update the server AND every client together. The network version changed (6 to 7, NeoForge protocol 1.10.0 to 1.11.0) and the party screen packets moved to new ids, so a 1.2.0 client cannot join a 1.3.0 server and a 1.3.0 client cannot join a 1.2.0 server. Existing worlds load as they are: claims, team claims, parties, configs and Team Claims data are kept and nothing is unclaimed by the update. Make a backup first: going back to 1.2.0 after running 1.3.0 is not supported. The new anchor options appear in the server config with upstream's defaults (anchors off).
+IMPORTANT when updating from 1.2.0: update the server AND every client together. The network version changed (6 to 7, NeoForge protocol 1.10.0 to 1.11.0) and the party screen packets moved to new ids, so a 1.2.0 client cannot join a 1.3.0 server and a 1.3.0 client cannot join a 1.2.0 server. Existing worlds load as they are: claims, team claims, parties, configs and Team Claims data are kept and nothing is unclaimed by the update. Make a backup first: going back to 1.2.0 after running 1.3.0 is not supported. The new anchor options appear in the server config with upstream's defaults (anchors off). The Team Claims server config has one new option, overLimitEnforcement (default true, unchanged behaviour).
 ```
 
 ## Description
@@ -83,7 +84,7 @@ Team Claims makes the party the unit that matters, while keeping every personal 
 - **Update the server and every client together.** The network version changed (6 to 7, NeoForge protocol 1.10.0 to 1.11.0) and the party screen packets moved to new ids. A 1.2.0 client cannot join a 1.3.0 server and a 1.3.0 client cannot join a 1.2.0 server.
 - **Existing worlds load as they are.** Claims, team claims, parties, player and team configs, `data/opacteamclaims/**` and the saved data `opacteamclaims_data` are kept, and nothing is unclaimed by the update. Upstream's claim files get an empty list of anchors the next time they are saved.
 - **Make a backup first.** Going back to 1.2.0 after 1.3.0 has run on a world is not supported.
-- The new options of OPAC's anchor-based claiming appear in `openpartiesandclaims-server.toml` with upstream's defaults. **`anchorBasedClaiming` is off**, and while it is off, Team Claims behaves exactly as in 1.2.0: budgets, limits, over-limit unclaim, FTB Teams sync, party screen and key.
+- The new options of OPAC's anchor-based claiming appear in `openpartiesandclaims-server.toml` with upstream's defaults. **`anchorBasedClaiming` is off**, and while it is off (and the new Team Claims option `overLimitEnforcement` stays `true`), Team Claims behaves exactly as in 1.2.0: budgets, limits, over-limit unclaim, FTB Teams sync, party screen and key.
 - If you turn anchors on, read "Anchor-based claiming and team claims" below first.
 
 ## Updating from 1.1.0
@@ -134,6 +135,7 @@ A member leaves, you lower the limits, the update from 1.1.0 — a team can end 
 - Every online member gets a chat message with the number over the limit, the **time left** (7 days by default, real time, also while the server is off) and the ways out; offline members get it at their next login, and everybody is reminded once a day. `/teamclaims info` and the party screen show the countdown. The team can make no new team claims meanwhile.
 - If the team is back within its limit before the deadline — unclaim some, get more members, turn team claims into private claims with `/teamclaims convert topersonal` — the deadline is cancelled and nothing is removed.
 - Otherwise the **most recently made team claims are unclaimed**, newest first, until the team is within its limit. For team forceloads the newest forceloads are turned off and the claims stay.
+- **Prefer to never remove anything?** Set `overLimitEnforcement = false` in the Team Claims server config. A team above its limit then keeps all its team claims and team forceloads: no deadline, no warnings, no countdown in chat, `/teamclaims info` or the party screen. The limits still apply: the team can make no new team claims or team forceloads until it is back within them. A deadline that is already running is dropped at the next check; switching the option back on starts a fresh one for a team that is still above its limit.
 
 ### 6. One look, one set of rules
 A team claim should look and behave the same no matter who claimed it:
@@ -232,7 +234,7 @@ OPAC shows a line with the claim's name when you walk into a different claim. Wi
 - Automatic `team_<party name>` sub-config for every party member (long and non-ASCII party names supported)
 - Team claims and personal claims side by side, switchable at any time
 - Separate budgets: private claims against OPAC's own limits, team claims against a team pool that grows with the member count, for claims **and** forceloads
-- Over-limit warning with a configurable grace period before the newest team claims are removed
+- Over-limit warning with a configurable grace period before the newest team claims are removed, or an option to never remove them
 - Party screen on the `O` key and in the OPAC menu
 - Upstream's optional anchor-based claiming (off by default) works together with team claims
 - Optional two-way sync with FTB Teams
@@ -251,7 +253,7 @@ OPAC shows a line with the claim's name when you walk into a different claim. Wi
 - All player-facing messages are translatable (English and German included); players without the language file still get readable text
 - Team data is stored per world, so singleplayer worlds never mix
 - Fully compatible with Xaero's Minimap and Xaero's World Map claim display and claim controls
-- Covered by 81 automated server-side game tests (115 with FTB Teams installed) that run on both loaders
+- Covered by 100 automated server-side game tests (134 with FTB Teams installed) that run on both loaders
 
 ## Installation
 
@@ -296,6 +298,7 @@ See "Updating from 1.1.0" at the top: single-member teams lose their team claims
 | `teamForceloadsBase` | `10` (0..1000000) | Team forceload limit of a team with exactly `teamClaimsMinMembers` members. |
 | `teamForceloadsPerExtraMember` | `2` (0..1000000) | Team forceloads added for every member beyond `teamClaimsMinMembers`. |
 | `overLimitGraceHours` | `168` (0..8760) | Real hours a team may stay above its team claim or team forceload limit before the newest ones are removed. `0` removes the excess at the next check. A running countdown keeps its end time when this is changed. |
+| `overLimitEnforcement` | `true` | Whether a team above its limit loses the excess when `overLimitGraceHours` are up. `false`: the team keeps everything, with no countdown and no warnings; the limits still refuse new team claims and team forceloads. A running countdown is dropped at the next check; switching back to `true` starts a fresh one for a team that is still above its limit. |
 | `ftbTeamsSync` | `true` | Whether parties are kept in sync with FTB Teams when that mod is installed. Does nothing without FTB Teams. Needs a server restart. |
 
 - Changes to the Team Claims config apply right away, except `enabled` and `ftbTeamsSync` (read at server start) and `forceloadGraceMinutes` (from the next logout). Teams are re-checked against their limits on every membership change and at least once a minute.

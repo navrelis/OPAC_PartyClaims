@@ -26,9 +26,11 @@ claiming (see "Anchor-based claiming and team claims"); it is off by default.
 * **Make a backup first.** Going back to 1.2.0 after 1.3.0 has run on a world is not supported.
 * **New server options.** The options of upstream's anchor-based claiming appear in OPAC's server config
   (`openpartiesandclaims-server.toml`) with upstream's defaults, `anchorBasedClaiming` being `false`. The Team Claims
-  server config has no new options.
-* **While `anchorBasedClaiming` is off, Team Claims behaves exactly as in 1.2.0:** the separate budgets, the limits, the
-  over-limit unclaim after the grace period, the FTB Teams sync, the party screen and its key.
+  server config (`openpartiesandclaims-teamclaims-server.toml`) has one new option, `overLimitEnforcement`, which
+  defaults to `true` (the 1.2.0 behaviour); `false` lets a team above its limit keep everything, see "Over the limit".
+* **While `anchorBasedClaiming` is off and `overLimitEnforcement` is `true`, Team Claims behaves exactly as in 1.2.0:**
+  the separate budgets, the limits, the over-limit unclaim after the grace period, the FTB Teams sync, the party screen
+  and its key.
 * **If you turn anchors on,** claiming works differently for everybody, team claims included: read "Anchor-based
   claiming and team claims" first.
 * Coming from 1.1.0 or older? "Updating from 1.1.0" applies to you as well, in particular the team claim limit of
@@ -151,6 +153,20 @@ forceload, and once a minute (which is how a changed config is noticed).
 * **Ways out:** unclaim team claims (or turn off team forceloads), get more members, turn team claims into private claims
   with `/teamclaims convert topersonal` (they have to fit into the converting player's own limits), or, as the
   admin, raise the limits.
+
+**Keeping everything: `overLimitEnforcement = false`.** With this option off in the Team Claims server config (default
+`true`, everything above), a team above its limit simply keeps all its team claims and team forceloads:
+
+* No deadline starts and nothing is ever unclaimed or turned off because of the limit.
+* No warnings: no chat messages when a team goes over, no reminders, no message at login, and no countdown in
+  `/teamclaims info` or on the party screen. (Both still show the team claims and team forceloads against the limits,
+  for example `5 / 3`.)
+* **The limits themselves stay.** A team above them can still make no new team claims or team forceloads, with the same
+  message as before, until it is back within them. This only stops the removal and the warnings.
+* A deadline that is running when you switch the option off (or that is stored in the world) is dropped at the next
+  check, within a minute, without a message. Switch the option back on and a team that is still above its limit gets a
+  fresh deadline at the next check, the full `overLimitGraceHours` from then, as if it had just gone over.
+* The option applies right away, no restart needed.
 
 ## Disbanding a party
 
@@ -376,6 +392,7 @@ Fabric and NeoForge; a copy in `<world>/serverconfig/` overrides it for that wor
 | `teamForceloadsBase` | `10` (0..1000000) | The team forceload limit of a team with exactly `teamClaimsMinMembers` members. Same when it applies. |
 | `teamForceloadsPerExtraMember` | `2` (0..1000000) | Team forceloads added to the limit for every member beyond `teamClaimsMinMembers`. Same when it applies. |
 | `overLimitGraceHours` | `168` (0..8760) | How many real hours (also while the server is off) a team may stay above its team claim or team forceload limit before the newest team claims are unclaimed (or the newest team forceloads turned off). `0` removes the excess at the next check. A running countdown keeps its end time when this is changed; a new one uses the new value. See "Over the limit". |
+| `overLimitEnforcement` | `true` | Whether a team above its team claim or team forceload limit loses the excess when `overLimitGraceHours` are up. `false`: the team keeps everything, with no countdown and no warnings (chat, `/teamclaims info`, party screen); the limits still refuse new team claims and team forceloads. A running countdown is dropped at the next check; switching back to `true` starts a fresh one for a team that is still above its limit. Changes apply right away. See "Over the limit". |
 | `ftbTeamsSync` | `true` | Whether parties are kept in sync with FTB Teams when that mod is installed. Does nothing without FTB Teams. Read once at server start, so a change needs a restart. See "FTB Teams sync". |
 
 The private limits are not set here: they stay OPAC's own `maxPlayerClaims` and `maxPlayerClaimForceloads`.
@@ -425,21 +442,23 @@ Before the server actually boots you must, one time:
 
 `start-all.bat` does not create or edit either file for you; it only prints a reminder.
 
-**Automated tests.** Four Gradle runs start a headless server with the mod and run the Team Claims `@GameTest` tests.
-None of them needs an EULA, each starts with a fresh world, and each task fails unless its log contains
-`All N required tests passed`:
+**Automated tests.** Six Gradle runs start a headless server with the mod and run the Team Claims `@GameTest` tests.
+None of them needs an EULA, and each task fails unless its log contains `All N required tests passed`. The first four
+start with a fresh world, the last two on a copy of the world data of a 1.2.0 server:
 
 | Run | FTB Teams | Tests | Log |
 | --- | --- | --- | --- |
-| `gradlew.bat :Fabric:runBootTest --console=plain` | not installed | 81 | `run-boottest/logs/latest.log` |
-| `gradlew.bat :NeoForge:runTeamClaimsGameTest --console=plain` | not installed | 81 | `NeoForge/runs/teamClaimsGameTest/logs/latest.log` |
-| `gradlew.bat :Fabric:runBootTestFtb --console=plain` | installed | 115 | `run-boottest-ftb/logs/latest.log` |
-| `gradlew.bat :NeoForge:runTeamClaimsGameTestFtb --console=plain` | installed | 115 | `NeoForge/runs/teamClaimsGameTestFtb/logs/latest.log` |
+| `gradlew.bat :Fabric:runBootTest --console=plain` | not installed | 100 | `run-boottest/logs/latest.log` |
+| `gradlew.bat :NeoForge:runTeamClaimsGameTest --console=plain` | not installed | 100 | `NeoForge/runs/teamClaimsGameTest/logs/latest.log` |
+| `gradlew.bat :Fabric:runBootTestFtb --console=plain` | installed | 134 | `run-boottest-ftb/logs/latest.log` |
+| `gradlew.bat :NeoForge:runTeamClaimsGameTestFtb --console=plain` | installed | 134 | `NeoForge/runs/teamClaimsGameTestFtb/logs/latest.log` |
+| `gradlew.bat :Fabric:runSaveCompatTest --console=plain` | not installed | 4 | `run-savecompat/logs/latest.log` |
+| `gradlew.bat :NeoForge:runSaveCompatGameTest --console=plain` | not installed | 4 | `NeoForge/runs/saveCompatGameTest/logs/latest.log` |
 
 The runs without FTB Teams have no FTB Teams, FTB Library or Architectury on their classpath, so they prove that the
 mod boots and that all of Team Claims works without FTB Teams (it is optional): the wiring smoke test (bridge handler,
 managers, `/teamclaims` and `/oparties` commands, team config dir), team sub-config creation and admin-only editing,
-the separate private and team budgets, the over-limit grace period and its removal, the disband rule, teammate
+the separate private and team budgets, the over-limit grace period and its removal (and `overLimitEnforcement` switched off and on), the disband rule, teammate
 unclaim/forceload, event-driven claim transfer on leave (party hooks queue membership events that are processed at the
 end of the tick), long and non-ASCII team names, hardening (quick join and leave, claim overhead after many changes,
 name validation, late joiners, corrupt team files, forceload tickets), the server config and the forceload grace
@@ -485,10 +504,15 @@ the one of 1.2.0 with World Map 1.47.0 is found without starting the game:
 * **Update the server and every client together:** the network version changed (6 to 7, NeoForge protocol 1.10.0 to
   1.11.0) and the party screen packets moved to ids 100-103. A 1.2.0 client cannot join a 1.3.0 server and the other way
   round. Existing worlds load as they are; make a backup, going back to 1.2.0 is not supported. See "Updating from 1.2.0".
+* **New server option `overLimitEnforcement`** (Team Claims server config, default `true`, which is the behaviour of
+  1.2.0). Set to `false`, a team above its team claim or team forceload limit keeps everything: no deadline, nothing is
+  unclaimed or turned off, no warnings and no countdown in chat, `/teamclaims info` or the party screen. New team claims
+  and team forceloads above the limit are still refused. A running deadline is dropped when the option is switched off;
+  switching it back on starts a fresh one for a team that is still above its limit. See "Over the limit".
 * Linkage checker `tools/linkcheck/` (development only, not shipped): checks the `xaero.pac` references of other mods'
   jars against the built jar.
-* 81 automated gametests (115 with FTB Teams installed), run on both loaders, including tests for team claims together
-  with anchors.
+* 100 automated gametests (134 with FTB Teams installed), run on both loaders, including tests for team claims together
+  with anchors, plus 4 tests per loader that load the world data of a 1.2.0 server.
 
 ### 1.2.0
 

@@ -125,4 +125,9 @@ public final class TeamClaimsPacketTestNeoForge {
     public static void budgetPacketShowsTimeLeftOfOverLimitDeadline(GameTestHelper helper) {
         TeamClaimsPacketTestCases.budgetPacketShowsTimeLeftOfOverLimitDeadline(helper, RECORDERS);
     }
+
+    @GameTest(template = TeamClaimsGameTestMod.EMPTY_STRUCTURE)
+    public static void budgetPacketShowsNoTimeLeftWithoutOverLimitEnforcement(GameTestHelper helper) {
+        TeamClaimsPacketTestCases.budgetPacketShowsNoTimeLeftWithoutOverLimitEnforcement(helper, RECORDERS);
+    }
 }
