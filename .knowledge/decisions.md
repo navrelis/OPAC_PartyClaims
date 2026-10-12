@@ -33,3 +33,4 @@
 - Anchors with team claims (lead): claiming anchors stay the per-player, per-dimension concept of upstream, default off, no team anchor pool; a team claim is a claim of the player who makes it and obeys that player's anchors. Nothing changes compared with 1.2.0 while `anchorBasedClaiming` is off.
 - Upstream takes packet id 50 for its anchors packet; the four party packets of the fork (50–53 in 1.2.0) move to new ids (client and server must be the same version anyway).
 - Linkage checker is a dependency-free JDK 21 single-file tool in `tools/linkcheck/` (own class file reader), not part of the Gradle build and not shipped.
+- T7: the switch is a new boolean `overLimitEnforcement` (default true) instead of a magic value of `overLimitGraceHours` — an existing config keeps its meaning and the option name says what it does; with it off the limit still refuses new team claims, only the removal and the warnings stop.

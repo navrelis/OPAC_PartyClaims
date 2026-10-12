@@ -1,12 +1,38 @@
 # Open Parties and Claims - Team Claims fork
 
 A fork of [Open Parties and Claims](https://github.com/thexaero/open-parties-and-claims)
-v0.31.6 by Xaero96, licensed under LGPL-3.0-only, adding a "Team Claims" layer on top
+v0.32.7 by Xaero96 (the `1.21` branch), licensed under LGPL-3.0-only, adding a "Team Claims" layer on top
 of the original party/claims system.
 
 Supported: Minecraft 1.21.1 on **Fabric** (Fabric Loader 0.14 or newer, Fabric API and Forge Config API Port) and on
 **NeoForge** (21.1.x). The mod id is still `openpartiesandclaims`, so it replaces the original mod; it cannot be
 installed next to it. Install it on the server and on every client. FTB Teams is optional (see "FTB Teams sync").
+
+## Updating from 1.2.0
+
+Version 1.3.0 is based on Open Parties and Claims 0.32.7 (1.2.0 was based on 0.31.6) and contains everything of
+upstream's changes in between. The reason for the update: Xaero's World Map 1.47.0 (and Xaero's Minimap 26.6.0) call
+OPAC API that upstream added in 0.32.x. With 1.2.0 installed, every right-click on the world map crashed the client with
+`NoSuchMethodError ... IClientClaimsManagerAPI.usingAnchorBasedClaiming()`. The new part of upstream is anchor-based
+claiming (see "Anchor-based claiming and team claims"); it is off by default.
+
+* **Update the server and every client together.** Upstream raised its network version (6 to 7; the NeoForge protocol
+  version went from 1.10.0 to 1.11.0), and the four packets of the party screen moved to new ids (50-53 to 100-103,
+  id 50 now belongs to upstream's anchors packet). A 1.2.0 client cannot join a 1.3.0 server and a 1.3.0 client cannot
+  join a 1.2.0 server.
+* **Existing worlds load as they are.** Claims, team claims, parties, player and team configs, the team config files
+  under `<world>/data/opacteamclaims/` and the saved data `opacteamclaims_data` are kept, and nothing is unclaimed by the
+  update. Upstream's claim files get an empty list of anchors the next time they are saved.
+* **Make a backup first.** Going back to 1.2.0 after 1.3.0 has run on a world is not supported.
+* **New server options.** The options of upstream's anchor-based claiming appear in OPAC's server config
+  (`openpartiesandclaims-server.toml`) with upstream's defaults, `anchorBasedClaiming` being `false`. The Team Claims
+  server config has no new options.
+* **While `anchorBasedClaiming` is off, Team Claims behaves exactly as in 1.2.0:** the separate budgets, the limits, the
+  over-limit unclaim after the grace period, the FTB Teams sync, the party screen and its key.
+* **If you turn anchors on,** claiming works differently for everybody, team claims included: read "Anchor-based
+  claiming and team claims" first.
+* Coming from 1.1.0 or older? "Updating from 1.1.0" applies to you as well, in particular the team claim limit of
+  single-member teams.
 
 ## Updating from 1.1.0
 
@@ -38,7 +64,7 @@ without players.
 take effect at the end of the same server tick, so even a member who joins and leaves again within a moment is not
 missed.
 
-**Going back to stock OPAC.** Team sub-configs are called `team_<name>`. Stock OPAC 0.31.6 only accepts sub-config ids
+**Going back to stock OPAC.** Team sub-configs are called `team_<name>`. Stock OPAC 0.32.7 only accepts sub-config ids
 of up to 16 characters (`PlayerConfig.isValidSubId`; this fork lifts that limit for `team_*` ids, up to 100), so a team
 sub-config fits only when the name takes at most 11 characters (an id made unique with a suffix is longer). Those keep working in stock as ordinary sub-configs.
 Stock does not load a longer one (`PlayerConfig.createSubConfig` refuses it, its file is silently left unused), and the
@@ -139,6 +165,46 @@ players who are offline; online players get a chat line with how many claims the
 confirmation of the party screen says: the party will be deleted for all of its members, team claims become private
 claims of the members who made them as far as their own claim limit allows, the rest is unclaimed, and this cannot be
 undone.
+
+## Anchor-based claiming and team claims
+
+Anchor-based claiming is a feature of upstream OPAC (since 0.32). With the OPAC server option `anchorBasedClaiming`
+(default `false`) turned on, a player can only claim chunks within the range of one of their own **claiming anchors**.
+The anchors are per player and per dimension. Team Claims does not change that: there is no team pool of anchors, and a
+team claim is a claim of the member who makes it, so it obeys that member's anchors.
+
+| Option (OPAC server config) | Default | Meaning |
+| --- | --- | --- |
+| `anchorBasedClaiming` | `false` | Turns anchor-based claiming on. |
+| `maxPlayerClaimingAnchors` | `3` | Anchors a player can have in a dimension. |
+| `claimingAnchorRange` | `16` | Chunks in every direction from an anchor (a square) in which the player can claim. |
+| `claimingAnchorBonusPerPartyMember` / `claimingAnchorBonusForPartyOwner` | `0.1` / `0` | Extra anchors for party members, like the claim bonus options; they apply with `partyOwnedClaims`. |
+| `maxPlayerClaimingAnchorsPermission` / `claimingAnchorRangePermission` | permission nodes | Permission nodes that override the two values above (empty = never check permissions). |
+
+The player config has the options `claims.bonusAnchors` (extra anchors) and `claims.bonusAnchorRange` (extra range).
+Anchors are placed and removed with `/oclaims anchor [<x> <z>]` and `/oclaims unanchor [<x> <z>] confirm` (block
+coordinates, without them your own position; both also take `in <dimension>`), or with the anchor buttons of the OPAC
+menu. An anchor on a chunk that is not claimed yet makes it a **private** claim of the player first, which needs a free
+private claim; a chunk the player already owns (a team claim, too) just gets the anchor.
+
+With anchors on, for team claims:
+
+* **Making a team claim** needs an anchor of the member who makes it in range. An anchor of another member does not
+  count.
+* **Removing an anchor** unclaims the claims of the anchor's owner that are in its range and in no other anchor's
+  range. That includes the owner's team claims, whatever rank the team requires to unclaim. Claims of other members are
+  never touched.
+* **A chunk with an anchor cannot be unclaimed** by anybody, teammates included; the anchor has to be removed first.
+  Other team claims are unclaimed as before (every member, unless the team requires a higher rank).
+* **When a member leaves** (or is kicked), their team claims go to the party owner only where the owner has an anchor in
+  range or receives one with the claim. An anchor on a handed-over claim goes along when the owner has room for another
+  anchor in that dimension, an anchor range at least as large as the leaver's, and none of the claims the leaver keeps
+  depends on that anchor. Every other team claim stays a private claim of the leaver, with its anchor.
+* **Automatic unclaims skip chunks with an anchor:** when a team is over its limit after the grace period, and when a
+  party is removed and the former team claims do not fit into a member's private limit (the next older claim goes
+  instead). A team can therefore stay above its limit with claims that carry an anchor.
+
+The budgets, the limits and the rest of Team Claims are the same as with anchors off.
 
 ## Party screen
 
@@ -365,10 +431,10 @@ None of them needs an EULA, each starts with a fresh world, and each task fails 
 
 | Run | FTB Teams | Tests | Log |
 | --- | --- | --- | --- |
-| `gradlew.bat :Fabric:runBootTest --console=plain` | not installed | 77 | `run-boottest/logs/latest.log` |
-| `gradlew.bat :NeoForge:runTeamClaimsGameTest --console=plain` | not installed | 77 | `NeoForge/runs/teamClaimsGameTest/logs/latest.log` |
-| `gradlew.bat :Fabric:runBootTestFtb --console=plain` | installed | 111 | `run-boottest-ftb/logs/latest.log` |
-| `gradlew.bat :NeoForge:runTeamClaimsGameTestFtb --console=plain` | installed | 111 | `NeoForge/runs/teamClaimsGameTestFtb/logs/latest.log` |
+| `gradlew.bat :Fabric:runBootTest --console=plain` | not installed | 81 | `run-boottest/logs/latest.log` |
+| `gradlew.bat :NeoForge:runTeamClaimsGameTest --console=plain` | not installed | 81 | `NeoForge/runs/teamClaimsGameTest/logs/latest.log` |
+| `gradlew.bat :Fabric:runBootTestFtb --console=plain` | installed | 115 | `run-boottest-ftb/logs/latest.log` |
+| `gradlew.bat :NeoForge:runTeamClaimsGameTestFtb --console=plain` | installed | 115 | `NeoForge/runs/teamClaimsGameTestFtb/logs/latest.log` |
 
 The runs without FTB Teams have no FTB Teams, FTB Library or Architectury on their classpath, so they prove that the
 mod boots and that all of Team Claims works without FTB Teams (it is optional): the wiring smoke test (bridge handler,
@@ -377,8 +443,9 @@ the separate private and team budgets, the over-limit grace period and its remov
 unclaim/forceload, event-driven claim transfer on leave (party hooks queue membership events that are processed at the
 end of the tick), long and non-ASCII team names, hardening (quick join and leave, claim overhead after many changes,
 name validation, late joiners, corrupt team files, forceload tickets), the server config and the forceload grace
-period, territory messages, `info`/`list`, team roles, `convert`, and the packets of the party screen (invitations and
-budget numbers). The runs with FTB Teams (FTB Teams 2101.1.11, FTB Library and Architectury as test-only runtime
+period, territory messages, `info`/`list`, team roles, `convert`, the packets of the party screen (invitations and
+budget numbers) and team claims together with OPAC's claiming anchors (`anchorBasedClaiming` switched on for the length of
+the test). The runs with FTB Teams (FTB Teams 2101.1.11, FTB Library and Architectury as test-only runtime
 mods) run the same tests plus the FTB Teams sync tests: every operation in both directions, the rank stability rule, no
 feedback loops, the first sync including conflicts, offline members, the saved link, the size limits, and the interplay
 with Team Claims. The tests run against offline UUID players, independently of each other, and clean up after themselves
@@ -390,7 +457,38 @@ On Fabric the tests run with Fabric API's gametest server (`-Dfabric-api.gametes
 loaded through the test-only `gametest` source set/mod (`NeoForge/src/gametest`, never shipped in the release jar).
 The FTB runs add the second test-only mod `gametestFtb` on each loader.
 
+**Linkage checker.** `tools/linkcheck/` is a single-file Java 21 tool without dependencies (not part of the Gradle
+build, not shipped). It checks that every `xaero.pac.*` class, method and field that other mods' jars reference (Xaero's
+World Map and Minimap, for example) exists in our built jar in a way the JVM can link, so a `NoSuchMethodError` crash like
+the one of 1.2.0 with World Map 1.47.0 is found without starting the game:
+`java tools/linkcheck/LinkCheck.java --provider <our jar> --consumer <other mod's jar>`. Its own self-test is
+`java tools/linkcheck/LinkCheckSelfTest.java`; see `tools/linkcheck/README.md`.
+
 ## Changelog
+
+### 1.3.0
+
+* **Based on Open Parties and Claims 0.32.7** (upstream `1.21` branch, merged completely; 1.2.0 was based on 0.31.6).
+* **Fixes the crash with Xaero's World Map 1.47.0 and Xaero's Minimap 26.6.0.** Both call OPAC API added in 0.32.x; with
+  1.2.0 every right-click on the world map crashed the client with a `NoSuchMethodError`
+  (`IClientClaimsManagerAPI.usingAnchorBasedClaiming()`).
+* **Anchor-based claiming** from upstream: server option `anchorBasedClaiming` (default off), the options
+  `maxPlayerClaimingAnchors` (3), `claimingAnchorRange` (16), `claimingAnchorBonusPerPartyMember`,
+  `claimingAnchorBonusForPartyOwner` and two permission options, the player config options `claims.bonusAnchors` and
+  `claims.bonusAnchorRange`, the commands `/oclaims anchor` and `/oclaims unanchor`, and anchor buttons in the OPAC menu.
+  The other upstream changes since 0.31.6 are fixes and API additions for this feature.
+* **Team Claims with anchors:** anchors stay per player; a team claim has to be in range of an anchor of the member who
+  makes it; removing an anchor removes that player's claims in its range, team claims included, never other members';
+  nobody can unclaim a chunk with an anchor; a leaving member's team claims go to the party owner only where the owner
+  has (or receives) an anchor covering them; automatic unclaims (team over its limit, removed party) skip chunks with an
+  anchor. See "Anchor-based claiming and team claims". Nothing changes while `anchorBasedClaiming` is off.
+* **Update the server and every client together:** the network version changed (6 to 7, NeoForge protocol 1.10.0 to
+  1.11.0) and the party screen packets moved to ids 100-103. A 1.2.0 client cannot join a 1.3.0 server and the other way
+  round. Existing worlds load as they are; make a backup, going back to 1.2.0 is not supported. See "Updating from 1.2.0".
+* Linkage checker `tools/linkcheck/` (development only, not shipped): checks the `xaero.pac` references of other mods'
+  jars against the built jar.
+* 81 automated gametests (115 with FTB Teams installed), run on both loaders, including tests for team claims together
+  with anchors.
 
 ### 1.2.0
 

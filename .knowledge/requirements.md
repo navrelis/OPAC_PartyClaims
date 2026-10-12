@@ -14,6 +14,8 @@ Xaero's World Map 1.47.0 crashes on every right-click on the map (`NoSuchMethodE
 6. Upload to CurseForge project 1704256, both loaders, Beta, with the owner's uploader in `F:\Coding\CurseForgeUpload` (dry run, remote dry run, review, upload). Token never printed. Only jars that passed every check. Nothing goes to project 1704237.
 7. Final acceptance, Graphify update, `report.md`, push, one line in `F:\Coding\.knowledge\log.md`.
 
+8. (owner, added 2026-10-12 during the session, to be done after the port tasks) Server option to turn the over-limit rule off: when a team shrinks below what its team claims or team forceloads need, nothing expires, nothing is unclaimed and no warning is sent. Default stays the 1.2.0 behaviour.
+
 ## Owner decisions / defaults
 - Full port, own worktree and session. Working branch `v1.3-dev` off `50d1919`, pushed to origin; no merge into `fabric-port` / `main` without the owner's word. Never force-push.
 - Behaviour of 1.2.0 stays: budgets, limits, over-limit auto-unclaim, FTB Teams sync, party screen. Anchor-based claiming keeps upstream's default (off) and must work together with team claims.
