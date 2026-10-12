@@ -3,7 +3,7 @@
 Branch `v1.3-dev` on github.com/navrelis/OPAC_PartyClaims (off `fabric-port` `50d1919`, = 1.2.0); `fabric-port` and
 `main` untouched, no merge without the owner's word. Release files: `ExportedJars/v1.3.0/`
 (`opac-team-claims-fabric-1.21.1-v1.3.0.jar`, `opac-team-claims-neoforge-1.21.1-v1.3.0.jar`, `CURSEFORGE.md`; jars are
-not committed). Version `1.3.0+opac.0.32.7`, mod id `openpartiesandclaims`. CurseForge state: see the last section.
+not committed). Version `1.3.0+opac.0.32.7`, mod id `openpartiesandclaims`. CurseForge: NeoForge file 9151608, Fabric file 9151657 (Release); see the last section.
 (The v1.2.0 report is in the git history of this file.)
 
 ## Requirements → result
@@ -74,12 +74,6 @@ Delegated: Opus T1 (long, counts 2); Sonnet T2 (1), T4 (1), T3 (long, 2, in two 
 
 ## Release state
 - Pushed: `v1.3-dev` at origin (first push, brings upstream's history along). Not merged into `fabric-port` / `main`.
-- CurseForge (project 1704256, Beta), state 2026-10-13: **nothing uploaded yet.** Offline and remote dry runs done
-  for both jars with the owner's uploader. NeoForge plan
-  (`F:\Coding\CurseForgeUpload\local\curseforge-plan-1704256-1.3.0-neoforge.json`, no relations) is resolved and
-  ready; the upload command was blocked by the session's permission layer and waits for the owner. Fabric plan
-  (`…-1.3.0-fabric.json`; `fabric-api` + `forge-config-api-port` required, `ftb-teams-fabric` optional) is not
-  uploadable: the tool's slug lookup answers 404 for `forge-config-api-port` and `ftb-teams-fabric` again (lookups by
-  project id 547434 / 438497 confirm both); needs the owner's decision like on 2026-10-09.
+- CurseForge (project 1704256), 2026-10-13: both files uploaded as **Release** (owner: "as release and not beta"), after a second full test pass on the unchanged jars: NeoForge file 9151608 (no relations), Fabric file 9151657 (Fabric API + Forge Config API Port required, FTB Teams (Fabric) optional). The tool's slug lookup answered 404 for `forge-config-api-port` and `ftb-teams-fabric` again; the owner approved overriding the check once (plan marked resolved by hand with a note, slugs confirmed by project id 547434 / 438497). Not done: project description / summary on the website; `CURSEFORGE.md` still says "Suggested release type: Beta".
 - Graphify: not updated (`graphify-out/` exists only in the main checkout, untracked, state of 1.1.0).
 - 1.2.0 stays as it is: branch `fabric-port`, jars and CurseForge files 9106819 / 9108825 untouched.
