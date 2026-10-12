@@ -73,3 +73,13 @@ not committed). Version `1.3.0+opac.0.32.7`, mod id `openpartiesandclaims`. Curs
 Delegated: Opus T1 (long, counts 2); Sonnet T2 (1), T4 (1), T3 (long, 2, in two sessions), T7 (1). Opus 2 of 7.
 
 ## Release state
+- Pushed: `v1.3-dev` at origin (first push, brings upstream's history along). Not merged into `fabric-port` / `main`.
+- CurseForge (project 1704256, Beta), state 2026-10-13: **nothing uploaded yet.** Offline and remote dry runs done
+  for both jars with the owner's uploader. NeoForge plan
+  (`F:\Coding\CurseForgeUpload\local\curseforge-plan-1704256-1.3.0-neoforge.json`, no relations) is resolved and
+  ready; the upload command was blocked by the session's permission layer and waits for the owner. Fabric plan
+  (`…-1.3.0-fabric.json`; `fabric-api` + `forge-config-api-port` required, `ftb-teams-fabric` optional) is not
+  uploadable: the tool's slug lookup answers 404 for `forge-config-api-port` and `ftb-teams-fabric` again (lookups by
+  project id 547434 / 438497 confirm both); needs the owner's decision like on 2026-10-09.
+- Graphify: not updated (`graphify-out/` exists only in the main checkout, untracked, state of 1.1.0).
+- 1.2.0 stays as it is: branch `fabric-port`, jars and CurseForge files 9106819 / 9108825 untouched.
