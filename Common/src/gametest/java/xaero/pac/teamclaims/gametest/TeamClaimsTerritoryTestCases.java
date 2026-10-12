@@ -377,7 +377,7 @@ public final class TeamClaimsTerritoryTestCases {
     }
 
     /** Receives everything that would be sent to the mock player, instead of a network connection. */
-    private static final class RecordingListener extends ServerGamePacketListenerImpl {
+    static final class RecordingListener extends ServerGamePacketListenerImpl {
         final List<Packet<?>> sent = new ArrayList<>();
 
         RecordingListener(MinecraftServer server, ServerPlayer player) {
@@ -400,7 +400,7 @@ public final class TeamClaimsTerritoryTestCases {
      * A mock player on the server whose packets are recorded, plus OPAC's welcomer to run for it. {@link #close} removes
      * the player again.
      */
-    private static final class WelcomeSetup {
+    static final class WelcomeSetup {
         final GameTestHelper helper;
         final MinecraftServer server;
         final ServerPlayer player;

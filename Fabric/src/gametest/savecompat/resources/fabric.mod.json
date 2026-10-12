@@ -1,0 +1,19 @@
+{
+    "schemaVersion": 1,
+    "id": "opac_teamclaims_gametest_savecompat",
+    "name": "OPAC Team Claims Gametest (save compatibility)",
+    "version": "1.0.0",
+    "environment": "*",
+    "entrypoints": {
+        "fabric-gametest": [
+            "xaero.pac.teamclaims.gametest.savecompat.TeamClaimsSaveCompatTest"
+        ]
+    },
+    "mixins": [
+        "opac_teamclaims_gametest.mixins.json"
+    ],
+    "depends": {
+        "openpartiesandclaims": "*",
+        "fabric-gametest-api-v1": "*"
+    }
+}

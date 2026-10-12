@@ -1100,7 +1100,7 @@ public final class TeamClaimsBudgetTestCases {
     }
 
     /** Sets the full private limit of a player to {@code target} with the matching bonus option. */
-    private static void setPrivateLimit(GameTestHelper helper, MinecraftServer server, UUID playerId,
+    static void setPrivateLimit(GameTestHelper helper, MinecraftServer server, UUID playerId,
             IPlayerConfigOptionSpecAPI<Integer> bonusOption, int target) {
         boolean claims = bonusOption == PlayerConfigOptions.BONUS_CHUNK_CLAIMS;
         int current = claims ? claimsAPI(server).getPlayerFullClaimLimit(playerId) : claimsAPI(server).getPlayerFullForceloadLimit(playerId);
@@ -1112,7 +1112,7 @@ public final class TeamClaimsBudgetTestCases {
                         + result + " and " + limit);
     }
 
-    private static void resetBonusQuiet(MinecraftServer server, UUID playerId) {
+    static void resetBonusQuiet(MinecraftServer server, UUID playerId) {
         for (IPlayerConfigOptionSpecAPI<Integer> bonusOption : List.of(PlayerConfigOptions.BONUS_CHUNK_CLAIMS,
                 PlayerConfigOptions.BONUS_CHUNK_FORCELOADS)) {
             try {

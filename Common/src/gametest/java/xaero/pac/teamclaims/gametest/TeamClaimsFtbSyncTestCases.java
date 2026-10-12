@@ -1726,6 +1726,12 @@ public final class TeamClaimsFtbSyncTestCases {
                     FtbTeamsSync sync = sync(helper);
                     UUID failingTeamId = linkedTeam(helper, party[0]).getId();
                     linkedTeam(helper, party[1]);
+                    // The notes of the other tests that ran earlier in this tick (an FTB player becoming known, for one) are
+                    // worked off first: such a note makes the sync reconcile everything after the queue, which merges the
+                    // failing pair a second time. The name is set by then (the listener only fails after it is), so that
+                    // second merge succeeds and the failure would not be pending any more. Nothing of the other tests can
+                    // get into the queue between here and runPendingWork below, it all happens in this one step.
+                    sync.runPendingWork();
                     Consumer<TeamPropertiesChangedEvent> failingListener = event -> {
                         if (event.getTeam().getId().equals(failingTeamId)) throw new IllegalStateException("FS33: the listener of another mod fails");
                     };

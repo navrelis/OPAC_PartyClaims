@@ -89,6 +89,16 @@ sourceSets {
         compileClasspath += sourceSets.gametest.compileClasspath + sourceSets.gametest.output
         runtimeClasspath += sourceSets.gametest.runtimeClasspath + sourceSets.gametest.output
     }
+    // [Team Claims] Third dev/test-only mod "opac_teamclaims_gametest_savecompat" (Fabric/src/gametest/savecompat) for
+    // ":Fabric:runSaveCompatTest": the tests that check that the world data of a 1.2.0 server loads (shared bodies in
+    // Common/src/gametest, fixture in Common/src/gametest/resources/world-data-from-1.2.0). The run gets the compiled
+    // classes of "gametest" (the shared bodies) but not its resources, so the other tests are not registered there.
+    gametestSaveCompat {
+        java.srcDirs = ["src/gametest/savecompat/java"]
+        resources.srcDirs = ["src/gametest/savecompat/resources"]
+        compileClasspath += sourceSets.gametest.compileClasspath + sourceSets.gametest.output
+        runtimeClasspath += sourceSets.main.runtimeClasspath + sourceSets.main.output + sourceSets.gametest.output.classesDirs
+    }
 }
 
 // [Team Claims] Remapped (intermediary -> named) mod dependencies of the "gametestFtb" source set only: the real
@@ -134,6 +144,10 @@ loom {
         // [Team Claims] only on the classpath of the bootTestFtb run
         register("opac_teamclaims_gametest_ftb") {
             sourceSet(sourceSets.gametestFtb)
+        }
+        // [Team Claims] only on the classpath of the saveCompatTest run
+        register("opac_teamclaims_gametest_savecompat") {
+            sourceSet(sourceSets.gametestSaveCompat)
         }
     }
     runs {
@@ -193,6 +207,17 @@ loom {
             vmArg("-Dfabric-api.gametest")
             source(sourceSets.gametestFtb)
         }
+        // [Team Claims] The save compatibility tests: the server starts on a world folder that holds the OPAC and Team
+        // Claims files of a 1.2.0 server (copied by the task configuration below): ":Fabric:runSaveCompatTest".
+        saveCompatTest {
+            server()
+            setConfigName("Fabric Save Compatibility Test")
+            ideConfigGenerated(false)
+            runDir("../run-savecompat")
+            vmArg("-Dfabric-api.gametest")
+            vmArg("-Dopac.teamclaims.savecompat=true")
+            source(sourceSets.gametestSaveCompat)
+        }
     }
 }
 
@@ -226,10 +251,44 @@ tasks.named('runBootTestFtb') {
     }
 }
 
+// [Team Claims] ":Fabric:runSaveCompatTest": the world folder is a fresh copy of the 1.2.0 fixture every time (only
+// its "data" folder: the server makes the rest). Besides the exit code the run requires vanilla's success line in its
+// log, which is deleted before each run.
+File runDirSaveCompat = rootProject.file("run-savecompat")
+tasks.named('runSaveCompatTest') {
+    doFirst {
+        delete new File(runDirSaveCompat, "world"), new File(runDirSaveCompat, "logs/latest.log")
+        copy {
+            from project(":Common").file("src/gametest/resources/world-data-from-1.2.0/data")
+            into new File(runDirSaveCompat, "world/data")
+        }
+    }
+    doLast {
+        File log = new File(runDirSaveCompat, "logs/latest.log")
+        def passed = log.exists() ? (log.getText("UTF-8") =~ /All (\d+) required tests passed/) : null
+        if (passed == null || !passed.find()) {
+            throw new GradleException("Team Claims save compatibility gametests did not pass: no \"All N required tests passed\" line in ${log}")
+        }
+        logger.lifecycle("Team Claims save compatibility gametests: ${passed.group(0)} (log: ${log})")
+    }
+}
+
+// [Team Claims] The save compatibility run starts the server on claim files of real players, which a vanilla game test
+// server cannot do without the mixin of the "gametest" mod that gives it a profile cache (see
+// MixinGameTestProfileCache). That mod itself is not part of the run (its fabric.mod.json would register all its
+// tests), so its mixin config is shared by this one.
+tasks.named("processGametestSaveCompatResources", ProcessResources) {
+    from("src/gametest/resources") {
+        include "opac_teamclaims_gametest.mixins.json"
+    }
+}
+
 // [Team Claims] The root build.gradle copies OPAC's lang files into every ProcessResources task; they belong to
-// the main mod only, not to the FTB test mod.
-tasks.named("processGametestFtbResources", ProcessResources) {
-    eachFile { if (it.path.startsWith("data/${project.mod_id}/")) it.exclude() }
+// the main mod only, not to the FTB and save compatibility test mods.
+["processGametestFtbResources", "processGametestSaveCompatResources"].each { String taskName ->
+    tasks.named(taskName, ProcessResources) {
+        eachFile { if (it.path.startsWith("data/${project.mod_id}/")) it.exclude() }
+    }
 }
 
 

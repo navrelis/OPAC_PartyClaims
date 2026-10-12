@@ -1,0 +1,19 @@
+{
+  "partyId": "557ea6ce-99d8-4c3c-957e-9762b8121a27",
+  "teamName": "Fixture Team",
+  "subConfigId": "team_fixture_team",
+  "members": [
+    "11111111-1111-4111-8111-111111111111",
+    "22222222-2222-4222-8222-222222222222",
+    "33333333-3333-4333-8333-333333333333"
+  ],
+  "settings": {
+    "opac.CLAIMS_COLOR": 16745191,
+    "opac.CLAIMS_NAME": "Fixture Team"
+  },
+  "roles": {
+    "claim": "MODERATOR",
+    "unclaim": "MEMBER",
+    "forceload": "ADMIN"
+  }
+}

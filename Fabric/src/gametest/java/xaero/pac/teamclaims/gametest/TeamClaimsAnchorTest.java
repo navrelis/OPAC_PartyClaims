@@ -30,4 +30,29 @@ public class TeamClaimsAnchorTest implements FabricGameTest {
     public void removedPartyKeepsAnchors(GameTestHelper helper) {
         TeamClaimsAnchorTestCases.removedPartyKeepsAnchors(helper);
     }
+
+    @GameTest(template = FabricGameTest.EMPTY_STRUCTURE)
+    public void ownersFullAnchorLimitKeepsTheAnchoredTeamClaimWithTheLeaver(GameTestHelper helper) {
+        TeamClaimsAnchorTestCases.ownersFullAnchorLimitKeepsTheAnchoredTeamClaimWithTheLeaver(helper);
+    }
+
+    @GameTest(template = FabricGameTest.EMPTY_STRUCTURE)
+    public void ownersSmallerAnchorRangeKeepsTheAnchoredTeamClaimWithTheLeaver(GameTestHelper helper) {
+        TeamClaimsAnchorTestCases.ownersSmallerAnchorRangeKeepsTheAnchoredTeamClaimWithTheLeaver(helper);
+    }
+
+    @GameTest(template = FabricGameTest.EMPTY_STRUCTURE)
+    public void ownersLargerAnchorRangeTakesTheAnchorAlong(GameTestHelper helper) {
+        TeamClaimsAnchorTestCases.ownersLargerAnchorRangeTakesTheAnchorAlong(helper);
+    }
+
+    @GameTest(template = FabricGameTest.EMPTY_STRUCTURE)
+    public void anchoredHandOverIsPerDimension(GameTestHelper helper) {
+        TeamClaimsAnchorTestCases.anchoredHandOverIsPerDimension(helper);
+    }
+
+    @GameTest(template = FabricGameTest.EMPTY_STRUCTURE)
+    public void anchorOnTheOwnTeamClaim(GameTestHelper helper) {
+        TeamClaimsAnchorTestCases.anchorOnTheOwnTeamClaim(helper);
+    }
 }

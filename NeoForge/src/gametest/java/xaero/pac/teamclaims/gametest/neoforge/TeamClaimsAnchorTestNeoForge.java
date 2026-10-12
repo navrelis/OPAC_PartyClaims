@@ -36,4 +36,29 @@ public final class TeamClaimsAnchorTestNeoForge {
     public static void removedPartyKeepsAnchors(GameTestHelper helper) {
         TeamClaimsAnchorTestCases.removedPartyKeepsAnchors(helper);
     }
+
+    @GameTest(template = TeamClaimsGameTestMod.EMPTY_STRUCTURE)
+    public static void ownersFullAnchorLimitKeepsTheAnchoredTeamClaimWithTheLeaver(GameTestHelper helper) {
+        TeamClaimsAnchorTestCases.ownersFullAnchorLimitKeepsTheAnchoredTeamClaimWithTheLeaver(helper);
+    }
+
+    @GameTest(template = TeamClaimsGameTestMod.EMPTY_STRUCTURE)
+    public static void ownersSmallerAnchorRangeKeepsTheAnchoredTeamClaimWithTheLeaver(GameTestHelper helper) {
+        TeamClaimsAnchorTestCases.ownersSmallerAnchorRangeKeepsTheAnchoredTeamClaimWithTheLeaver(helper);
+    }
+
+    @GameTest(template = TeamClaimsGameTestMod.EMPTY_STRUCTURE)
+    public static void ownersLargerAnchorRangeTakesTheAnchorAlong(GameTestHelper helper) {
+        TeamClaimsAnchorTestCases.ownersLargerAnchorRangeTakesTheAnchorAlong(helper);
+    }
+
+    @GameTest(template = TeamClaimsGameTestMod.EMPTY_STRUCTURE)
+    public static void anchoredHandOverIsPerDimension(GameTestHelper helper) {
+        TeamClaimsAnchorTestCases.anchoredHandOverIsPerDimension(helper);
+    }
+
+    @GameTest(template = TeamClaimsGameTestMod.EMPTY_STRUCTURE)
+    public static void anchorOnTheOwnTeamClaim(GameTestHelper helper) {
+        TeamClaimsAnchorTestCases.anchorOnTheOwnTeamClaim(helper);
+    }
 }

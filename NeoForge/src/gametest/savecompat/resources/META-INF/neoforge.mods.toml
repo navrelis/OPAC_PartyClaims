@@ -1,0 +1,27 @@
+# Dev/test-only mod: never part of the production NeoForge jar (NeoForge "gametestSaveCompat" source set, loaded only by
+# the ":NeoForge:runSaveCompatGameTest" run, next to "opac_teamclaims_gametest", whose test classes it uses). It carries
+# the @GameTestHolder wrappers of the save compatibility tests, so those are only registered in that run. Values are
+# hardcoded on purpose, like in the other test mods.
+modLoader="javafml"
+loaderVersion="[4,)"
+license="GNU Lesser General Public License v3.0 (LGPL-3.0-only)"
+
+[[mods]]
+modId="opac_teamclaims_gametest_savecompat"
+version="1.0.0"
+displayName="OPAC Team Claims Gametest (save compatibility)"
+description='''Headless gametests that check that the world data of a Team Claims 1.2.0 server loads (dev/test only).'''
+
+[[dependencies.opac_teamclaims_gametest_savecompat]]
+    modId="openpartiesandclaims"
+    type="required"
+    versionRange="[0,)"
+    ordering="AFTER"
+    side="BOTH"
+
+[[dependencies.opac_teamclaims_gametest_savecompat]]
+    modId="opac_teamclaims_gametest"
+    type="required"
+    versionRange="[0,)"
+    ordering="AFTER"
+    side="BOTH"

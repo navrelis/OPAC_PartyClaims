@@ -779,7 +779,7 @@ public final class TeamClaimsPacketTestCases {
      * Runs {@code action} with the connection of the player replaced by a recorder and returns the OPAC packets that
      * were sent to the player meanwhile, in order. The connection is back in place when this returns.
      */
-    private static List<Object> capture(MinecraftServer server, ServerPlayer player, RecorderFactory recorders, Runnable action) {
+    static List<Object> capture(MinecraftServer server, ServerPlayer player, RecorderFactory recorders, Runnable action) {
         ServerGamePacketListenerImpl original = player.connection;
         PacketRecorder recorder = recorders.create(server, player);
         try {

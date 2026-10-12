@@ -15,7 +15,8 @@
             "xaero.pac.teamclaims.gametest.TeamClaimsConvertTest",
             "xaero.pac.teamclaims.gametest.TeamClaimsBudgetTest",
             "xaero.pac.teamclaims.gametest.TeamClaimsPacketTest",
-            "xaero.pac.teamclaims.gametest.TeamClaimsAnchorTest"
+            "xaero.pac.teamclaims.gametest.TeamClaimsAnchorTest",
+            "xaero.pac.teamclaims.gametest.TeamClaimsLimitsPacketTest"
         ]
     },
     "mixins": [

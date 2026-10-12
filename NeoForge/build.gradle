@@ -41,6 +41,16 @@ sourceSets {
         compileClasspath += sourceSets.main.output + sourceSets.gametest.output
         runtimeClasspath += sourceSets.main.output + sourceSets.gametest.output
     }
+    // [Team Claims] Third dev/test-only mod "opac_teamclaims_gametest_savecompat" (NeoForge/src/gametest/savecompat): the
+    // @GameTestHolder wrappers of the save compatibility tests, run by ":NeoForge:runSaveCompatGameTest" on a world
+    // folder with the data of a 1.2.0 server. They have a namespace of their own, which only that run enables.
+    gametestSaveCompat {
+        java.srcDirs = ["src/gametest/savecompat/java"]
+        resources.srcDirs = ["src/gametest/savecompat/resources"]
+        inherits.from(sourceSets.main)
+        compileClasspath += sourceSets.main.output + sourceSets.gametest.output
+        runtimeClasspath += sourceSets.main.output + sourceSets.gametest.output
+    }
 }
 
 // [Team Claims] FTB Teams, FTB Library and Architectury as real mods of ":NeoForge:runTeamClaimsGameTestFtb":
@@ -97,6 +107,20 @@ runs {
         modSources.add('opac_teamclaims_gametest', project.sourceSets.gametest)
         modSources.add('opac_teamclaims_gametest_ftb', project.sourceSets.gametestFtb)
         systemProperty 'neoforge.enabledGameTestNamespaces', 'opac_teamclaims_gametest'
+        shouldExportToIDE false
+    }
+
+    // [Team Claims] The save compatibility tests: ":NeoForge:runSaveCompatGameTest". The server starts on a world folder
+    // with the OPAC and Team Claims files of a 1.2.0 server (copied by the task configuration below). The test mod of
+    // the other tests is loaded for the classes they share, but only the namespace of the save compatibility tests is
+    // enabled. Working dir: NeoForge/runs/saveCompatGameTest.
+    saveCompatGameTest {
+        runType 'gameTestServer'
+        workingDirectory project.file('runs/saveCompatGameTest')
+        modSources.add('opac_teamclaims_gametest', project.sourceSets.gametest)
+        modSources.add('opac_teamclaims_gametest_savecompat', project.sourceSets.gametestSaveCompat)
+        systemProperty 'neoforge.enabledGameTestNamespaces', 'opac_teamclaims_gametest_savecompat'
+        systemProperty 'opac.teamclaims.savecompat', 'true'
         shouldExportToIDE false
     }
 }
@@ -157,7 +181,7 @@ tasks.named("sourcesJar", Jar) {
 
 // [Team Claims] The root build.gradle copies OPAC's lang files into every ProcessResources task
 // (data/openpartiesandclaims/lang); keep them out of the test mod, they belong to the main mod only.
-["processGametestResources", "processGametestFtbResources"].each { String taskName ->
+["processGametestResources", "processGametestFtbResources", "processGametestSaveCompatResources"].each { String taskName ->
     tasks.named(taskName, ProcessResources) {
         eachFile { if (it.path.startsWith("data/${project.mod_id}/")) it.exclude() }
     }
@@ -177,13 +201,15 @@ tasks.named("sourcesJar", Jar) {
 // so FML loads them from there in dev like on a real server).
 def teamClaimsGameTestRuns = [
         "runTeamClaimsGameTest"   : [dir: file("runs/teamClaimsGameTest"), ftb: false],
-        "runTeamClaimsGameTestFtb": [dir: file("runs/teamClaimsGameTestFtb"), ftb: true]
+        "runTeamClaimsGameTestFtb": [dir: file("runs/teamClaimsGameTestFtb"), ftb: true],
+        "runSaveCompatGameTest"   : [dir: file("runs/saveCompatGameTest"), ftb: false, saveCompat: true]
 ]
 tasks.configureEach { Task task ->
     def teamClaimsRun = teamClaimsGameTestRuns[task.name]
     if (teamClaimsRun == null) return
     File teamClaimsGameTestDir = teamClaimsRun.dir
     boolean withFtbMods = teamClaimsRun.ftb
+    boolean withSaveCompatWorld = teamClaimsRun.saveCompat == true
     if (withFtbMods) task.inputs.files(configurations.ftbGameTestMods)
     task.doFirst {
         project.delete(new File(teamClaimsGameTestDir, "world"), new File(teamClaimsGameTestDir, "logs/latest.log"),
@@ -192,6 +218,13 @@ tasks.configureEach { Task task ->
             project.copy {
                 from configurations.ftbGameTestMods
                 into new File(teamClaimsGameTestDir, "mods")
+            }
+        }
+        // the save compatibility run starts on a fresh copy of the 1.2.0 fixture's world data
+        if (withSaveCompatWorld) {
+            project.copy {
+                from project(":Common").file("src/gametest/resources/world-data-from-1.2.0/data")
+                into new File(teamClaimsGameTestDir, "world/data")
             }
         }
     }
