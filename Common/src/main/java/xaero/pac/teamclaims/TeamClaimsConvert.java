@@ -163,7 +163,8 @@ public final class TeamClaimsConvert {
         }
 
         // The guards of OPAC's tryToClaimTyped, once for the whole area. The distance and dimension checks don't apply:
-        // the area is around the player, in their dimension, and only has claims they already own.
+        // the area is around the player, in their dimension, and only has claims they already own. For the same reason
+        // there is no claiming anchor check: the claims keep their owner, and with it their anchors.
         IServerClaimsManager<?, ?, ?> claimsManager = serverData.getServerClaimsManager();
         ClaimResult.Type guard = null;
         if (!ServerConfig.CONFIG.claimsEnabled.get())

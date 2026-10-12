@@ -16,8 +16,8 @@ public class TeamClaimsPacketTest implements FabricGameTest {
     private static final RecorderFactory RECORDERS = TeamClaimsPacketTestCases.PacketRecorder::new;
 
     @GameTest(template = FabricGameTest.EMPTY_STRUCTURE)
-    public void packetsAreRegisteredWithIds50To53(GameTestHelper helper) {
-        TeamClaimsPacketTestCases.packetsAreRegisteredWithIds50To53(helper);
+    public void packetsAreRegisteredWithIds100To103(GameTestHelper helper) {
+        TeamClaimsPacketTestCases.packetsAreRegisteredWithIds100To103(helper);
     }
 
     @GameTest(template = FabricGameTest.EMPTY_STRUCTURE)

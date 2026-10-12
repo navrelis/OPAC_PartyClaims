@@ -20,6 +20,7 @@ package xaero.pac.common.claims.player.mode.api;
 
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
+import xaero.pac.common.claims.player.IPlayerDimensionClaims;
 import xaero.pac.common.claims.player.mode.ClaimingMode;
 import xaero.pac.common.claims.player.mode.ClaimingModeLimits;
 import xaero.pac.common.claims.result.api.ClaimResult;
@@ -66,8 +67,14 @@ public class ClaimingModes {
 				IServerPlayerClaimInfo<?> playerClaims = claimsManager.getPlayerInfo(playerId);
 				int claimCount = playerClaims.getClaimCount();
 				int forceloadCount = playerClaims.getForceloadCount();
+				int anchorCount = 0;
+				IPlayerDimensionClaims<?> playerDimensionClaims = playerClaims.getDimension(player.level().dimension().location());
+				if(playerDimensionClaims != null)
+					anchorCount = playerDimensionClaims.getAnchors().size();
 				int claimLimit = claimsManager.getPlayerFullClaimLimit(playerId);
 				int forceloadLimit = claimsManager.getPlayerFullForceloadLimit(playerId);
+				int anchorLimit = claimsManager.getPlayerFullAnchorLimit(playerId, player.level().dimension().location());
+				int anchorRange = claimsManager.getPlayerFullAnchorRange(playerId, player.level().dimension().location());
 				// [Team Claims] private and team claims are two separate budgets: the player sees the team's
 				// numbers while their team sub-config is the used sub-claim, else their private numbers
 				xaero.pac.common.server.claims.TeamClaimsIntegration.TeamClaimsHandler tcHandler =
@@ -85,7 +92,8 @@ public class ClaimingModes {
 					}
 				}
 				return new ClaimingModeLimits(
-						ClaimingModes.PLAYER, claimCount, forceloadCount, claimLimit, forceloadLimit
+						ClaimingModes.PLAYER, claimCount, forceloadCount, anchorCount,
+						claimLimit, forceloadLimit, anchorLimit, anchorRange
 				);
 			})
 			.setCanBeImpersonated(true)
@@ -123,16 +131,24 @@ public class ClaimingModes {
 			.setLimitsBuilder((player, claimsManager) -> {
 				int partyClaimCount = 0;
 				int partyForceloadCount = 0;
+				int partyAnchorCount = 0;
 				int partyClaimLimit = 0;
 				int partyForceloadLimit = 0;
+				int partyAnchorLimit = 0;
+				int partyAnchorRange = 0;
 				if(ServerConfig.CONFIG.partyOwnedClaims.get()){
 					UUID partyOwner = claimsManager.getPartySystemManager().getPrimaryPartyOwnerByMember(player.getUUID());
 					if(partyOwner != null) {
 						IServerPlayerClaimInfo<?> partyOwnerClaims = claimsManager.getPlayerInfo(partyOwner);
 						partyClaimCount = partyOwnerClaims.getClaimCount();
 						partyForceloadCount = partyOwnerClaims.getForceloadCount();
+						IPlayerDimensionClaims<?> playerDimensionClaims = partyOwnerClaims.getDimension(player.level().dimension().location());
+						if(playerDimensionClaims != null)
+							partyAnchorCount = playerDimensionClaims.getAnchors().size();
 						partyClaimLimit = claimsManager.getPlayerFullClaimLimit(partyOwner);
 						partyForceloadLimit = claimsManager.getPlayerFullForceloadLimit(partyOwner);
+						partyAnchorLimit = claimsManager.getPlayerFullAnchorLimit(partyOwner, player.level().dimension().location());
+						partyAnchorRange = claimsManager.getPlayerFullAnchorRange(partyOwner, player.level().dimension().location());
 						// [Team Claims] native party claims are private claims of the party owner, the owner's
 						// team claims have their own budget
 						xaero.pac.common.server.claims.TeamClaimsIntegration.TeamClaimsHandler tcHandler =
@@ -144,7 +160,8 @@ public class ClaimingModes {
 					}
 				}
 				return new ClaimingModeLimits(
-						ClaimingModes.PARTY, partyClaimCount, partyForceloadCount, partyClaimLimit, partyForceloadLimit
+						ClaimingModes.PARTY, partyClaimCount, partyForceloadCount, partyAnchorCount,
+						partyClaimLimit, partyForceloadLimit, partyAnchorLimit, partyAnchorRange
 				);
 			})
 			.setCanBeImpersonated(true)
@@ -185,7 +202,8 @@ public class ClaimingModes {
 					serverForceloadCount = serverClaims.getForceloadCount();
 				}
 				return new ClaimingModeLimits(
-						ClaimingModes.SERVER, serverClaimCount, serverForceloadCount, Integer.MAX_VALUE, Integer.MAX_VALUE
+						ClaimingModes.SERVER, serverClaimCount, serverForceloadCount, 0,
+						Integer.MAX_VALUE, Integer.MAX_VALUE, Integer.MAX_VALUE, Integer.MAX_VALUE
 				);
 			})
 			.setActiveLabel(Component.translatable("gui.xaero_pac_claiming_as_server"))

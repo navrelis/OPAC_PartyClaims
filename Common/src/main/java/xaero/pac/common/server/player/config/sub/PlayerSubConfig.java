@@ -86,7 +86,9 @@ public class PlayerSubConfig
 
 	@Override
 	public boolean isOptionAllowed(@Nonnull IPlayerConfigOptionSpecAPI<?> option) {
-		return super.isOptionAllowed(option) && (option.isOverridable() || isTeamSubConfig());
+		// [Team Claims] "|| isTeamSubConfig()"
+		return super.isOptionAllowed(option) &&
+				(option.isOverridable() || option.isOnlyDimensionOverridable() && getType().hasDimensionSubConfigs() || isTeamSubConfig());
 	}
 
 	// [Team Claims] team sub-configs store every option, not just the overridable ones
@@ -100,7 +102,7 @@ public class PlayerSubConfig
 		PlayerConfigOptionSpec<T> option = (PlayerConfigOptionSpec<T>) o;
 		// [Team Claims] a team sub-config stores non-overridable options too, so it must read them
 		// back from its own storage instead of always falling through to the main config
-		if(!option.isOverridable() && !isTeamSubConfig())
+		if(!option.isOverridable() && (!option.isOnlyDimensionOverridable() || !getType().hasDimensionSubConfigs()) && !isTeamSubConfig())
 			return inherit ? mainConfig.getFromEffectiveConfig(option) : null;
 		if(isOptionDefaulted(option))
 			return inherit ? manager.getDefaultConfig().getFromEffectiveConfig(option) : null;

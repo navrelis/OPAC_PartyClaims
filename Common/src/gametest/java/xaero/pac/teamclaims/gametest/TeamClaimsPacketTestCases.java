@@ -50,9 +50,9 @@ import static xaero.pac.teamclaims.gametest.TeamClaimsLogicTestCases.*;
 import static xaero.pac.teamclaims.gametest.TeamClaimsOverviewTestCases.removePlayerQuiet;
 
 /**
- * Dev/test-only, loader-neutral test bodies for the party screen's four packets (ids 50 to 53): the request for the
- * received invitations (50) and its answer (51), declining an invitation (52), and the claim and forceload budgets
- * (53) that the request also triggers. Same conventions as {@link TeamClaimsBudgetTestCases}: a chunk offset of 1000
+ * Dev/test-only, loader-neutral test bodies for the party screen's four packets (ids 100 to 103): the request for the
+ * received invitations (100) and its answer (101), declining an invitation (102), and the claim and forceload budgets
+ * (103) that the request also triggers. Same conventions as {@link TeamClaimsBudgetTestCases}: a chunk offset of 1000
  * per test starting at 90000, cleanup of parties, players, claims and clock on every path, every test registered with
  * the loader's empty structure template and the default timeout.
  * <p>
@@ -72,10 +72,10 @@ public final class TeamClaimsPacketTestCases {
     public static final int RATE_LIMIT_TIMEOUT_TICKS = 100;
 
     private static final long HOUR = 3_600_000L;
-    private static final int ID_REQUEST = 50;
-    private static final int ID_INVITES = 51;
-    private static final int ID_DECLINE = 52;
-    private static final int ID_BUDGET = 53;
+    private static final int ID_REQUEST = 100;
+    private static final int ID_INVITES = 101;
+    private static final int ID_DECLINE = 102;
+    private static final int ID_BUDGET = 103;
 
     private TeamClaimsPacketTestCases() {}
 
@@ -117,8 +117,8 @@ public final class TeamClaimsPacketTestCases {
 
     // ==================== Tests: registration and codecs ====================
 
-    /** The four packets are registered with ids 50 to 53, their codecs, and the handler of the side that receives them. */
-    public static void packetsAreRegisteredWithIds50To53(GameTestHelper helper) {
+    /** The four packets are registered with ids 100 to 103, their codecs, and the handler of the side that receives them. */
+    public static void packetsAreRegisteredWithIds100To103(GameTestHelper helper) {
         PacketHandlerFull handler = packetHandler();
         assertRegistered(helper, handler, ID_REQUEST, ServerboundPartyInvitesRequestPacket.class,
                 ServerboundPartyInvitesRequestPacket.Codec.class, ServerboundPartyInvitesRequestPacket.ServerHandler.class, true);
@@ -131,7 +131,7 @@ public final class TeamClaimsPacketTestCases {
         helper.succeed();
     }
 
-    /** Request (50): no content, so nothing is written, an empty buffer decodes, and anything left over is rejected. */
+    /** Request (100): no content, so nothing is written, an empty buffer decodes, and anything left over is rejected. */
     public static void requestPacketCodec(GameTestHelper helper) {
         ServerboundPartyInvitesRequestPacket.Codec codec = new ServerboundPartyInvitesRequestPacket.Codec();
         FriendlyByteBuf out = buffer();
@@ -146,7 +146,7 @@ public final class TeamClaimsPacketTestCases {
     }
 
     /**
-     * Invitations (51): equal content after a round trip, at most 64 entries (more are cut off when writing and
+     * Invitations (101): equal content after a round trip, at most 64 entries (more are cut off when writing and
      * refused when reading), names cut to 128 and 64 characters when writing and refused when longer, a missing name is
      * written as an empty one, and a count that is negative or too large, missing or trailing bytes, an empty buffer and
      * more than 65536 bytes are all rejected.
@@ -213,7 +213,7 @@ public final class TeamClaimsPacketTestCases {
         helper.succeed();
     }
 
-    /** Decline (52): the party id survives a round trip, 16 bytes are written, and any other size is rejected. */
+    /** Decline (102): the party id survives a round trip, 16 bytes are written, and any other size is rejected. */
     public static void declinePacketCodec(GameTestHelper helper) {
         ServerboundPartyInviteDeclinePacket.Codec codec = new ServerboundPartyInviteDeclinePacket.Codec();
         UUID partyId = UUID.randomUUID();
@@ -230,7 +230,7 @@ public final class TeamClaimsPacketTestCases {
     }
 
     /**
-     * Budget (53): equal content after a round trip (unlimited limits and long time spans too), an unavailable budget
+     * Budget (103): equal content after a round trip (unlimited limits and long time spans too), an unavailable budget
      * is a single byte and decodes to {@link PartyBudgetData#UNAVAILABLE} whatever else it carried, and a negative
      * count or time, missing or trailing bytes, an empty buffer and more than 256 bytes are all rejected.
      */
@@ -274,7 +274,7 @@ public final class TeamClaimsPacketTestCases {
         helper.succeed();
     }
 
-    // ==================== Tests: request (50) and answer (51) ====================
+    // ==================== Tests: request (100) and answer (101) ====================
 
     /**
      * A player invited by two parties (one with a custom party name, one with the default) asks for the invitations:
@@ -434,7 +434,7 @@ public final class TeamClaimsPacketTestCases {
         }
     }
 
-    // ==================== Tests: decline (52) ====================
+    // ==================== Tests: decline (102) ====================
 
     /**
      * Declining removes exactly that invitation: the party no longer lists the player as invited, the other party still
@@ -559,7 +559,7 @@ public final class TeamClaimsPacketTestCases {
         }
     }
 
-    // ==================== Tests: budget packet (53) ====================
+    // ==================== Tests: budget packet (103) ====================
 
     /** A player in no team: their private claims and forceloads against their own limits, everything about a team 0 or false. */
     public static void budgetPacketOfPlayerWithoutTeam(GameTestHelper helper, RecorderFactory recorders) {

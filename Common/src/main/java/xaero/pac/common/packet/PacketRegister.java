@@ -199,26 +199,33 @@ public class PacketRegister {
 				null, new ClientboundPlayerConfigConfigurableOptionsPacket.ClientHandler()
 		);
 
+		packetHandler.register(50, ClientboundClaimAnchorsPacket.class,
+				ClientboundClaimAnchorsPacket.ENCODER, ClientboundClaimAnchorsPacket.DECODER,
+				null, new ClientboundClaimAnchorsPacket.ClientHandler()
+		);
+
+		// [Team Claims] the party screen's packets use the ids 100 to 103, which leaves the ids after upstream's
+		// last one free for upstream (the id is sent as a signed byte, so 127 is the highest possible one)
 		ServerboundPartyInvitesRequestPacket.Codec partyInvitesRequestCodec = new ServerboundPartyInvitesRequestPacket.Codec();
-		packetHandler.register(50, ServerboundPartyInvitesRequestPacket.class,
+		packetHandler.register(100, ServerboundPartyInvitesRequestPacket.class,
 				partyInvitesRequestCodec, partyInvitesRequestCodec,
 				new ServerboundPartyInvitesRequestPacket.ServerHandler(), null
 		);
 
 		ClientboundPartyInvitesPacket.Codec partyInvitesCodec = new ClientboundPartyInvitesPacket.Codec();
-		packetHandler.register(51, ClientboundPartyInvitesPacket.class,
+		packetHandler.register(101, ClientboundPartyInvitesPacket.class,
 				partyInvitesCodec, partyInvitesCodec,
 				null, new ClientboundPartyInvitesPacket.ClientHandler()
 		);
 
 		ServerboundPartyInviteDeclinePacket.Codec partyInviteDeclineCodec = new ServerboundPartyInviteDeclinePacket.Codec();
-		packetHandler.register(52, ServerboundPartyInviteDeclinePacket.class,
+		packetHandler.register(102, ServerboundPartyInviteDeclinePacket.class,
 				partyInviteDeclineCodec, partyInviteDeclineCodec,
 				new ServerboundPartyInviteDeclinePacket.ServerHandler(), null
 		);
 
 		ClientboundPartyBudgetPacket.Codec partyBudgetCodec = new ClientboundPartyBudgetPacket.Codec();
-		packetHandler.register(53, ClientboundPartyBudgetPacket.class,
+		packetHandler.register(103, ClientboundPartyBudgetPacket.class,
 				partyBudgetCodec, partyBudgetCodec,
 				null, new ClientboundPartyBudgetPacket.ClientHandler()
 		);

@@ -18,6 +18,7 @@ import net.minecraft.world.level.saveddata.SavedData;
 import org.slf4j.Logger;
 import xaero.pac.common.claims.player.PlayerChunkClaim;
 import xaero.pac.common.claims.player.api.IPlayerChunkClaimAPI;
+import xaero.pac.common.claims.player.api.IPlayerDimensionClaimsAPI;
 import xaero.pac.common.claims.result.api.ClaimResult;
 import xaero.pac.common.claims.tracker.api.IClaimsManagerListenerAPI;
 import xaero.pac.common.parties.party.member.api.IPartyMemberAPI;
@@ -41,6 +42,7 @@ import javax.annotation.Nullable;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.LongSupplier;
+import java.util.function.Predicate;
 
 /**
  * Tracks the team claims of every party (which chunk is a team claim of which party, owned by which member, in which
@@ -59,6 +61,12 @@ import java.util.function.LongSupplier;
  * passes, the most recently made team claims are unclaimed until the team is within its limit. The team claims of a
  * leaving member are handed over to the party owner; those of a removed party stay private claims of their owners only
  * as far as these have private room ({@link #onPartyRemoved}).
+ * <p>
+ * Claiming anchors (OPAC's server option {@code anchorBasedClaiming}) stay a matter of the single player: a team claim
+ * is a claim of the member who technically owns it and has to be within the range of one of that member's anchors,
+ * which OPAC checks itself. Whatever this class does to claims on its own keeps that true while the option is on, see
+ * {@link #planAnchoredHandOver} (leaving member) and {@link #isAnchorChunk} (claims above a limit). While the option
+ * is off, nothing here looks at anchors.
  * <p>
  * Threading: server-thread confined. {@link TeamData}, the indexes and the caches are only ever touched on the server
  * thread. The single exception is a call of {@link #getOwnedTeamClaimCount}/{@link #getOwnedTeamForceloadCount} from
@@ -666,14 +674,20 @@ public class TeamClaimManager implements IClaimsManagerListenerAPI {
         int keep = roomFor(claims.size(), claimsAPI.getPlayerFullClaimLimit(ownerId), otherClaims);
 
         int unclaimed = 0;
-        for (int i = claims.size() - 1; i >= keep; i--) {
+        Set<ClaimPos> kept = new HashSet<>(claims);
+        int excess = claims.size() - keep;
+        for (int i = claims.size() - 1; i >= 0 && excess > 0; i--) {
             ClaimPos pos = claims.get(i);
+            // A chunk with a claiming anchor of the player stays (OPAC never unclaims one either): the next older
+            // claim goes instead, and if only such chunks are left, the player ends up above their private limit
+            if (isAnchorChunk(claimsAPI, ownerId, pos)) continue;
+            excess--;
+            kept.remove(pos);
             claimsAPI.unclaim(pos.dimension, pos.x, pos.z);
             //still there only when claims are disabled server-wide, in which case nothing changes
             if (claimsAPI.get(pos.dimension, pos.x, pos.z) == null) unclaimed++;
         }
 
-        Set<ClaimPos> kept = new HashSet<>(claims.subList(0, keep));
         List<ClaimPos> keptForceloads = new ArrayList<>();
         for (ClaimPos pos : forceloadOrder) {
             if (kept.contains(pos) && forceloaded.contains(pos)) keptForceloads.add(pos);
@@ -1295,13 +1309,18 @@ public class TeamClaimManager implements IClaimsManagerListenerAPI {
 
     /**
      * Unclaims the {@code count} most recently made team claims of the team, newest first, with OPAC's low-level
-     * unclaim (no role or permission involved, this is the server acting).
+     * unclaim (no role or permission involved, this is the server acting). With anchor-based claiming, the chunks
+     * that have a claiming anchor are not among them.
      *
      * @return how many team claims the team has less afterwards
      */
     private int removeNewestTeamClaims(TeamData teamData, int count) {
-        List<ClaimPos> newest = teamData.newestClaims(count);
         IServerClaimsManagerAPI claimsAPI = OpenPACServerAPI.get(server).getServerClaimsManager();
+        // A chunk with a claiming anchor of its owner is left alone (OPAC never unclaims one either, the anchor has to
+        // be removed first): the next older team claims go instead. A team with nothing else left stays above its limit.
+        List<ClaimPos> newest = claimsAPI.usingAnchorBasedClaiming()
+                ? teamData.newestClaims(count, pos -> !isAnchorChunk(claimsAPI, teamData.getOwner(pos), pos))
+                : teamData.newestClaims(count);
         if (anyOwnerHasClaimTask(claimsAPI, teamData, newest)) return 0;
         int before = teamData.getClaimCount();
         for (ClaimPos pos : newest) {
@@ -1479,7 +1498,8 @@ public class TeamClaimManager implements IClaimsManagerListenerAPI {
      * <p>
      * Whatever cannot be transferred keeps the legacy behaviour: it stops being tracked and stays a
      * private claim of the leaver (their team sub-config is removed right after this, so the claim
-     * stops being a team claim).
+     * stops being a team claim). With OPAC's anchor-based claiming that includes every claim the party
+     * owner could not hold, see {@link #planAnchoredHandOver}.
      */
     public void onPlayerLeftParty(UUID partyId, UUID playerUUID) {
         TeamData teamData = teams().get(partyId);
@@ -1545,8 +1565,25 @@ public class TeamClaimManager implements IClaimsManagerListenerAPI {
                     positions.size(), leaverId, ownerId);
             return 0;
         }
+        // With anchor-based claiming: which of the claims can go to the owner, and which take their anchor along
+        Map<ClaimPos, Boolean> anchoredHandOver = null;
+        if (claimsAPI.usingAnchorBasedClaiming()) {
+            if (hasAreaClaimTaskInProgress(claimsAPI, leaverId) || hasAreaClaimTaskInProgress(claimsAPI, ownerId)) {
+                LOGGER.warn("[TeamClaims] Not transferring {} team claim(s) of {} to the party owner {}: an area claim "
+                        + "action (e.g. the removal of a claiming anchor) is in progress. They stay private claims of the "
+                        + "leaving player.", positions.size(), leaverId, ownerId);
+                return 0;
+            }
+            anchoredHandOver = planAnchoredHandOver(claimsAPI, leaverId, ownerId, positions);
+        }
         int transferred = 0;
+        int outOfAnchorRange = 0;
         for (ClaimPos pos : positions) {
+            Boolean takesAnchorAlong = anchoredHandOver == null ? Boolean.FALSE : anchoredHandOver.get(pos);
+            if (takesAnchorAlong == null) {
+                outOfAnchorRange++;
+                continue;
+            }
             IPlayerChunkClaimAPI current = claimsAPI.get(pos.dimension, pos.x, pos.z);
             if (current == null || !leaverId.equals(current.getPlayerId())) {
                 LOGGER.warn("[TeamClaims] Not transferring the tracked team claim at {}: it is no longer owned by {}.",
@@ -1555,16 +1592,144 @@ public class TeamClaimManager implements IClaimsManagerListenerAPI {
             }
             try {
                 //null only when claims are disabled server-wide, in which case nothing changed
-                if (claimsAPI.claim(pos.dimension, ownerId, ownerSubIndex, pos.x, pos.z, current.isForceloadable()) != null)
+                if (claimsAPI.claim(pos.dimension, ownerId, ownerSubIndex, pos.x, pos.z, current.isForceloadable()) != null) {
                     transferred++;
-                else
+                    // The claim change removed the leaver's anchor of this chunk, the owner gets one in its place (what
+                    // OPAC's own claim transfer does)
+                    if (takesAnchorAlong) claimsAPI.addAnchor(pos.dimension, new ChunkPos(pos.x, pos.z), ownerId);
+                } else
                     LOGGER.warn("[TeamClaims] Could not transfer the team claim at {}: claims are disabled.", pos);
             } catch (Exception e) {
                 LOGGER.warn("[TeamClaims] Failed to transfer the team claim at {} from {} to {}",
                         pos, leaverId, ownerId, e);
             }
         }
+        if (outOfAnchorRange > 0)
+            LOGGER.info("[TeamClaims] {} team claim(s) of {} were not transferred to the party owner {}: they would not be "
+                    + "within the range of one of the owner's claiming anchors, or the owner cannot take their anchor. "
+                    + "They stay private claims of the leaving player.", outOfAnchorRange, leaverId, ownerId);
         return transferred;
+    }
+
+    // ==================== Claiming anchors ====================
+
+    /**
+     * The hand-over of the team claims of a leaving member while OPAC's anchor-based claiming is on, where every claim
+     * of a player has to be within the range of one of that player's own claiming anchors. Decides, per dimension,
+     * which of {@code positions} can become claims of the party owner without breaking that for the owner or for the
+     * claims the leaver keeps:
+     * <ul>
+     *     <li>an anchor of the leaver on one of the claims goes to the owner together with the claim, as in OPAC's own
+     *     claim transfer and on the same conditions (the owner has room for another anchor in that dimension and the
+     *     owner's anchor range is not smaller than the leaver's), and only if none of the claims the leaver keeps in
+     *     that dimension is within its range;</li>
+     *     <li>a claim with an anchor that does not go along stays with the leaver, so do its anchor and everything
+     *     that depends on it;</li>
+     *     <li>any other claim is handed over if it is within the owner's range of one of the owner's anchors, counting
+     *     the ones that come along.</li>
+     * </ul>
+     * No anchor is ever removed without its claim, and the owner never gets a claim outside their anchor ranges.
+     *
+     * @return the claims to hand over, each with whether its chunk has an anchor that goes along; every other position
+     *         stays a claim of the leaver
+     */
+    private Map<ClaimPos, Boolean> planAnchoredHandOver(IServerClaimsManagerAPI claimsAPI, UUID leaverId, UUID ownerId,
+            List<ClaimPos> positions) {
+        Map<ClaimPos, Boolean> plan = new HashMap<>();
+        Map<ResourceLocation, List<ClaimPos>> byDimension = new LinkedHashMap<>();
+        for (ClaimPos pos : positions) byDimension.computeIfAbsent(pos.dimension, d -> new ArrayList<>()).add(pos);
+        for (Map.Entry<ResourceLocation, List<ClaimPos>> entry : byDimension.entrySet()) {
+            ResourceLocation dimension = entry.getKey();
+            List<ClaimPos> handedOver = entry.getValue();
+            Set<ChunkPos> leaverAnchors = anchorsOf(claimsAPI, leaverId, dimension);
+            Set<ChunkPos> ownerAnchors = new HashSet<>(anchorsOf(claimsAPI, ownerId, dimension));
+            int leaverRange = claimsAPI.getPlayerFullAnchorRange(leaverId, dimension);
+            int ownerRange = claimsAPI.getPlayerFullAnchorRange(ownerId, dimension);
+            Set<ChunkPos> goingAlong = new HashSet<>();
+            if (!leaverAnchors.isEmpty() && ownerRange >= leaverRange) {
+                long room = (long) claimsAPI.getPlayerFullAnchorLimit(ownerId, dimension) - ownerAnchors.size();
+                List<ChunkPos> keptByLeaver = claimsKeptByLeaver(claimsAPI, leaverId, dimension, handedOver);
+                for (ClaimPos pos : handedOver) {
+                    if (room <= 0) break;
+                    ChunkPos anchor = new ChunkPos(pos.x, pos.z);
+                    if (!leaverAnchors.contains(anchor)) continue;
+                    boolean needed = false;
+                    for (ChunkPos kept : keptByLeaver) {
+                        if (isWithinAnchorRange(anchor, leaverRange, kept.x, kept.z)) {
+                            needed = true;
+                            break;
+                        }
+                    }
+                    if (needed) continue;
+                    goingAlong.add(anchor);
+                    room--;
+                }
+            }
+            ownerAnchors.addAll(goingAlong);
+            for (ClaimPos pos : handedOver) {
+                ChunkPos chunk = new ChunkPos(pos.x, pos.z);
+                boolean takesAnchorAlong = goingAlong.contains(chunk);
+                if (leaverAnchors.contains(chunk) && !takesAnchorAlong) continue;
+                boolean anchored = false;
+                for (ChunkPos anchor : ownerAnchors) {
+                    if (isWithinAnchorRange(anchor, ownerRange, pos.x, pos.z)) {
+                        anchored = true;
+                        break;
+                    }
+                }
+                if (anchored) plan.put(pos, takesAnchorAlong);
+            }
+        }
+        return plan;
+    }
+
+    /** The claims of the leaver in a dimension that are not among the ones to hand over. */
+    private static List<ChunkPos> claimsKeptByLeaver(IServerClaimsManagerAPI claimsAPI, UUID leaverId,
+            ResourceLocation dimension, List<ClaimPos> handedOver) {
+        var info = claimsAPI.getPlayerInfo(leaverId);
+        IPlayerDimensionClaimsAPI dimensionClaims = info == null ? null : info.getDimension(dimension);
+        if (dimensionClaims == null) return List.of();
+        Set<ChunkPos> handedOverChunks = new HashSet<>();
+        for (ClaimPos pos : handedOver) handedOverChunks.add(new ChunkPos(pos.x, pos.z));
+        List<ChunkPos> kept = new ArrayList<>();
+        dimensionClaims.getStream().forEach(posList -> posList.getStream().forEach(chunk -> {
+            if (!handedOverChunks.contains(chunk)) kept.add(chunk);
+        }));
+        return kept;
+    }
+
+    /** OPAC's anchor range: a square around the anchor, {@code range} chunks in every direction. */
+    private static boolean isWithinAnchorRange(ChunkPos anchor, int range, int x, int z) {
+        return Math.abs((long) x - anchor.x) <= range && Math.abs((long) z - anchor.z) <= range;
+    }
+
+    /** The claiming anchors of a player in a dimension, empty if they have none. */
+    private static Set<ChunkPos> anchorsOf(IServerClaimsManagerAPI claimsAPI, UUID playerId, ResourceLocation dimension) {
+        var info = claimsAPI.getPlayerInfo(playerId);
+        IPlayerDimensionClaimsAPI dimensionClaims = info == null ? null : info.getDimension(dimension);
+        return dimensionClaims == null ? Set.of() : dimensionClaims.getAnchors();
+    }
+
+    /**
+     * Whether the chunk has a claiming anchor of {@code ownerId} while OPAC's anchor-based claiming is on. OPAC refuses
+     * to unclaim such a chunk (the anchor has to be removed first, which unclaims what only it covers), because every
+     * other claim in its range may depend on it. Team Claims therefore never unclaims one on its own either; always
+     * false while the option is off.
+     */
+    private static boolean isAnchorChunk(IServerClaimsManagerAPI claimsAPI, @Nullable UUID ownerId, ClaimPos pos) {
+        return ownerId != null && claimsAPI.usingAnchorBasedClaiming()
+                && anchorsOf(claimsAPI, ownerId, pos.dimension).contains(new ChunkPos(pos.x, pos.z));
+    }
+
+    /** Like {@link #hasClaimTaskInProgress}, for OPAC's spread-out area claim actions (the removal of an anchor is one). */
+    private boolean hasAreaClaimTaskInProgress(IServerClaimsManagerAPI claimsAPI, UUID playerId) {
+        try {
+            var info = claimsAPI.getPlayerInfo(playerId);
+            return info instanceof IServerPlayerClaimInfo<?> internalInfo && internalInfo.isAreaClaimTaskInProgress();
+        } catch (Exception e) {
+            LOGGER.warn("[TeamClaims] Could not check the area claim task state of {}", playerId, e);
+            return true;
+        }
     }
 
     /**
@@ -1723,6 +1888,16 @@ public class TeamClaimManager implements IClaimsManagerListenerAPI {
         /** The {@code count} most recently made team claims, newest first. */
         private List<ClaimPos> newestClaims(int count) {
             return newest(claimOwners.keySet(), count);
+        }
+
+        /** The {@code count} most recently made team claims that pass the filter, newest first. */
+        private List<ClaimPos> newestClaims(int count, Predicate<ClaimPos> filter) {
+            List<ClaimPos> all = new ArrayList<>(claimOwners.keySet());
+            List<ClaimPos> result = new ArrayList<>();
+            for (int i = all.size() - 1; i >= 0 && result.size() < count; i--) {
+                if (filter.test(all.get(i))) result.add(all.get(i));
+            }
+            return result;
         }
 
         /** The {@code count} most recently made team forceloads, newest first. */

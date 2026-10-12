@@ -142,7 +142,10 @@ public final class TeamRoles {
             TeamAction teamAction = switch (action) {
                 case UNCLAIM -> TeamAction.UNCLAIM;
                 case FORCELOAD, UNFORCELOAD -> TeamAction.FORCELOAD;
-                default -> null;//claims are checked in interceptClaim, which knows the sub-config
+                // Claims are checked in interceptClaim, which knows the sub-config (also the claim an ANCHOR makes).
+                // UNANCHOR and its UNCLAIM_UNANCHORED only ever touch the acting player's own anchor and the claims that
+                // depend on it, team claims included, which then have to go whatever the unclaim level is.
+                default -> null;
             };
             if (teamAction == null || currentOverride.getType() == ClaimActionPermissionOverrideType.FORBID)
                 return currentOverride;

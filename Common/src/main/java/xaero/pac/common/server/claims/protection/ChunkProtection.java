@@ -2591,9 +2591,16 @@ public class ChunkProtection
 		if(claimsManager.getPermissionHandler().playerHasAdminModePermission(player))
 			return false;
 		IPlayerConfigManager configManager = serverData.getPlayerConfigManager();
-		boolean result = !tcTeamClaim && ServerPlayerConfigUtils.isOverClaimLimit(configManager.getLoadedConfig(claimOwnerId));
-		if(!result)
-			result = ServerPlayerConfigUtils.isOverClaimLimit(configManager.getLoadedConfig(accessor.getUUID()));
+		IPlayerConfig claimOwnerConfig = configManager.getLoadedConfig(claimOwnerId);
+		// [Team Claims] a team claim doesn't count against its technical owner's claim limit (see isTeamClaimConfig),
+		// the owner's claiming anchors are still the owner's own
+		boolean result = tcTeamClaim ?
+				ServerPlayerConfigUtils.isOverClaimingAnchorLimit(claimOwnerConfig, player.level().dimension().location()) :
+				ServerPlayerConfigUtils.isOverEitherClaimingLimit(claimOwnerConfig, player.level().dimension().location());
+		if(!result) {
+			IPlayerConfig accessorConfig = configManager.getLoadedConfig(accessor.getUUID());
+			result = ServerPlayerConfigUtils.isOverEitherClaimingLimit(accessorConfig, player.level().dimension().location());
+		}
 		if(!result)
 			return false;
 		long time = System.currentTimeMillis();

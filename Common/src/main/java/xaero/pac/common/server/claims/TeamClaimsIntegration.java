@@ -83,7 +83,10 @@ public final class TeamClaimsIntegration {
 
 		/**
 		 * Called by {@code ServerClaimsManager.tryToUnclaimHelper} when the requesting player
-		 * doesn't own the claim and the request isn't forced.
+		 * doesn't own the claim and the request isn't forced. Not called for the unclaims that come
+		 * with the removal of a claiming anchor, which only ever take the claims of the anchor's owner.
+		 * A team claim on a chunk with a claiming anchor of its owner is refused by the caller afterwards
+		 * ({@code CANT_UNCLAIM_ANCHOR}), as for the owner themselves.
 		 *
 		 * @return true if the requesting player may unclaim this claim because it is a team
 		 *         claim of a party they're also a member of, in which case the normal unclaim

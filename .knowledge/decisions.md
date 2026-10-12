@@ -27,3 +27,9 @@
 - 2026-10-09 T5 split: 5a (over-limit texts, packet gametests) runs in a worktree parallel to T3 because its files are disjoint from T3's (T3 is barred from lang files, `TeamClaimManager` and the existing gametest files); 5b (FTB lang keys, docs, version, jars) needs T3's key list and runs after both.
 - Over-limit durations reuse the party screen's three `party_screen_time_*` keys as one nested component — chat, `/teamclaims info` and screen can never show different units for the same time; no duplicate keys.
 - Merged worktrees of T2/T4 removed (branches deleted after merge; folders deleted by hand because git hit Windows' path length limit).
+- 2026-10-12 v1.3: upstream is brought in as a real git merge of `upstream/1.21` (`75ce21d6`), not as a patch — a temporary local graft (`git replace --graft`, removed again) gave the fork root commit the parent `c0d97b37`, so git did a true 3-way merge (9 conflicted files); the merge commit has upstream as second parent, so later upstream updates are a plain `git merge`. Upstream history is pushed to origin with it.
+- `Forge/` and `docs/javadoc/` stay deleted in the merge (the fork removed both; upstream only changed them).
+- Version `1.3.0+opac.0.32.7` (protocol and save data change).
+- Anchors with team claims (lead): claiming anchors stay the per-player, per-dimension concept of upstream, default off, no team anchor pool; a team claim is a claim of the player who makes it and obeys that player's anchors. Nothing changes compared with 1.2.0 while `anchorBasedClaiming` is off.
+- Upstream takes packet id 50 for its anchors packet; the four party packets of the fork (50–53 in 1.2.0) move to new ids (client and server must be the same version anyway).
+- Linkage checker is a dependency-free JDK 21 single-file tool in `tools/linkcheck/` (own class file reader), not part of the Gradle build and not shipped.

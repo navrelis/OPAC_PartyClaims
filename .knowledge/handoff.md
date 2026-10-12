@@ -1,30 +1,12 @@
-# Handoff — OPAC Team Claims v1.2.0 (finished 2026-10-09)
+# Handoff — OPAC Team Claims v1.3.0 (in progress, 2026-10-12)
 
-All tasks of v1.2.0 are done, verified and pushed on `v1.2-dev` (see `plan.md`, `log.md`, `report.md`). Nothing is
-running. (The handoff of the stopped session of 2026-10-09 is in the git history of this file.)
+Branch `v1.3-dev` (worktree `.claude/worktrees/dazzling-noether-a1675c`), based on `50d1919`. Remote `upstream` = thexaero/open-parties-and-claims.
+A merge of `upstream/1.21` is in progress in this checkout (not committed): see `plan.md` for the task state and `log.md` for what ran.
+To redo the merge base: `git replace --graft e901c190 c0d97b37`, `git merge --no-commit --no-ff upstream/1.21`, `git replace -d e901c190`; then `git rm` everything under `Forge/` and `docs/`.
 
-## State
-- `v1.2-dev` = origin: budgets, party screen, FTB Teams sync, lang en + de, tests, README, version `1.2.0+opac.0.31.6`.
-- `v1.2-dev` is merged into `fabric-port` (GitHub default) and pushed; `main` is untouched.
-- Release files: `ExportedJars/v1.2.0/` (two jars, not committed; `CURSEFORGE.md` committed).
-- CurseForge project 1704256 (Beta, files go through CurseForge's review first): NeoForge 1.2.0 = file 9106819 (no relations), Fabric 1.2.0 = file 9108825 (Fabric API + Forge Config API Port required, FTB Teams (Fabric) optional). The project description and summary on the website still show the 1.1.0 text.
-- Untracked and to stay untracked: `graphify-out/`, `ExportedJars/opacteamclaimslogo.png`.
-
-## Open for the user
-1. Manual test checklist in `report.md` (two clients; with and without FTB Teams).
-2. CurseForge website: project description and summary from `ExportedJars/v1.2.0/CURSEFORGE.md`; optionally add FTB Teams (NeoForge) as optional relation of the NeoForge file.
-3. Server admins: read "Updating from 1.1.0" in the README (solo teams have a team limit of 0 by default).
-
-## Commands
+Commands and "things that cost time" (full list: git history of this file, commit `50d1919`):
 - Without FTB Teams: `./gradlew :Fabric:build :NeoForge:build :Fabric:runBootTest :NeoForge:runTeamClaimsGameTest` -> "All 77 required tests passed" twice.
 - With FTB Teams: `./gradlew :Fabric:runBootTestFtb :NeoForge:runTeamClaimsGameTestFtb` -> "All 111 required tests passed" twice.
-- Never two Gradle invocations in the same checkout at once.
-
-## Things that cost time (avoid them)
-- A subagent started with `isolation: "worktree"` gets a worktree based on the old `main` root commit: put the wanted
-  base commit in the instruction and allow `git reset --hard <commit>` on its own branch as the first step.
-- `git worktree remove` fails on Windows with "Filename too long" after deregistering the worktree: delete the folder
-  with `[System.IO.Directory]::Delete('\\?\<path>', $true)`.
-- With staged work of an agent in the checkout, commit board files with `git commit -o -- <paths>`.
-- `python` is not on the Git Bash PATH (use `py`); filter git's CRLF warnings with `2>/dev/null`.
-- Other Claude sessions run Gradle daemons on this machine: only stop Java processes whose command line contains this repo's path.
+- Never two Gradle invocations in the same checkout; only stop Java processes whose command line contains this repo's path.
+- `python` is not on the Git Bash PATH (use `py`); a subagent with `isolation: "worktree"` starts on the old `main` root commit.
+- CurseForge: project 1704256; 1.2.0 files NeoForge 9106819, Fabric 9108825; uploader in `F:\Coding\CurseForgeUpload`.

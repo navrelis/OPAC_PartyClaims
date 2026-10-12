@@ -42,8 +42,8 @@ public final class TeamClaimsPacketTestNeoForge {
     }
 
     @GameTest(template = TeamClaimsGameTestMod.EMPTY_STRUCTURE)
-    public static void packetsAreRegisteredWithIds50To53(GameTestHelper helper) {
-        TeamClaimsPacketTestCases.packetsAreRegisteredWithIds50To53(helper);
+    public static void packetsAreRegisteredWithIds100To103(GameTestHelper helper) {
+        TeamClaimsPacketTestCases.packetsAreRegisteredWithIds100To103(helper);
     }
 
     @GameTest(template = TeamClaimsGameTestMod.EMPTY_STRUCTURE)
