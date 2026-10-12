@@ -10,7 +10,7 @@ not committed). Version `1.3.0+opac.0.32.7`, mod id `openpartiesandclaims`. Curs
 | # | Requirement | Result |
 |---|---|---|
 | 1 | Fork contains upstream OPAC 0.32.7 with Team Claims on top | Real git merge of `thexaero/open-parties-and-claims` `1.21` (`75ce21d6`) as commit `7d7196c3` (two parents; later upstream updates are a plain `git merge`). 9 conflicted files resolved; `Forge/` and `docs/javadoc/` stay deleted. Fork packets moved from ids 50–53 to 100–103 (upstream took 50). |
-| 2 | Proof the World Map crash is gone | Linkage checker `tools/linkcheck/` on the final jars against World Map 1.47.0 + Minimap 26.6.0: Fabric 102 + 54 references OK, NeoForge 103 + 55 OK, 0 missing, exit 0. Control on the 1.2.0 jars (both loaders): exit 1, 9 missing incl. `IClientClaimsManagerAPI.usingAnchorBasedClaiming()`. **A dev-client run with World Map was not done** (manual checklist). |
+| 2 | Proof the World Map crash is gone | Linkage checker `tools/linkcheck/` on the final jars against World Map 1.47.0 + Minimap 26.6.0: Fabric 102 + 54 references OK, NeoForge 103 + 55 OK, 0 missing, exit 0. Control on the 1.2.0 jars (both loaders): exit 1, 9 missing incl. `IClientClaimsManagerAPI.usingAnchorBasedClaiming()`. Dev-client run (NeoForge, 2026-10-13, after the upload): map opened, right-click menu shown, "Claim Selected" claimed chunks, no crash, no linkage error in the log. |
 | 3 | Existing tests green, new tests | Default runs 100 / 100 on Fabric and NeoForge, with FTB Teams 134 / 134 on both (was 77 / 111 in 1.2.0). New: 4 + 5 anchor tests, 7 claim limits packet tests, 7 `overLimitEnforcement` tests, and a separate save-compatibility run (4 tests per loader) that starts the server on world data written by the real 1.2.0 code. |
 | 4 | README upgrade notes | "Updating from 1.2.0": server and all clients together (network version 6 → 7), existing worlds load as they are, no way back to 1.2.0. |
 | 5 | Changelog, jars, `CURSEFORGE.md` | Done, see above. |
@@ -52,7 +52,7 @@ not committed). Version `1.3.0+opac.0.32.7`, mod id `openpartiesandclaims`. Curs
   `CURSEFORGE.md` diffs.
 
 ## Not verified
-- No client was started: the World Map right-click, the map claim / anchor entries, and the layout of the OPAC menu
+- Client: only one NeoForge dev-client run (see requirement 2); Fabric client, anchor entries on the map, and the layout of the OPAC menu
   with upstream's new Anchor / Unanchor buttons next to the "Party" button are untested (coordinates only).
 - Lang check of T4 (en 820 keys, de 165, fork keys identical) is the agent's claim.
 - Not shown that the save-compat tests fail on wrong data (they compare exact constants of the fixture).
