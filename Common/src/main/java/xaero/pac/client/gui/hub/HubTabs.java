@@ -25,6 +25,7 @@ import net.minecraft.client.gui.screens.Screen;
 import xaero.pac.OpenPartiesAndClaims;
 import xaero.pac.client.gui.party.PartyScreen;
 import xaero.pac.client.parties.party.IClientPartyStorage;
+import xaero.pac.client.teamclaims.TeamClaimsClientData;
 import xaero.pac.common.packet.parties.PartyBudgetData;
 import xaero.pac.common.platform.Services;
 
@@ -47,13 +48,11 @@ public final class HubTabs {
 	}
 
 	/**
-	 * Checks whether the player may see the Admin tab.
-	 * <p>
-	 * TODO Admin tab (task 4): return the admin flag that the server sends. The server checks every admin request
-	 * itself, so this only decides whether the tab is shown. It is false until then.
+	 * Checks whether the player may see the Admin tab, which is the flag that the server sends. The server checks every
+	 * admin request itself, so this only decides whether the tab is shown.
 	 */
 	public static boolean isAdminTabVisible() {
-		return false;
+		return TeamClaimsClientData.INSTANCE.isAdminMenuAllowed();
 	}
 
 	/**
@@ -109,8 +108,7 @@ public final class HubTabs {
 			case PARTY -> new PartyScreen(escape, parent);
 			case CLAIMS -> new ClaimsTabScreen(escape, parent);
 			case TEAM -> new TeamTabScreen(escape, parent);
-			// TODO Admin tab (task 4): the screen of the Admin tab
-			case ADMIN -> new PartyScreen(escape, parent);
+			case ADMIN -> new AdminTabScreen(escape, parent);
 		};
 	}
 
