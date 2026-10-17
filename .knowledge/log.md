@@ -83,3 +83,5 @@
 - Merged branch: build + runBootTest + runTeamClaimsGameTest green, 123 / 123 both loaders.
 - T4a done (Sonnet): Team tab (roles, territory messages, convert with confirm, claim-as toggle shared via ClaimAsToggle, settings button to the team sub-config, budget with bonus), Claims tab uses TeamInfoData.subConfigIndex and maxClaimActionSize, P no longer closes the hub while an edit box has focus. 128 / 128 both loaders.
 - T5 done (Sonnet): version 1.4.0+opac.0.32.7, README, changelog, ExportedJars/v1.4.0/CURSEFORGE.md (release type line to be set at upload; 1.3.0 went up as Release on the owner request).
+- 2026-10-17 session handoff (context limit): T4b stopped mid-task; see handoff-2026-10-17-5b0bb036.md in the worktree root.
+- 2026-10-17 new lead session: resumed from handoff; T4b WIP committed in ../opac-t4-admin, merge of hub branch started there (1 conflict, HubTabs import); T4b phase 1 (merge resolution) to Sonnet.
