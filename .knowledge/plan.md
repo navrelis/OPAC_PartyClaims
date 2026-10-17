@@ -11,6 +11,6 @@ Status: open / in progress / in review / done. Size S/L, difficulty E/H. One Gra
 | 3 | Hub frame + Claims tab: P key, tab bar, Party tab = party screen, chunk grid, selection + area requests, Private/Team toggle, budget bars | L/E | Sonnet | 1 | done (110 per loader; screens not yet seen in game) | builds both loaders; screen works in dev client |
 | 4a | Team tab + Claims tab uses team info (sub index, max action size) | L/E | Sonnet (this checkout) | 2, 3 | done (128 per loader) | builds; Team tab edits go through existing commands and option packets |
 | 4b | Admin tab (configs, players, teams) | L/E | Sonnet (worktree ../opac-t4-admin) | 2, 3 | done (135 / 169 per loader, merged 9ca8a7a6) | builds; every admin action goes through task 2's packets |
-| 5 | Docs/release prep: version 1.4.0+opac.0.32.7, README, changelog, CURSEFORGE.md, lang en + de complete | S/E | Sonnet | 4 | done (docs to recheck after 4b) | docs match behaviour |
+| 5 | Docs/release prep: version 1.4.0+opac.0.32.7, README, changelog, CURSEFORGE.md, lang en + de complete | S/E | Sonnet | 4 | done (rechecked after 4b) | docs match behaviour |
 | 6 | Acceptance: all test runs, dedicated server with two players, linkcheck vs World Map/Minimap | – | lead | 1–5 | open | checklist in report.md |
 | 7 | Release: jars to ExportedJars/v1.4.0, dev instance mods/, push, CurseForge upload both loaders, report | – | lead | 6 | open | file ids in report.md |

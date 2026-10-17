@@ -26,7 +26,7 @@ and a per-team bonus for team claims and team forceloads. It is still based on O
 * **Fixed:** in the party screen the member rows no longer move when a rank changes (they were sorted by rank, so the
   row you had just clicked jumped to another place). The rows are now ordered by owner, then name.
 * **Servers that do not use the new features see no change:** the Admin tab and `/teamclaims bonus` are only for
-  permission level 2 and the permission node `xaero.pac_admin_menu`, and a team without a bonus behaves as in 1.3.0.
+  permission level 2 or the permission node `xaero.pac_admin_menu`, and a team without a bonus behaves as in 1.3.0.
 * Coming from 1.2.0 or older? "Updating from 1.2.0" and "Updating from 1.1.0" apply to you as well.
 
 ## Updating from 1.2.0
@@ -254,7 +254,8 @@ The budgets, the limits and the rest of Team Claims are the same as with anchors
 One screen with tabs, opened with the key **P** (the default; rebindable in Minecraft's Controls under the category
 "Open Parties and Claims" as "Open Parties and Claims Hub"). It opens on the tab you used last, and pressing the key
 again closes it while no text field has the focus. P is also vanilla's "Social Interactions" key, so Controls shows a
-conflict until one of the two is rebound. The tabs are **Party**, **Claims**, **Team** and, only for admins, **Admin**.
+conflict until one of the two is rebound. The tabs are **Party**, **Claims**, **Team** (only while your party is a team) and,
+only for admins, **Admin**.
 The hub can also be opened with the **Party** button in the OPAC menu (the menu of the apostrophe key). On a server
 without the mod, or with parties disabled, the party parts of it only say so.
 
@@ -263,11 +264,15 @@ for claiming without commands.
 
 * Click a chunk, or drag a rectangle, to select it, then press **Claim**, **Unclaim**, **Forceload** or **Unforceload**.
   The buttons send the same area requests as the claim UI of Xaero's World Map, so every OPAC rule applies (limits,
-  anchors, team roles) and the server answers as usual. The server may refuse very large selections. The arrow keys
-  move the grid (Shift moves it further) and **Centre** brings it back to your chunk.
-* Your own private claims, your team's claims, your party's, other players' and server claims have their own colours,
-  forceloaded chunks carry a dot and your own chunk a marker; hover a chunk for its coordinates, its owner, the claim
-  name and the forceload state. A legend is shown next to the grid.
+  anchors, team roles) and the server answers as usual. The four buttons are disabled while the selection is larger
+  than the OPAC server option `maxSingleClaimActionSize` (121 chunks by default); the tab then names the limit. A right
+  click on the grid or **Clear selection** deselects. The arrow keys move the grid (Shift moves it further) and
+  **Centre** brings it back to your chunk.
+* Every chunk is drawn in the colour of its claim. A small mark in its top left corner tells whose claim it is: white for
+  your own private claims, yellow for your team's claims, green for claims of other party members and light blue for
+  server claims (expired claims are grey); the claims of other players have no mark. Forceloaded chunks carry a white
+  square in the bottom right corner and your own chunk a red outline. Hover a chunk for its coordinates, what kind of
+  claim it is, its owner, the claim name and the forceload state. A legend is shown next to the grid.
 * The **Claim as: Private / Team** button decides who owns what you claim: only you, or your team. It switches the
   selected sub-claim (`claims.usedSub`, the main config or the team sub-config), and so it **also decides what Xaero's
   World Map "Claim Selected" claims**. Without a team only Private is possible. It applies while you claim as a player;
@@ -275,12 +280,16 @@ for claiming without commands.
 * The budget lines show your private claims and forceloads and, in a team, the team claims and forceloads against the
   limits.
 
-**Team tab.** Your team at a glance: the team name, the team budget (team claims and team forceloads against the limit,
-bonus included, and the countdown while the team is over its limit), the rank required to claim, unclaim and forceload
-(the party owner and admins can change them; everybody else sees them read-only), your own switch for the claim welcome
-messages, **Convert to team** and **Convert to personal** with a radius and a confirmation, the same Private / Team
-switch for claiming as the Claims tab, and a button to the protection settings of the team. It does what
-`/teamclaims info`, `roles`, `territorymessages` and `convert` do, and the server checks everything as before.
+**Team tab.** Your team at a glance: the team name and member count, the team budget (team claims and team forceloads
+against the limit, bonus included, a line with the bonus if the team has one, and the countdown while the team is over
+its limit), the lowest rank required to claim, unclaim and forceload (a click on the button picks the next rank; the
+party owner and admins can change them, everybody else sees them read-only), your own switch for the claim welcome
+messages, the claim colour and claims name of the team, the same Private / Team switch for claiming as the Claims tab,
+a button to the protection and appearance settings of the team (read-only for everybody but the party owner and
+admins), and **To team** and **To personal** under "Convert claims around you", with a radius button and a confirmation.
+The radius button goes from 0 to 4, and the server option `convertMaxRadius` still limits it; a larger radius needs
+the command. The tab does what `/teamclaims info`, `roles`, `territorymessages` and `convert` do, and the
+server checks everything as before.
 
 **Admin tab.** Only with the permission described in "Admin menu".
 
@@ -475,30 +484,34 @@ needs the same permission.
 
 * **OPAC server**: every number, on/off, choice and text option of `openpartiesandclaims-server.toml`.
 * **Team Claims**: the same for `openpartiesandclaims-teamclaims-server.toml`.
-* **Players**: pick an online player, or type a name (also offline players that have a config); the tab shows their
-  limits and what they use and edits their bonus claims, bonus forceloads, bonus anchors and bonus anchor range (the
-  player config options `claims.bonusChunkClaims`, `claims.bonusChunkForceloads`, `claims.bonusAnchors` and
-  `claims.bonusAnchorRange`).
-* **Teams**: the teams with their member count and what they use of their limits; edit a team's bonus team claims and
-  bonus team forceloads (see "Team bonus" below).
+* **Players**: click an online player, or type a name or a UUID and press **Look up**. Offline players work as far as
+  OPAC knows them. The tab shows their limits and what they use and edits their bonus claims, bonus forceloads, bonus
+  anchors and bonus anchor range (the player config options `claims.bonusChunkClaims`, `claims.bonusChunkForceloads`,
+  `claims.bonusAnchors` and `claims.bonusAnchorRange`). A bonus is a whole number from -1,000,000 to 1,000,000; a
+  negative one lowers the limit.
+* **Teams**: the teams with their member count and what they use of their limits, with a search box for the team name;
+  edit a team's bonus team claims and bonus team forceloads, each from 0 to 1,000,000 (see "Team bonus" below).
 
-In the two option sections the options can be searched by name. Each option shows its current value, its range or the
-allowed values, and its comment as a tooltip. The server checks the value against the config spec, writes it to the toml
-and answers with the new value or the reason it was refused.
+In the two option sections the options can be searched: every word of the search has to be in the option's path, its
+readable name or its comment. Each option shows its current value; its tooltip has the path, the comment, the default,
+the range or the allowed values and the value the server runs with. The server checks the value against the config
+spec, writes it to the toml and answers with the new value or the reason it was refused.
 
 **List options stay toml-only.** The protection block, entity and item lists, the dimension lists and every other list
 option are not shown; edit them in the toml as before.
 
-**Live and restart-only options.** Most options apply at once, like a change in the toml file does. Options that are only
-read at server start (the ones marked "restart", for example `enabled` and `ftbTeamsSync` of the Team Claims config) are
-written to the toml file only: the running server keeps its current value until the next restart, and the tab shows
-the saved value as "after restart" next to the running one.
+**Live and restart-only options.** Options that are only read at server start carry a "restart" badge (an "R" in a
+narrow window). They are written to the toml file only: the running server keeps its current value until the next
+restart, and the tab shows "→ <value> after restart" under the option name until then. In the Team Claims config
+these are `enabled` and `ftbTeamsSync`; every other option of it applies at once, like a change in the toml file does.
+Every option of OPAC's own server config is marked "restart" in its definition, so a change there is saved and takes
+effect after the next start.
 
 **Log.** Every change is logged in the server log with the name of who made it, the option and the new value
 (`[TeamClaims] <name> set the ... server config option ...`), and so is every bonus change.
 
 **Team bonus.** `/teamclaims bonus <team>` shows the bonus and the limits of a team, `/teamclaims bonus <team> claims <n>`
-and `/teamclaims bonus <team> forceloads <n>` set the bonus team claims or team forceloads (0 or more). `<team>` is the
+and `/teamclaims bonus <team> forceloads <n>` set the bonus team claims or team forceloads (0 to 1,000,000). `<team>` is the
 team name (in quotes if it has spaces) or the party id. The team limit is the formula of "Claim budgets" plus the bonus,
 also below `teamClaimsMinMembers`. Lowering a bonus can put a team over its limit; the over-limit deadline of "Over the
 limit" then starts as if a member had left. The admin menu and the command do the same.
@@ -554,10 +567,10 @@ start with a fresh world, the last two on a copy of the world data of a 1.2.0 se
 
 | Run | FTB Teams | Tests | Log |
 | --- | --- | --- | --- |
-| `gradlew.bat :Fabric:runBootTest --console=plain` | not installed | 100 | `run-boottest/logs/latest.log` |
-| `gradlew.bat :NeoForge:runTeamClaimsGameTest --console=plain` | not installed | 100 | `NeoForge/runs/teamClaimsGameTest/logs/latest.log` |
-| `gradlew.bat :Fabric:runBootTestFtb --console=plain` | installed | 134 | `run-boottest-ftb/logs/latest.log` |
-| `gradlew.bat :NeoForge:runTeamClaimsGameTestFtb --console=plain` | installed | 134 | `NeoForge/runs/teamClaimsGameTestFtb/logs/latest.log` |
+| `gradlew.bat :Fabric:runBootTest --console=plain` | not installed | 135 | `run-boottest/logs/latest.log` |
+| `gradlew.bat :NeoForge:runTeamClaimsGameTest --console=plain` | not installed | 135 | `NeoForge/runs/teamClaimsGameTest/logs/latest.log` |
+| `gradlew.bat :Fabric:runBootTestFtb --console=plain` | installed | 169 | `run-boottest-ftb/logs/latest.log` |
+| `gradlew.bat :NeoForge:runTeamClaimsGameTestFtb --console=plain` | installed | 169 | `NeoForge/runs/teamClaimsGameTestFtb/logs/latest.log` |
 | `gradlew.bat :Fabric:runSaveCompatTest --console=plain` | not installed | 4 | `run-savecompat/logs/latest.log` |
 | `gradlew.bat :NeoForge:runSaveCompatGameTest --console=plain` | not installed | 4 | `NeoForge/runs/saveCompatGameTest/logs/latest.log` |
 
@@ -569,7 +582,8 @@ unclaim/forceload, event-driven claim transfer on leave (party hooks queue membe
 end of the tick), long and non-ASCII team names, hardening (quick join and leave, claim overhead after many changes,
 name validation, late joiners, corrupt team files, forceload tickets), the server config and the forceload grace
 period, territory messages, `info`/`list`, team roles, `convert`, the packets of the party screen (invitations and
-budget numbers) and team claims together with OPAC's claiming anchors (`anchorBasedClaiming` switched on for the length of
+budget numbers), the hub logic, the admin menu (its permission, the config registry with live and restart-only
+writes, the player and team bonus) with its packets, and team claims together with OPAC's claiming anchors (`anchorBasedClaiming` switched on for the length of
 the test). The runs with FTB Teams (FTB Teams 2101.1.11, FTB Library and Architectury as test-only runtime
 mods) run the same tests plus the FTB Teams sync tests: every operation in both directions, the rank stability rule, no
 feedback loops, the first sync including conflicts, offline members, the saved link, the size limits, and the interplay
@@ -600,8 +614,8 @@ the one of 1.2.0 with World Map 1.47.0 is found without starting the game:
   also decides what Xaero's World Map "Claim Selected" claims.
 * **Team tab:** team name, budget with bonus and the over-limit countdown, the roles for claim, unclaim and forceload,
   your own territory-message switch, convert to team and to personal with a radius and a confirmation, the Private /
-  Team switch, and a button to the team's protection settings. Editable for the party owner and admins, read-only for
-  everybody else; the server enforces it as before.
+  Team switch, and a button to the team's protection and appearance settings. The roles and the settings are editable
+  for the party owner and admins and read-only for everybody else; the server enforces it as before.
 * **Admin menu** for permission level 2 or the node `xaero.pac_admin_menu`: every scalar option of OPAC's server config
   and of the Team Claims server config with search, a restart badge and the "after restart" value, the bonus claims,
   forceloads, anchors and anchor range of players, and the bonus of teams. List options stay toml-only. Restart-only

@@ -42,3 +42,4 @@
 - 2026-10-17 v1.4: hub tabs are separate screens with a shared tab bar (HubTabs.create); the Party tab is the 1.3 party screen.
 - 2026-10-17 v1.4: fork network version = upstream * 1000 + fork revision (7001); NeoForge protocol 1.11.0-teamclaims.1 (T2).
 - 2026-10-17 v1.4: team info is its own request kind (105 TEAM_INFO -> 113 + 103) instead of extending packet 100 (existing tests pin 100 to two answers).
+- 2026-10-17 v1.4: every OPAC server option carries upstream's worldRestart flag, so the admin menu saves OPAC option changes to the toml for the next start (only Team Claims options except enabled/ftbTeamsSync apply live); documented, no change to upstream flags (minimal upstream delta).

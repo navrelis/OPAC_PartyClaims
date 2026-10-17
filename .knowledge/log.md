@@ -91,3 +91,4 @@
 - Merged branch 9ca8a7a6 (lead run): default 135 / 135, FTB 169 / 169, save-compat 4 / 4, each on Fabric and NeoForge; build green.
 - Linkcheck 1.4.0 jars vs World Map 1.47.0 + Minimap 26.6.0: Fabric and NeoForge 0 errors, exit 0.
 - Docs recheck to Sonnet (README, CURSEFORGE.md; release type Release).
+- Docs recheck done (Sonnet, 1 correction): README + CURSEFORGE.md match the final UI, test table 135 / 169 / 4, release type Release.
