@@ -43,3 +43,6 @@
 - 2026-10-17 v1.4: fork network version = upstream * 1000 + fork revision (7001); NeoForge protocol 1.11.0-teamclaims.1 (T2).
 - 2026-10-17 v1.4: team info is its own request kind (105 TEAM_INFO -> 113 + 103) instead of extending packet 100 (existing tests pin 100 to two answers).
 - 2026-10-17 v1.4: every OPAC server option carries upstream's worldRestart flag, so the admin menu saves OPAC option changes to the toml for the next start (only Team Claims options except enabled/ftbTeamsSync apply live); documented, no change to upstream flags (minimal upstream delta).
+- 2026-10-17 v1.4: in-game acceptance is an automated scripted two-player run (owner: "make it a automated test ... just like all other clients"), no computer-use; modelled on QuestBridge's -PjournalTour unattended tour (dev-only, gated by a Gradle property, nothing shipped).
+- 2026-10-17 v1.4: P conflict: vanilla keeps one KeyMapping per key, so with Social Interactions also on P the hub never got the press; fix routes social clicks to the hub while both share the key (no change to vanilla bindings or the user's options).
+- 2026-10-17 v1.4: T9 (harness core) to Opus: client-driving tour across two clients + server with real assertions is new architecture where silent false-greens are costly.
