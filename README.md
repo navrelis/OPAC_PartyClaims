@@ -8,6 +8,27 @@ Supported: Minecraft 1.21.1 on **Fabric** (Fabric Loader 0.14 or newer, Fabric A
 **NeoForge** (21.1.x). The mod id is still `openpartiesandclaims`, so it replaces the original mod; it cannot be
 installed next to it. Install it on the server and on every client. FTB Teams is optional (see "FTB Teams sync").
 
+## Updating from 1.3.0
+
+Version 1.4.0 adds the hub screen on the **P** key (see "Hub (P)"), an admin menu for server owners (see "Admin menu")
+and a per-team bonus for team claims and team forceloads. It is still based on Open Parties and Claims 0.32.7.
+
+* **Update the server and every client together.** The network version changed (7 to 7001, the fork's revision on top of
+  upstream's 7; the NeoForge protocol version is now `1.11.0-teamclaims.1`) and ten new packets (ids 104-113) belong to
+  the hub and the admin menu. A 1.3.0 client cannot join a 1.4.0 server and a 1.4.0 client cannot join a 1.3.0 server:
+  the login is refused.
+* **Existing worlds load as they are.** Nothing is unclaimed by the update. The team JSON files get the optional fields
+  `bonusClaims` and `bonusForceloads` only for teams that have a bonus; a file without them means a bonus of 0.
+* **The hub key is P.** The party screen (key **O**, "Open Party Menu") is now the Party tab of the hub, and the hub has
+  a new key binding, "Open Parties and Claims Hub", default **P**. A new binding means everybody gets P, also players
+  who had rebound or kept O; a rebinding of the old key is lost. P is also vanilla's "Social Interactions" key: if both
+  open at once, rebind either of them in Minecraft's Controls.
+* **Fixed:** in the party screen the member rows no longer move when a rank changes (they were sorted by rank, so the
+  row you had just clicked jumped to another place). The rows are now ordered by owner, then name.
+* **Servers that do not use the new features see no change:** the Admin tab and `/teamclaims bonus` are only for
+  permission level 2 and the permission node `xaero.pac_admin_menu`, and a team without a bonus behaves as in 1.3.0.
+* Coming from 1.2.0 or older? "Updating from 1.2.0" and "Updating from 1.1.0" apply to you as well.
+
 ## Updating from 1.2.0
 
 Version 1.3.0 is based on Open Parties and Claims 0.32.7 (1.2.0 was based on 0.31.6) and contains everything of
@@ -121,6 +142,12 @@ the defaults a team of 1 member has 0 team claims and 0 team forceloads, 2 membe
 4 members 550 and 14. A team at or above a limit can make no new team claims (or team forceloads); the message says
 which limit it is and, for a team that is too small, how many members it needs.
 
+**Team bonus (1.4.0).** A server admin can give one team extra team claims and extra team forceloads on top of that
+formula, in the admin menu (tab "Teams") or with `/teamclaims bonus`. The limit is then the formula plus the bonus, **also
+below `teamClaimsMinMembers`**: a team of one member with a bonus of 100 team claims has a limit of 100. The bonus is
+stored in the team JSON (`bonusClaims`, `bonusForceloads`; missing means 0). Lowering a bonus can put a team over its
+limit, and "Over the limit" then applies as it does when a member leaves.
+
 The claim counter of OPAC's claim UI and map shows the team's numbers while the team sub-config is the selected
 sub-claim, and the player's private numbers otherwise. `/teamclaims info` shows both, `/oclaims about` shows the private
 numbers. A team claim is still technically owned by the member who made it (OPAC's data stays compatible); mods that
@@ -222,20 +249,54 @@ With anchors on, for team claims:
 
 The budgets, the limits and the rest of Team Claims are the same as with anchors off.
 
+## Hub (P)
+
+One screen with tabs, opened with the key **P** (the default; rebindable in Minecraft's Controls under the category
+"Open Parties and Claims" as "Open Parties and Claims Hub"). It opens on the tab you used last, and pressing the key
+again closes it while no text field has the focus. P is also vanilla's "Social Interactions" key, so Controls shows a
+conflict until one of the two is rebound. The tabs are **Party**, **Claims**, **Team** and, only for admins, **Admin**.
+The hub can also be opened with the **Party** button in the OPAC menu (the menu of the apostrophe key). On a server
+without the mod, or with parties disabled, the party parts of it only say so.
+
+**Claims tab.** A grid of the chunks around you, drawn in the claim colours (no terrain; Xaero's World Map shows that),
+for claiming without commands.
+
+* Click a chunk, or drag a rectangle, to select it, then press **Claim**, **Unclaim**, **Forceload** or **Unforceload**.
+  The buttons send the same area requests as the claim UI of Xaero's World Map, so every OPAC rule applies (limits,
+  anchors, team roles) and the server answers as usual. The server may refuse very large selections. The arrow keys
+  move the grid (Shift moves it further) and **Centre** brings it back to your chunk.
+* Your own private claims, your team's claims, your party's, other players' and server claims have their own colours,
+  forceloaded chunks carry a dot and your own chunk a marker; hover a chunk for its coordinates, its owner, the claim
+  name and the forceload state. A legend is shown next to the grid.
+* The **Claim as: Private / Team** button decides who owns what you claim: only you, or your team. It switches the
+  selected sub-claim (`claims.usedSub`, the main config or the team sub-config), and so it **also decides what Xaero's
+  World Map "Claim Selected" claims**. Without a team only Private is possible. It applies while you claim as a player;
+  OPAC's claiming mode (player, party, server) is still chosen in the OPAC menu.
+* The budget lines show your private claims and forceloads and, in a team, the team claims and forceloads against the
+  limits.
+
+**Team tab.** Your team at a glance: the team name, the team budget (team claims and team forceloads against the limit,
+bonus included, and the countdown while the team is over its limit), the rank required to claim, unclaim and forceload
+(the party owner and admins can change them; everybody else sees them read-only), your own switch for the claim welcome
+messages, **Convert to team** and **Convert to personal** with a radius and a confirmation, the same Private / Team
+switch for claiming as the Claims tab, and a button to the protection settings of the team. It does what
+`/teamclaims info`, `roles`, `territorymessages` and `convert` do, and the server checks everything as before.
+
+**Admin tab.** Only with the permission described in "Admin menu".
+
+**Party tab.** The party screen of 1.3.0, below.
+
 ## Party screen
 
-A screen for what used to be typed as `/oparties ...` commands. Open it with the key **O** (the default; the vanilla key
-for the social interactions screen is P) or with the **Party** button in the OPAC menu (the menu of the apostrophe key).
-The key is rebindable in Minecraft's Controls under the category "Open Parties and Claims" as "Open Party Menu", and
-pressing it again closes the screen while no text field has the focus. On a server without the mod, or with parties
-disabled, the screen only says so (and the button is greyed out or missing). Every action sends the same `/oparties` command a player would type, so the server's checks and
-messages are the same; the screen only offers the actions the player's rank allows.
+The Party tab: what used to be typed as `/oparties ...` commands. Every action sends the same `/oparties` command a
+player would type, so the server's checks and messages are the same; the screen only offers the actions the player's
+rank allows.
 
 * **Without a party:** create a party (the name is optional; characters OPAC does not allow in a party name turn the
   box red), and a list of the invitations sent to you with **Accept** and **Decline**. The list is refreshed every couple
   of seconds while the screen is open.
-* **In a party:** the owner, the member and invitation counts, the rename box (owner), the members (owner first, then by
-  rank, then alphabetical) with a rank button that cycles through the ranks you may give, **Kick**, and **Make owner**
+* **In a party:** the owner, the member and invitation counts, the rename box (owner), the members (owner first, then alphabetical, a row keeps its place when its
+  rank changes) with a rank button that cycles through the ranks you may give, **Kick**, and **Make owner**
   (owner only, with a confirmation), the pending invitations with **Cancel**, an invite box with buttons for online
   players who are not in the party yet (inviting and kicking need the rank moderator or higher, changing ranks admin or
   higher), and **Leave party** or, for the owner, **Disband party** (both with a confirmation).
@@ -257,6 +318,8 @@ messages are the same; the screen only offers the actions the player's rank allo
 | `/teamclaims roles <claim\|unclaim\|forceload> <member\|claimer\|moderator\|admin\|owner>` | The party owner and admins | Sets the rank one of those actions requires. The other online members are told about the change. |
 | `/teamclaims convert toteam [radius]` | Everybody in a team | Turns your own claims in the square of chunks around the chunk you stand in (`radius` 0, the default, is only that chunk; at most `convertMaxRadius`) into team claims, keeping their forceload. See "Converting claims" below. |
 | `/teamclaims convert topersonal [radius]` | Everybody in a team | Turns your own team claims in that area back into personal claims of your selected sub-claim (the main config if that is the team sub-config), keeping their forceload. |
+| `/teamclaims bonus <team>` | Permission level 2 or the node `xaero.pac_admin_menu` | Shows the bonus team claims and bonus team forceloads of a team and its limits. `<team>` is the team name (in quotes if it has spaces) or the party id. |
+| `/teamclaims bonus <team> <claims\|forceloads> <n>` | Permission level 2 or the node `xaero.pac_admin_menu` | Sets the bonus team claims or team forceloads of a team. The limit is the formula plus the bonus, also below `teamClaimsMinMembers`. Lowering it can put the team over its limit. See "Claim budgets". |
 | `/teamclaims ftbsync status` | Permission level 2 | Whether the FTB Teams sync runs (and if not, why), how many parties are linked to an FTB Teams party and what is waiting to be synced (up to 10 entries). See "FTB Teams sync" below. Also works from the console. |
 | `/teamclaims ftbsync resync` | Permission level 2 | Runs the full reconciliation with FTB Teams right away and reports how many changes it made, how many parties are linked and how many entries are waiting. |
 
@@ -397,6 +460,49 @@ Fabric and NeoForge; a copy in `<world>/serverconfig/` overrides it for that wor
 
 The private limits are not set here: they stay OPAC's own `maxPlayerClaims` and `maxPlayerClaimForceloads`.
 
+## Admin menu
+
+The **Admin** tab of the hub (key **P**) lets server owners change settings without editing toml files or typing
+commands.
+
+**Who sees it.** Players with permission level 2 (operators) or the permission node `xaero.pac_admin_menu`, checked
+through the permission system OPAC is configured to use (`permissionSystem` in OPAC's server config, for example
+LuckPerms). Everybody else does not get the tab, and the server checks every admin request on its own, so a modified
+client gets nothing: the request is ignored and logged (the first one of a player as a warning). `/teamclaims bonus`
+needs the same permission.
+
+**What can be edited.**
+
+* **OPAC server**: every number, on/off, choice and text option of `openpartiesandclaims-server.toml`.
+* **Team Claims**: the same for `openpartiesandclaims-teamclaims-server.toml`.
+* **Players**: pick an online player, or type a name (also offline players that have a config); the tab shows their
+  limits and what they use and edits their bonus claims, bonus forceloads, bonus anchors and bonus anchor range (the
+  player config options `claims.bonusChunkClaims`, `claims.bonusChunkForceloads`, `claims.bonusAnchors` and
+  `claims.bonusAnchorRange`).
+* **Teams**: the teams with their member count and what they use of their limits; edit a team's bonus team claims and
+  bonus team forceloads (see "Team bonus" below).
+
+In the two option sections the options can be searched by name. Each option shows its current value, its range or the
+allowed values, and its comment as a tooltip. The server checks the value against the config spec, writes it to the toml
+and answers with the new value or the reason it was refused.
+
+**List options stay toml-only.** The protection block, entity and item lists, the dimension lists and every other list
+option are not shown; edit them in the toml as before.
+
+**Live and restart-only options.** Most options apply at once, like a change in the toml file does. Options that are only
+read at server start (the ones marked "restart", for example `enabled` and `ftbTeamsSync` of the Team Claims config) are
+written to the toml file only: the running server keeps its current value until the next restart, and the tab shows
+the saved value as "after restart" next to the running one.
+
+**Log.** Every change is logged in the server log with the name of who made it, the option and the new value
+(`[TeamClaims] <name> set the ... server config option ...`), and so is every bonus change.
+
+**Team bonus.** `/teamclaims bonus <team>` shows the bonus and the limits of a team, `/teamclaims bonus <team> claims <n>`
+and `/teamclaims bonus <team> forceloads <n>` set the bonus team claims or team forceloads (0 or more). `<team>` is the
+team name (in quotes if it has spaces) or the party id. The team limit is the formula of "Claim budgets" plus the bonus,
+also below `teamClaimsMinMembers`. Lowering a bonus can put a team over its limit; the over-limit deadline of "Over the
+limit" then starts as if a member had left. The admin menu and the command do the same.
+
 ## Territory messages
 
 OPAC shows an action bar line with the claim's name and colour whenever you walk into a different claim (server
@@ -484,6 +590,33 @@ the one of 1.2.0 with World Map 1.47.0 is found without starting the game:
 `java tools/linkcheck/LinkCheckSelfTest.java`; see `tools/linkcheck/README.md`.
 
 ## Changelog
+
+### 1.4.0
+
+* **Hub screen on the P key** (new key binding "Open Parties and Claims Hub"; P is also vanilla's "Social Interactions"
+  key, rebind either one). Tabs **Party** (the party screen of 1.3.0), **Claims**, **Team** and **Admin**. See "Hub (P)".
+* **Claims tab:** a chunk grid around you in the claim colours; click or drag to select, then claim, unclaim, forceload
+  or unforceload; hover for owner, name and forceload state; budget lines; a **Claim as: Private / Team** button that
+  also decides what Xaero's World Map "Claim Selected" claims.
+* **Team tab:** team name, budget with bonus and the over-limit countdown, the roles for claim, unclaim and forceload,
+  your own territory-message switch, convert to team and to personal with a radius and a confirmation, the Private /
+  Team switch, and a button to the team's protection settings. Editable for the party owner and admins, read-only for
+  everybody else; the server enforces it as before.
+* **Admin menu** for permission level 2 or the node `xaero.pac_admin_menu`: every scalar option of OPAC's server config
+  and of the Team Claims server config with search, a restart badge and the "after restart" value, the bonus claims,
+  forceloads, anchors and anchor range of players, and the bonus of teams. List options stay toml-only. Restart-only
+  options are written to the toml and take effect after a restart; the others apply at once. Every change is logged.
+  The server checks every request. See "Admin menu".
+* **Team bonus:** a per-team bonus of team claims and team forceloads on top of the formula, also below
+  `teamClaimsMinMembers`; new optional fields `bonusClaims` and `bonusForceloads` in the team JSON; the command
+  `/teamclaims bonus <team> [claims|forceloads <n>]`. Lowering a bonus can start the over-limit deadline.
+* **Fix:** the member rows of the party screen keep their place when a rank changes (they were sorted by rank, so the
+  clicked member moved to another row).
+* **Update the server and every client together:** the network version changed (7 to 7001, NeoForge protocol
+  1.11.0-teamclaims.1) and the hub and the admin menu use ten new packets (ids 104-113). A 1.3.0 client cannot join a
+  1.4.0 server and the other way round. Existing worlds load as they are. See "Updating from 1.3.0".
+* New automated gametests for the hub logic, the admin permission, the config registry (live and restart-only writes),
+  the team and player bonus and the new packets, run on both loaders.
 
 ### 1.3.0
 
