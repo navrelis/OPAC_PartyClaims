@@ -48,3 +48,4 @@
 - 2026-10-17 v1.4: T9 (harness core) to Opus: client-driving tour across two clients + server with real assertions is new architecture where silent false-greens are costly.
 - 2026-10-17 v1.4: shared-key check compares bound key + key modifier via IKeyBindingHelper, not KeyMapping.same() (NeoForge's same() treats P and Ctrl+P as conflicting).
 - 2026-10-17 v1.4: instance start check uses the pack's perf harness (py perf_client.py run startup --profile owner); py (Python 3.14) is available, the earlier 'Python not installed' note only meant 'python' on PATH.
+- 2026-10-18 v1.4: Graphify rebuilt code-only (AST) in this worktree's graphify-out, untracked like before; the main-checkout graph came from another repo path and the fabric-port code, so an incremental update could not match it.

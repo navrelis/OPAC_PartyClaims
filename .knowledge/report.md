@@ -1,79 +1,111 @@
-# Final report — OPAC Team Claims 1.3.0 (Fabric + NeoForge 1.21.1), sessions 2026-10-12 / 2026-10-13
+# Final report — OPAC Team Claims 1.4.0 (Fabric + NeoForge 1.21.1), sessions 2026-10-17 / 2026-10-18
 
-Branch `v1.3-dev` on github.com/navrelis/OPAC_PartyClaims (off `fabric-port` `50d1919`, = 1.2.0); `fabric-port` and
-`main` untouched, no merge without the owner's word. Release files: `ExportedJars/v1.3.0/`
-(`opac-team-claims-fabric-1.21.1-v1.3.0.jar`, `opac-team-claims-neoforge-1.21.1-v1.3.0.jar`, `CURSEFORGE.md`; jars are
-not committed). Version `1.3.0+opac.0.32.7`, mod id `openpartiesandclaims`. CurseForge: NeoForge file 9151608, Fabric file 9151657 (Release); see the last section.
-(The v1.2.0 report is in the git history of this file.)
+Branch `claude/opac-admin-rework-d73a06` on github.com/navrelis/OPAC_PartyClaims (based on `v1.3-dev`, = 1.3.0); `main`
+and `fabric-port` untouched. Version `1.4.0+opac.0.32.7`. (1.3.0 report: git history of this file.)
 
-## Requirements → result
-| # | Requirement | Result |
+## Release
+| | Fabric | NeoForge |
 |---|---|---|
-| 1 | Fork contains upstream OPAC 0.32.7 with Team Claims on top | Real git merge of `thexaero/open-parties-and-claims` `1.21` (`75ce21d6`) as commit `7d7196c3` (two parents; later upstream updates are a plain `git merge`). 9 conflicted files resolved; `Forge/` and `docs/javadoc/` stay deleted. Fork packets moved from ids 50–53 to 100–103 (upstream took 50). |
-| 2 | Proof the World Map crash is gone | Linkage checker `tools/linkcheck/` on the final jars against World Map 1.47.0 + Minimap 26.6.0: Fabric 102 + 54 references OK, NeoForge 103 + 55 OK, 0 missing, exit 0. Control on the 1.2.0 jars (both loaders): exit 1, 9 missing incl. `IClientClaimsManagerAPI.usingAnchorBasedClaiming()`. Dev-client run (NeoForge, 2026-10-13, after the upload): map opened, right-click menu shown, "Claim Selected" claimed chunks, no crash, no linkage error in the log. |
-| 3 | Existing tests green, new tests | Default runs 100 / 100 on Fabric and NeoForge, with FTB Teams 134 / 134 on both (was 77 / 111 in 1.2.0). New: 4 + 5 anchor tests, 7 claim limits packet tests, 7 `overLimitEnforcement` tests, and a separate save-compatibility run (4 tests per loader) that starts the server on world data written by the real 1.2.0 code. |
-| 4 | README upgrade notes | "Updating from 1.2.0": server and all clients together (network version 6 → 7), existing worlds load as they are, no way back to 1.2.0. |
-| 5 | Changelog, jars, `CURSEFORGE.md` | Done, see above. |
-| 6 | CurseForge upload, both loaders, Beta | See the last section. |
-| 7 | Acceptance, Graphify, report, push, shared log | See the last section. |
-| 8 | Option to switch the over-limit rule off | `overLimitEnforcement` (Team Claims server config, default `true` = 1.2.0 behaviour, applies without restart). `false`: a team above its limit keeps all team claims and team forceloads; no deadline, no chat / login warnings, no countdown in `/teamclaims info` or on the party screen; a running or stored deadline is dropped silently at the next check; switching back on starts a fresh deadline. |
+| Jar (ExportedJars/v1.4.0, gitignored) | `opac-team-claims-fabric-1.21.1-v1.4.0.jar` | `opac-team-claims-neoforge-1.21.1-v1.4.0.jar` |
+| SHA-256 | `af61fbad…ccbe1c` | `e1accc83…4d4` |
+| CurseForge (project 1704256, Release) | file **9233932** | file **9233929** |
+| Relations | fabric-api (req.), forge-config-api-port (req.), ftb-teams-fabric (opt.) | none (as 1.1.0–1.3.0) |
 
-## Things you should know
-- **`overLimitEnforcement = false` does not lift the limit.** A team above its limit keeps everything but still cannot
-  make new team claims or team forceloads until it is back within the limit. This was the open question of the
-  session; built as "no". Changing it later is a small change in the limit check.
-- With the option off, `/teamclaims info` and the party screen still show the numbers against the limit (e.g. `5 / 3`,
-  in red), just without a countdown. No new lang keys were needed.
-- **Anchors (only with upstream's `anchorBasedClaiming` on, default off):** anchors stay per player and dimension, a
-  team has no anchor pool; a team claim obeys the anchors of the player who makes it. Known limitations, not fixed:
-  with a private limit of 0 nobody can place a first anchor (it needs one private claim); when a member leaves, team
-  claims the owner cannot anchor (owner's anchor limit full, or a smaller anchor range) become private claims of the
-  leaver without a limit check or chat message; a team stuck above its limit on anchor chunks still gets the "will be
-  unclaimed" reminder.
-- A player's own team claim sends one claim limits packet with the old team count, followed in the same tick by the
-  corrected one. The client ends up right; one redundant packet.
-- `isOverEitherClaimingLimit` (upstream's "player is over a limit" check) looks at private claims and anchors only; a
-  team above its team limit does not make its members "over". Intended: the team has its own rule.
-- The flaky FTB sync test `failingPairDoesNotStopTheOthers` (1 of 4 Fabric FTB runs in session 1) was a test ordering
-  problem: a note of another test in the same tick made the sync reconcile a second time. Fixed in the test; the cause
-  was reproduced by injecting such a note, not caught organically. No FTB sync main code changed in 1.3.0.
-- Upstream's history is on origin with this branch. `git diff --check` reports whitespace in two upstream files; left
-  as upstream has them.
+Links: https://www.curseforge.com/minecraft/mc-mods/open-parties-and-claims-team-claims/files/9233932 (Fabric) and
+https://www.curseforge.com/minecraft/mc-mods/open-parties-and-claims-team-claims/files/9233929 (NeoForge); new files
+may show as processing until CurseForge has reviewed them.
+Relation-slug override (cfwidget slug lookup 404 for forge-config-api-port and ftb-teams-fabric, both confirmed by project
+id 547434 / 438497): approved by the owner in chat, 2026-10-18.
 
-## Verification (lead's own runs on the final commit, clean build)
-- `gradlew clean :Fabric:build :NeoForge:build :Fabric:runBootTest :NeoForge:runTeamClaimsGameTest`: 100 / 100 on both.
-- `gradlew :Fabric:runBootTestFtb :NeoForge:runTeamClaimsGameTestFtb`: 134 / 134 on both.
-- `gradlew :Fabric:runSaveCompatTest :NeoForge:runSaveCompatGameTest`: 4 / 4 on both.
-- Exported jars are byte-identical to the build (SHA-256 Fabric `8fbaa338…7be6547`, NeoForge `b8a3847c…4d315d0`);
-  version `1.3.0+opac.0.32.7` in both; no gametest, fixture, `dev/ftb` or `dev/architectury` entries; `ftbteams`
-  optional. No TODO / FIXME / `System.out` / `printStackTrace` in the Team Claims layer.
-- Read by the lead: the merge delta of the 9 conflicted files and the Team Claims layer (session 1), the linkage
-  checker source, every new test file of T3, the full main-code diff of `overLimitEnforcement`, the README and
-  `CURSEFORGE.md` diffs.
+Dev instance `NytheriaDevelopment\mods`: `opac-team-claims-fabric-1.21.1-v1.4.0.jar` added (same SHA-256 as above);
+`opac-team-claims-fabric-1.21.1-v1.3.0.jar` moved to `F:\Coding\NytheriaDevelopment\mods_backup\`. Nothing committed there.
 
-## Not verified
-- Client: only one NeoForge dev-client run (see requirement 2); Fabric client, anchor entries on the map, and the layout of the OPAC menu
-  with upstream's new Anchor / Unanchor buttons next to the "Party" button are untested (coordinates only).
-- Lang check of T4 (en 820 keys, de 165, fork keys identical) is the agent's claim.
-- Not shown that the save-compat tests fail on wrong data (they compare exact constants of the fixture).
-- `ChunkProtection` with `overLimitEnforcement = false`: unchanged code, concluded by reading, no dedicated test.
-- Live reload of the new option from the config file: by reading (same mechanism as `overLimitGraceHours`).
+## What was implemented, per requirement
+- **Rank-button bug** (party screen changed a different row): root cause: member rows were sorted by rank, so after a
+  rank change the clicked member moved to another row and the next click hit someone else. Fix: rows ordered owner, name,
+  uuid (393e7956); regression gametests; the two-player test proves it in a real client (a third member sits between
+  owner and Player2, rows unchanged after the click, server shows only Player2 changed).
+- **Tabbed hub on P** (Party | Claims | Team | Admin): 3e868c55, 8153a389, 9ca8a7a6. New key binding id so P reaches
+  players whose options.txt already saved O.
+- **P-key finding** (T8, f332ab36): vanilla Social Interactions is also P and vanilla keeps one KeyMapping per key, so
+  the hub key never fired (P opened Social Interactions). Fix: while the hub key and Social Interactions share key and
+  modifier, the hub takes the clicks of both (drained at client-tick start, before vanilla's handleKeybinds). Rebinding
+  Social Interactions restores vanilla behaviour. NeoForge's `KeyMapping.same()` was not used (it treats P and Ctrl+P as
+  the same); the modifier is compared through the platform key-binding helper. Docs updated (README, CURSEFORGE.md).
+- **GUI for team claims**: Claims tab (chunk grid, select, claim/unclaim/forceload/unforceload, Private/Team toggle,
+  budgets, oversize selection disables actions) and Team tab (roles, territory messages, convert, team settings;
+  read-only for members).
+- **Permission-gated Admin menu** (op level 2 or `xaero.pac_admin_menu`): server options of OPAC and Team Claims (live
+  vs restart-only with pending value), player bonuses with lookup, team bonuses; every request checked server side
+  (5ec9c0dc backend, 9ca8a7a6 UI).
+- **Automated two-player test** (owner requirement, no computer-use; T9, 04e77a06 + 60606a99): dev-only, gated by
+  `-PtwoPlayerTest`, one command `pwsh -File tools/twoplayertest/Run-TwoPlayerTest.ps1` (server + two Fabric clients,
+  scripted driver, server snapshots, screenshots, results.json / summary.md, exit code). Not in any jar (listing checked).
+- **Docs**: README (hub, admin menu, team bonus, updating from 1.3.0, two-player test), changelog, CURSEFORGE.md.
 
-## Manual test checklist
-- Client with World Map 1.47.0 + Minimap 26.6.0 and the 1.3.0 jar, both loaders: open the map, right-click (anchor
-  entries appear only with anchors on), claim / unclaim from the map.
-- OPAC menu: "Party" button and the Anchor / Unanchor buttons do not overlap.
-- A real 1.2.0 world opened with 1.3.0 (backup first): claims, team claims, party screen numbers.
-- `anchorBasedClaiming = true`: place an anchor, team claim in range, unanchor with `confirm`, a member leaves.
-- `overLimitEnforcement = false` on a team above its limit: no messages, party screen without countdown; back to
-  `true`: warning with the full grace time.
-- The 1.2.0 checklist (party screen, FTB Teams sync) in the git history of this file still applies.
+## Changed files (main areas)
+- `Common/src/main/java/xaero/pac/client/gui/hub/` (HubTabs, Claims/Team/Admin tab screens, AdminConfigView,
+  AdminValueRules): the hub UI.
+- `Common/src/main/java/xaero/pac/client/ClientTickHandler.java`, `client/controls/keybinding/IKeyBindingHelper.java` +
+  Fabric/NeoForge helpers: hub key and the P conflict.
+- Party screen (member order), `client/teamclaims/TeamClaimsClientData.java` / `TeamClaimsClientRequests`: client data
+  and the only send path for hub requests.
+- Server side Team Claims: admin access, config registry, bonus storage (optional JSON fields), packets 104–113, command
+  `/teamclaims bonus`; network version 7001 / NeoForge protocol 1.11.0-teamclaims.1.
+- Lang en + de; gametests (Common/src/gametest + Fabric/NeoForge wrappers).
+- `Fabric/build.gradle` (dev-only block), `Fabric/src/twoplayertest/**`, `tools/twoplayertest/**`: the two-player test.
+- README.md, ExportedJars/v1.4.0/CURSEFORGE.md.
+102 files, +14.9k / −65 lines against 1.3.0 (most of it tests and the new UI).
 
-## Usage
-Delegated: Opus T1 (long, counts 2); Sonnet T2 (1), T4 (1), T3 (long, 2, in two sessions), T7 (1). Opus 2 of 7.
+## Key decisions (full list in decisions.md)
+- Member rows ordered owner, name, uuid (no rank).
+- Hub tabs are separate screens with a shared tab bar; the Party tab is the 1.3 party screen.
+- All OPAC server options carry upstream's `worldRestart` flag, so admin edits to them are saved to the toml and apply
+  after a restart (Team Claims options apply live); upstream flags unchanged.
+- P conflict: route Social Interactions clicks to the hub while both share the key; no change to vanilla bindings.
+- In-game acceptance = automated scripted two-player run (owner); T9 to Opus (new architecture, false greens costly).
 
-## Release state
-- Pushed: `v1.3-dev` at origin (first push, brings upstream's history along). Not merged into `fabric-port` / `main`.
-- CurseForge (project 1704256), 2026-10-13: both files uploaded as **Release** (owner: "as release and not beta"), after a second full test pass on the unchanged jars: NeoForge file 9151608 (no relations), Fabric file 9151657 (Fabric API + Forge Config API Port required, FTB Teams (Fabric) optional). The tool's slug lookup answered 404 for `forge-config-api-port` and `ftb-teams-fabric` again; the owner approved overriding the check once (plan marked resolved by hand with a note, slugs confirmed by project id 547434 / 438497). Not done: project description / summary on the website; `CURSEFORGE.md` still says "Suggested release type: Beta".
-- Graphify: not updated (`graphify-out/` exists only in the main checkout, untracked, state of 1.1.0).
-- 1.2.0 stays as it is: branch `fabric-port`, jars and CurseForge files 9106819 / 9108825 untouched.
+## Checks and tests run (lead, on the final code)
+| Run | Fabric | NeoForge |
+|---|---|---|
+| Default gametests (`runBootTest` / `runTeamClaimsGameTest`) | 135 / 135 | 135 / 135 |
+| With FTB Teams (`runBootTestFtb` / `runTeamClaimsGameTestFtb`) | 169 / 169 | 169 / 169 |
+| Save compatibility (1.2.0 world data) | 4 / 4 | 4 / 4 |
+| Build | green | green |
+- **Two-player test** (real dedicated server + 2 Fabric dev clients, default key bindings): **55 / 55 PASS, 0 FAIL,
+  0 SKIPPED**, first run; a second run identical. Results, screenshots (GUI scale 2 and 4) and logs:
+  `F:\Coding\OPAC_PartyClaims\.claude\worktrees\opac-clienttest\build\twoPlayerTest\20261017-233735\`
+  (`summary.md`, `results.json`, `Player1\screenshots\` 26 PNGs, `Player2\screenshots\` 13 PNGs). The lead checked the
+  counts and the rank-click and read-only screenshots. Covers: P opens/closes the hub and not while typing; party
+  create/invite/accept; rank click; Claims claim/unclaim/Team toggle/oversize; Team tab owner edit + member read-only;
+  Admin tab op only, live option, restart-only pending, team bonus, player bonus via lookup, the suggestion-button click
+  (no crash), a non-admin's crafted admin requests rejected with a log warning.
+- Harness self-check `:Fabric:runTwoPlayerTestSelfCheck -PtwoPlayerTest`: 6 / 6; dry run OK.
+- Jar listings without `-PtwoPlayerTest`: same entries as before, 0 harness entries.
+- Linkcheck vs Xaero's World Map 1.47.0 + Minimap 26.6.0 (on 9ca8a7a6; unchanged API since): 0 missing.
+- Nytheria dev instance start with the 1.4.0 jar and all 647 mods (perf harness `startup`, player profile because the
+  owner was playing at the time): title screen after 139.6 s, OPAC 1.4.0+opac.0.32.7 loaded, no OPAC WARN/ERROR lines.
+
+## Manual test checklist (not automated)
+- Claim map colours, markers and hover tooltip; Forceload / Unforceload buttons; Xaero's World Map "Claim Selected".
+- Convert with its confirmation; team settings screen; the territory-messages toggle.
+- A small window / GUI scale 3 on a real monitor resolution.
+- A 1.3.0 client joining a 1.4.0 server is refused.
+- Admin path via the permission node (only op level was tested).
+- NeoForge: hub on Ctrl+P with Social Interactions on P (both mappings may fire; untested).
+
+## Model usage
+Long tasks count 2, short 1. Opus: T2 (2), T9 (2) = 4. Sonnet: T1 1, T3 2, T4a 2, T5 1, T4b 2, docs recheck 1, T8 1,
+README test section 1 = 11. Opus ≈ 27 %. No precision overrides.
+
+## Known limitations and recommendations
+- The Team tab button "Team protection & appearance settings..." does not fit at GUI scale 2 / 1280×960 and scrolls
+  (vanilla scrolling label); consider a shorter label in 1.4.1.
+- Screenshots of the two-player test can contain a hover tooltip where the real mouse cursor sits over a client window.
+- Allies show as "others" in the Claims grid; the client caps the convert radius at 0..4 (from earlier notes).
+- `renderCount` in the Admin Players page rebuilds the filtered rows every frame (minor).
+- The `run-*` line in `.gitignore` also matches `Run-*.ps1` on Windows (case-insensitive); the runner script is
+  force-added. A rename or an exception line would avoid the trap for new files.
+- Graphify: rebuilt code-only (AST, 11,873 nodes, 276 communities) in this worktree's `graphify-out/` (untracked, by
+  the earlier decision not to commit it); the old graph in the main checkout was built from another path and the
+  fabric-port code and is superseded. Docs and images were not extracted (no LLM pass).
