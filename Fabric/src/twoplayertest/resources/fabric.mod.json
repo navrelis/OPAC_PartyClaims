@@ -1,0 +1,21 @@
+{
+    "schemaVersion": 1,
+    "id": "opac_teamclaims_twoplayertest",
+    "name": "OPAC Team Claims two-player test (dev only)",
+    "description": "Dev-only driver of the automated two-player test of the 1.4 hub. Only exists in Gradle runs with -PtwoPlayerTest and does nothing without the opac.twoplayertest.* JVM properties.",
+    "version": "1.0.0",
+    "license": "LGPL-3.0-only",
+    "environment": "*",
+    "entrypoints": {
+        "client": [
+            "xaero.pac.teamclaims.twoplayertest.client.TwoPlayerTestClient"
+        ],
+        "server": [
+            "xaero.pac.teamclaims.twoplayertest.server.TwoPlayerTestServer"
+        ]
+    },
+    "depends": {
+        "openpartiesandclaims": "*",
+        "fabric-api": "*"
+    }
+}

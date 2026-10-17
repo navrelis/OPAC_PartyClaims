@@ -331,3 +331,140 @@ publishing {
         }
     }
 }
+
+// [Team Claims] ---- The automated two-player test of the 1.4 hub (dev only) ----
+//
+//   pwsh tools/twoplayertest/Run-TwoPlayerTest.ps1 [-DryRun]          the one command: server + two clients + report
+//   gradlew :Fabric:runTwoPlayerTestSelfCheck -PtwoPlayerTest         headless self-check of the harness (no window)
+//
+// The script runs :Fabric:runTwoPlayerTestServer, :Fabric:runTwoPlayerTestClient1 and :Fabric:runTwoPlayerTestClient2,
+// each with -PtwoPlayerTest=<output folder>. Without -PtwoPlayerTest nothing below exists: no source set, no run config,
+// no task, so the build, the jars and the other test runs are exactly as without it. The "twoplayertest" source set
+// (Fabric/src/twoplayertest, mod "opac_teamclaims_twoplayertest") is only on the classpath of these four runs and never
+// in any jar (no jar task reads it). Its mod does nothing without the -Dopac.twoplayertest.* properties set here.
+//
+//   twoPlayerTest                  the output folder (relative to the repository root); empty: build/twoPlayerTest/manual
+//   twoPlayerTestTimeoutMinutes    the longest one client's scenario may take (default 25)
+//   twoPlayerTestServer            the address the clients connect to (default localhost:25565)
+if (project.hasProperty('twoPlayerTest')) {
+    String tptValue = project.property('twoPlayerTest').toString().trim()
+    File tptOut = (tptValue.isEmpty() || tptValue == 'true') ? rootProject.file("build/twoPlayerTest/manual") : rootProject.file(tptValue)
+    File tptSelfCheckOut = rootProject.file("build/twoPlayerTest/selfcheck")
+    String tptTimeout = (project.findProperty('twoPlayerTestTimeoutMinutes') ?: '25').toString()
+    String tptServer = (project.findProperty('twoPlayerTestServer') ?: 'localhost:25565').toString()
+    // the self-check counts its own gametests: a run that registered fewer cannot pass
+    int tptSelfCheckTests = 6
+    File tptManifest = rootProject.file("tools/twoplayertest/expected-assertions.txt")
+
+    sourceSets {
+        twoplayertest {
+            java.srcDirs = ["src/twoplayertest/java"]
+            resources.srcDirs = ["src/twoplayertest/resources"]
+            compileClasspath += sourceSets.main.compileClasspath + sourceSets.main.output
+            runtimeClasspath += sourceSets.main.runtimeClasspath + sourceSets.main.output
+        }
+        // The self-check gametests, a second mod (Fabric/src/twoplayertest/selfcheck) only on the classpath of
+        // runTwoPlayerTestSelfCheck. Like gametestSaveCompat it gets the compiled classes of "gametest" for the
+        // profile-cache mixin a gametest server needs (MixinGameTestProfileCache), but not its resources, so none of the
+        // other gametests are registered there.
+        twoplayertestSelfcheck {
+            java.srcDirs = ["src/twoplayertest/selfcheck/java"]
+            resources.srcDirs = ["src/twoplayertest/selfcheck/resources"]
+            compileClasspath += sourceSets.twoplayertest.compileClasspath + sourceSets.twoplayertest.output
+            runtimeClasspath += sourceSets.twoplayertest.runtimeClasspath + sourceSets.twoplayertest.output + sourceSets.gametest.output.classesDirs
+        }
+    }
+
+    loom {
+        mods {
+            register("opac_teamclaims_twoplayertest") {
+                sourceSet(sourceSets.twoplayertest)
+            }
+            register("opac_teamclaims_twoplayertest_selfcheck") {
+                sourceSet(sourceSets.twoplayertestSelfcheck)
+            }
+        }
+        runs {
+            // The dedicated server: the repository's run-server folder (eula, online-mode=false, Player1 op), on the
+            // throwaway world PerfTest-OPACHub that the script prepares.
+            twoPlayerTestServer {
+                server()
+                setConfigName("Fabric Two-Player Test Server")
+                ideConfigGenerated(false)
+                runDir("../run-server")
+                programArgs("nogui", "--world", "PerfTest-OPACHub")
+                vmArg("-Dopac.twoplayertest.out=${tptOut.absolutePath}")
+                vmArg("-Dopac.twoplayertest.role=server")
+                source(sourceSets.twoplayertest)
+            }
+            // The two clients: own run folders (not run-client1/2 of start-all.bat), so their options.txt can be
+            // the test's own (default key bindings, no pause on focus loss); 1280 x 960 allows GUI scale 4.
+            twoPlayerTestClient1 {
+                client()
+                setConfigName("Fabric Two-Player Test Client 1")
+                ideConfigGenerated(false)
+                runDir("../run-tpt-client1")
+                programArgs("--username", "Player1", "--width", "1280", "--height", "960")
+                vmArg("-Dopac.twoplayertest.out=${tptOut.absolutePath}")
+                vmArg("-Dopac.twoplayertest.role=Player1")
+                vmArg("-Dopac.twoplayertest.timeoutMinutes=${tptTimeout}")
+                vmArg("-Dopac.twoplayertest.server=${tptServer}")
+                source(sourceSets.twoplayertest)
+            }
+            twoPlayerTestClient2 {
+                client()
+                setConfigName("Fabric Two-Player Test Client 2")
+                ideConfigGenerated(false)
+                runDir("../run-tpt-client2")
+                programArgs("--username", "Player2", "--width", "1280", "--height", "960")
+                vmArg("-Dopac.twoplayertest.out=${tptOut.absolutePath}")
+                vmArg("-Dopac.twoplayertest.role=Player2")
+                vmArg("-Dopac.twoplayertest.timeoutMinutes=${tptTimeout}")
+                vmArg("-Dopac.twoplayertest.server=${tptServer}")
+                source(sourceSets.twoplayertest)
+            }
+            // The headless self-check (gametest server, like runBootTest): needs no window and no game lock.
+            twoPlayerTestSelfCheck {
+                server()
+                setConfigName("Fabric Two-Player Test Self-Check")
+                ideConfigGenerated(false)
+                runDir("../run-tpt-selfcheck")
+                vmArg("-Dfabric-api.gametest")
+                vmArg("-Dopac.twoplayertest.out=${tptSelfCheckOut.absolutePath}")
+                vmArg("-Dopac.twoplayertest.role=selfcheck")
+                vmArg("-Dopac.twoplayertest.manifest=${tptManifest.absolutePath}")
+                source(sourceSets.twoplayertestSelfcheck)
+            }
+        }
+    }
+
+    // The root build.gradle copies OPAC's lang files into every ProcessResources task; they belong to the main mod only.
+    ["processTwoplayertestResources", "processTwoplayertestSelfcheckResources"].each { String taskName ->
+        tasks.named(taskName, ProcessResources) {
+            eachFile { if (it.path.startsWith("data/${project.mod_id}/")) it.exclude() }
+        }
+    }
+    tasks.named("processTwoplayertestSelfcheckResources", ProcessResources) {
+        from("src/gametest/resources") {
+            include "opac_teamclaims_gametest.mixins.json"
+        }
+    }
+
+    File runDirTptSelfCheck = rootProject.file("run-tpt-selfcheck")
+    tasks.named('runTwoPlayerTestSelfCheck') {
+        doFirst {
+            delete new File(runDirTptSelfCheck, "world"), new File(runDirTptSelfCheck, "logs/latest.log"), tptSelfCheckOut
+        }
+        doLast {
+            File log = new File(runDirTptSelfCheck, "logs/latest.log")
+            def passed = log.exists() ? (log.getText("UTF-8") =~ /All (\d+) required tests passed/) : null
+            if (passed == null || !passed.find()) {
+                throw new GradleException("Two-player test self-check did not pass: no \"All N required tests passed\" line in ${log}")
+            }
+            if (passed.group(1).toInteger() != tptSelfCheckTests) {
+                throw new GradleException("Two-player test self-check ran ${passed.group(1)} tests, expected ${tptSelfCheckTests}: ${passed.group(0)} (log: ${log})")
+            }
+            logger.lifecycle("Two-player test self-check: ${passed.group(0)} (log: ${log})")
+        }
+    }
+}
