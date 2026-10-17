@@ -585,12 +585,14 @@ public class TeamConfigManager {
         }
     }
 
-    private int getCanonicalColor(TeamConfig config) {
+    /** The claims colour every member's team sub-config gets: the stored one, else one derived from the party id. */
+    public int getCanonicalColor(TeamConfig config) {
         Integer color = config.getClaimsColor();
         return color != null ? color : TeamConfig.computeTeamColor(config.getPartyId());
     }
 
-    private String getCanonicalName(TeamConfig config) {
+    /** The claims name every member's team sub-config gets: the stored one, else the team name. */
+    public String getCanonicalName(TeamConfig config) {
         String name = config.getClaimsName();
         return name != null ? name : config.getTeamName();
     }
@@ -653,6 +655,9 @@ public class TeamConfigManager {
     }
 
     @Nullable public TeamConfig getTeamConfig(UUID partyId) { return teamConfigs.get(partyId); }
+
+    /** Every team config of the server (live read-only view, copy it before changing teams while iterating). */
+    public Collection<TeamConfig> getTeamConfigs() { return Collections.unmodifiableCollection(teamConfigs.values()); }
 
     @Nullable
     public TeamConfig getTeamConfigForPlayer(UUID playerUUID) {

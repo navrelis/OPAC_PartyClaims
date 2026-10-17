@@ -106,6 +106,9 @@ public class ServerPlayerData extends ServerPlayerDataAPI {
 	private UUID claimTransferRequestTargetPlayerId;
 	private long claimTransferRequestTime;
 	private long lastPartyInvitesRequestTick = -1000;
+	// [Team Claims] the admin menu flag last sent to the client (null = none yet) and the last config snapshot request
+	private Boolean syncedAdminMenu;
+	private long lastAdminConfigsRequestTick = -1000;
 
 	public ServerPlayerData(
 			IServerData<IServerClaimsManager<IPlayerChunkClaim, IServerPlayerClaimInfo<IPlayerDimensionClaims<IPlayerClaimPosList>>, IServerDimensionClaimsManager<IServerRegionClaims>>, IServerParty<IPartyMember, IPartyPlayerInfo, IPartyAlly>>
@@ -339,6 +342,23 @@ public class ServerPlayerData extends ServerPlayerDataAPI {
 
 	public void setLastPartyInvitesRequestTick(long lastPartyInvitesRequestTick) {
 		this.lastPartyInvitesRequestTick = lastPartyInvitesRequestTick;
+	}
+
+	// [Team Claims] see the fields
+	public Boolean getSyncedAdminMenu() {
+		return syncedAdminMenu;
+	}
+
+	public void setSyncedAdminMenu(Boolean syncedAdminMenu) {
+		this.syncedAdminMenu = syncedAdminMenu;
+	}
+
+	public long getLastAdminConfigsRequestTick() {
+		return lastAdminConfigsRequestTick;
+	}
+
+	public void setLastAdminConfigsRequestTick(long lastAdminConfigsRequestTick) {
+		this.lastAdminConfigsRequestTick = lastAdminConfigsRequestTick;
 	}
 
 	public void setHasMod(boolean hasMod) {

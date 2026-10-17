@@ -24,6 +24,7 @@ import xaero.pac.common.server.IServerData;
 import xaero.pac.common.server.player.config.api.PlayerConfigType;
 import xaero.pac.common.server.player.data.ServerPlayerData;
 import xaero.pac.common.server.player.data.config.PlayerConfigPermissionUpdateData;
+import xaero.pac.teamclaims.admin.AdminAccess;
 
 public class PlayerConfigPermissionUpdater {
 
@@ -54,6 +55,7 @@ public class PlayerConfigPermissionUpdater {
 		if (checkTime && time - playerData.getLastPlayerConfigPermissionUpdate() < 100)
 			return;
 		playerData.setLastPlayerConfigPermissionUpdate(time);
+		AdminAccess.syncFlag(player, playerData);//[Team Claims] tells the client when it gains or loses the admin menu
 		boolean hadChanges = false;
 		for (PlayerConfigType type : PlayerConfigType.values()) {
 			if(updateForType(type, playerData, player, serverData))

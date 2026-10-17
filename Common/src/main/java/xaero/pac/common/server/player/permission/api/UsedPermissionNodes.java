@@ -178,6 +178,18 @@ public class UsedPermissionNodes {
 			ALL_BUILDER);
 
 	/**
+	 * [Team Claims] The permission to use the admin menu of the hub screen (server settings, player and team bonuses),
+	 * which permission level 2 always gives. The node has no config option to rename it.
+	 */
+	public static final IPermissionNodeAPI<Boolean> ADMIN_MENU = new PermissionNode<>(
+			"xaero.pac_admin_menu",
+			PermissionValueTypes.BOOLEAN,
+			() -> "xaero.pac_admin_menu",
+			Component.translatable("gui.xaero_pac_permission_admin_menu"),
+			Component.translatable("gui.xaero_pac_permission_comment_admin_menu"),
+			ALL_BUILDER);
+
+	/**
 	 * A (default node string)->(node instance) map of all player permission nodes.
 	 */
 	public static final ImmutableMap<String, IPermissionNodeAPI<?>> ALL = ImmutableMap.copyOf(ALL_BUILDER);

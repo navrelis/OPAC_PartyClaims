@@ -96,6 +96,7 @@ public final class ClientData implements IClientData<PlayerConfigClientStorageMa
 		claimsManager.reset(notifyClaimsTracker);
 		clientClaimsSyncHandler.reset();
 		playerConfigStorageManager.reset();
+		xaero.pac.client.teamclaims.TeamClaimsClientData.INSTANCE.reset();//[Team Claims]
 	}
 
 	@Override
