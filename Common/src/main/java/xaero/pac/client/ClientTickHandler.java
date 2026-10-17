@@ -36,8 +36,16 @@ public class ClientTickHandler {
 		}
 		if(clientData.getKeyBindings().openModMenu.consumeClick())
 			Minecraft.getInstance().setScreen(new MainMenu(null, null));
-		if(clientData.getKeyBindings().openHubMenu.consumeClick())//[Team Claims]
-			HubTabs.openLast(Minecraft.getInstance(), null, null);
+		//[Team Claims] P is also vanilla's Social Interactions key and only one of the two gets the presses, so while they share a key the hub takes both
+		int hubClicks = 0;
+		while(clientData.getKeyBindings().openHubMenu.consumeClick())
+			hubClicks++;
+		Minecraft minecraft = Minecraft.getInstance();
+		if(HubTabs.isSharedWithSocialInteractions(minecraft))
+			while(minecraft.options.keySocialInteractions.consumeClick())
+				hubClicks++;
+		if(hubClicks > 0)
+			HubTabs.openLast(minecraft, null, null);
 	}
 
 }	

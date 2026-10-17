@@ -35,4 +35,9 @@ public class KeyBindingHelperFabric implements IKeyBindingHelper {
 		return KeyBindingHelper.getBoundKeyOf(keyBinding);
 	}
 
+	@Override
+	public boolean haveSameKeyModifier(KeyMapping first, KeyMapping second) {//[Team Claims]
+		return true;
+	}
+
 }

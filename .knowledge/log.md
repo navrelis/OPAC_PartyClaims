@@ -93,3 +93,8 @@
 - Docs recheck to Sonnet (README, CURSEFORGE.md; release type Release).
 - Docs recheck done (Sonnet, 1 correction): README + CURSEFORGE.md match the final UI, test table 135 / 169 / 4, release type Release.
 - Lead changed: report to local_14a71120-35a6-429d-b561-ecf58ba39d51 (still second in game-lock queue after QuestBridge).
+- In-game check by computer-use stopped (owner wants an automated test); lock released to QuestBridge. Finding: P opened vanilla Social Interactions, not the hub. T8 (Sonnet, P conflict) and T9 (Opus, automated two-player client test, worktree ../opac-clienttest) started.
+- 2026-10-17 handoff (context limit): T8 and T9 stopped before any edit; see handoff-2026-10-17-d9a49a83.md in the worktree root.
+- Lead local_14a71120: P fix approved, cover in test; never take the game lock on own — report when T9 builds + headless parts pass, lead slots OPAC into the chain and has the previous session hand the lock over.
+- 2026-10-17 session 3 (resumed from handoff d9a49a83): T8 re-delegated (Sonnet, this checkout), T9 re-delegated (Opus, ../opac-clienttest, phase 1 headless only).
+- T8 done (Sonnet, 0 corrections): hub takes Social Interactions clicks while both share key+modifier (NeoForge same() rejected: true for P vs Ctrl+P); lead run 135 / 135 both loaders; docs 3 spots each in README + CURSEFORGE.md.

@@ -12,5 +12,9 @@ Status: open / in progress / in review / done. Size S/L, difficulty E/H. One Gra
 | 4a | Team tab + Claims tab uses team info (sub index, max action size) | L/E | Sonnet (this checkout) | 2, 3 | done (128 per loader) | builds; Team tab edits go through existing commands and option packets |
 | 4b | Admin tab (configs, players, teams) | L/E | Sonnet (worktree ../opac-t4-admin) | 2, 3 | done (135 / 169 per loader, merged 9ca8a7a6) | builds; every admin action goes through task 2's packets |
 | 5 | Docs/release prep: version 1.4.0+opac.0.32.7, README, changelog, CURSEFORGE.md, lang en + de complete | S/E | Sonnet | 4 | done (rechecked after 4b) | docs match behaviour |
-| 6 | Acceptance: all test runs, dedicated server with two players, linkcheck vs World Map/Minimap | – | lead | 1–5 | open | checklist in report.md |
+| 8 | Hub key P vs vanilla Social Interactions (P): with both on P vanilla wins (one mapping per key); route the conflicting social click to the hub | S/E | Sonnet (this checkout) | 4b | done (135 / 135 both loaders; in-game proof via T9) | P opens the hub with default keys; build + tests green |
+| 9 | Automated two-player client test (owner: no computer-use): dev-only scripted client driver for runServer + runClient + runClient2, opens hub/Claims/Team/Admin, clicks rank buttons, screenshots, asserts client and server state, report file | L/H | Opus (worktree ../opac-clienttest) | 4b | in progress (re-delegated, phase 1 headless; lock needed for phase 2) | one command runs server + 2 clients unattended, writes screenshots + pass/fail per assertion, exits; committed |
+| 6 | Acceptance: all test runs, dedicated server with two players, linkcheck vs World Map/Minimap | – | lead | 1–5, 8, 9 | open | checklist in report.md |
 | 7 | Release: jars to ExportedJars/v1.4.0, dev instance mods/, push, CurseForge upload both loaders, report | – | lead | 6 | open | file ids in report.md |
+
+Usage tally (long = 2, short = 1): Opus T2 (2) + T9 (2) = 4; Sonnet T1 (1), T3 (2), T4a (2), T5 (1), T4b (2), docs recheck (1), T8 (1) = 10. Opus ≈ 29 %.
