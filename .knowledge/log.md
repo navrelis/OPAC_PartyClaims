@@ -85,3 +85,9 @@
 - T5 done (Sonnet): version 1.4.0+opac.0.32.7, README, changelog, ExportedJars/v1.4.0/CURSEFORGE.md (release type line to be set at upload; 1.3.0 went up as Release on the owner request).
 - 2026-10-17 session handoff (context limit): T4b stopped mid-task; see handoff-2026-10-17-5b0bb036.md in the worktree root.
 - 2026-10-17 new lead session: resumed from handoff; T4b WIP committed in ../opac-t4-admin, merge of hub branch started there (1 conflict, HubTabs import); T4b phase 1 (merge resolution) to Sonnet.
+- Lead local_26c21154: own both worktrees; game lock order uxwm-zoomout-perf -> QuestBridge -> this session.
+- Hub branch 8153a389 (pre-T4b): FTB 162 / 162 both loaders, save-compat 4 / 4 both loaders (lead run).
+- T4b done (Sonnet, 2 phases): merge resolved (214fe3d7), Admin tab finished (35a3e3a8), merged into hub as 9ca8a7a6. Agent run: 135 / 135 default, 169 / 169 FTB, both loaders. Lead review: full diff read; open in-game point = suggestion buttons rebuild during their own click.
+- Merged branch 9ca8a7a6 (lead run): default 135 / 135, FTB 169 / 169, save-compat 4 / 4, each on Fabric and NeoForge; build green.
+- Linkcheck 1.4.0 jars vs World Map 1.47.0 + Minimap 26.6.0: Fabric and NeoForge 0 errors, exit 0.
+- Docs recheck to Sonnet (README, CURSEFORGE.md; release type Release).

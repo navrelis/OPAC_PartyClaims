@@ -21,3 +21,4 @@ Requirements of v1.3.0 and older: git history of this file. Design and owner dec
 - As in 1.3.0 (git history of this file) plus: commit as Navrelis <111079703+navrelis@users.noreply.github.com>, no
   Co-Authored-By, no real name or local paths in commits. Never kill javaw; game lock `F:\Coding\.knowledge\game.lock`.
 - Never overwrite an existing handoff file; own handoff = `.knowledge/handoff-opac-admin-rework-2026-10-17.md`.
+- 2026-10-17 owner: CurseForge 1.4.0 release type = Release (both loaders); relation-slug check override OK for this upload.
