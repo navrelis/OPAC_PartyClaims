@@ -33,12 +33,13 @@ public class XPACKeyBindings implements OPACKeyBindingsAPI {
 	
 	private final List<KeyMapping> keyBindings;
 	public final KeyMapping openModMenu;
-	public final KeyMapping openPartyMenu;
+	public final KeyMapping openHubMenu;//[Team Claims]
 
 	public XPACKeyBindings() {
 		keyBindings = new ArrayList<>();
 		keyBindings.add(openModMenu = new KeyMapping("gui.xaero_pac_key_open_menu", GLFW.GLFW_KEY_APOSTROPHE, "Open Parties and Claims"));
-		keyBindings.add(openPartyMenu = new KeyMapping("gui.xaero_pac_key_open_party_menu", GLFW.GLFW_KEY_O, "Open Parties and Claims"));
+		//[Team Claims] the hub; a new name instead of the one of the party key of 1.3.0 so that the default P applies to everyone, not only to those who never started 1.3.0
+		keyBindings.add(openHubMenu = new KeyMapping("gui.xaero_pac_key_open_hub_menu", GLFW.GLFW_KEY_P, "Open Parties and Claims"));
 	}
 	
 	public void register() {

@@ -92,7 +92,8 @@ public class XPACScreen extends Screen implements IDropDownContainer {
 	@Override
 	public void render(GuiGraphics guiGraphics, int mouseX, int mouseY, float partial) {
 		super.render(guiGraphics, mouseX, mouseY, partial);
-		guiGraphics.drawCenteredString(font, XPAC_TITLE, width / 2, 5, -1);
+		if(isTitleShown())//[Team Claims] the hub screens draw their tab bar there
+			guiGraphics.drawCenteredString(font, XPAC_TITLE, width / 2, 5, -1);
 		renderPreDropdown(guiGraphics, mouseX, mouseY, partial);
 		if(openDropdown != null) {
 			PoseStack poseStack = guiGraphics.pose();
@@ -104,6 +105,13 @@ public class XPACScreen extends Screen implements IDropDownContainer {
 	}
 
 	protected void renderPreDropdown(GuiGraphics guiGraphics, int mouseX, int mouseY, float partial){
+	}
+
+	/**
+	 * [Team Claims] Checks whether the screen has the OPAC title at the top.
+	 */
+	protected boolean isTitleShown(){
+		return true;
 	}
 
 	@Override

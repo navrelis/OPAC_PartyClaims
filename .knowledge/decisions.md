@@ -38,3 +38,5 @@
 - 2026-10-17 v1.4: parallel tasks run in their own manually created worktrees next to this one (branched from this branch), never with isolation=worktree (that starts on the old main root).
 - 2026-10-17 v1.4: per-team bonus applies on top of the formula, also below teamClaimsMinMembers (lead call).
 - 2026-10-17 v1.4: restart-only options edited in the admin menu go to the toml only; the running server keeps the old value (lead call, anti-goal "half-applied").
+- 2026-10-17 v1.4: hub key gets a new keymapping id (gui.xaero_pac_key_open_hub_menu, default P) so the P default reaches players whose options.txt already saved O; rebinds of the 1.3 party key are lost (minor).
+- 2026-10-17 v1.4: hub tabs are separate screens with a shared tab bar (HubTabs.create); the Party tab is the 1.3 party screen.

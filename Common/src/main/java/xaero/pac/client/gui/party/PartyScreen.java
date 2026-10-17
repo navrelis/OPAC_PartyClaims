@@ -19,8 +19,6 @@
 package xaero.pac.client.gui.party;
 
 import com.google.common.collect.Lists;
-import com.mojang.blaze3d.platform.InputConstants;
-import net.minecraft.client.KeyMapping;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.EditBox;
@@ -33,9 +31,11 @@ import net.minecraft.network.chat.CommonComponents;
 import net.minecraft.network.chat.Component;
 import net.minecraft.util.FormattedCharSequence;
 import xaero.pac.OpenPartiesAndClaims;
-import xaero.pac.client.controls.keybinding.IKeyBindingHelper;
 import xaero.pac.client.gui.MainMenu;
 import xaero.pac.client.gui.XPACScreen;
+import xaero.pac.client.gui.hub.HubTab;
+import xaero.pac.client.gui.hub.HubTabBar;
+import xaero.pac.client.gui.hub.HubTabs;
 import xaero.pac.common.parties.party.ReceivedPartyInvite;
 import xaero.pac.client.parties.party.IClientParty;
 import xaero.pac.client.parties.party.IClientPartyAllyInfo;
@@ -53,7 +53,6 @@ import xaero.pac.common.parties.party.IPartyPlayerInfo;
 import xaero.pac.common.parties.party.ally.IPartyAlly;
 import xaero.pac.common.parties.party.member.IPartyMember;
 import xaero.pac.common.parties.party.member.PartyMemberRank;
-import xaero.pac.common.platform.Services;
 import xaero.pac.common.server.player.config.PlayerConfigOptionSpec;
 import xaero.pac.common.server.player.config.api.PlayerConfigType;
 import xaero.pac.common.server.player.config.api.v2.PlayerConfigOptions;
@@ -90,8 +89,8 @@ public class PartyScreen extends XPACScreen implements PartyEntryList.Actions {
 	private static final int HEADER_GAP = 2;
 	private static final int MAX_LINES_PER_ENTRY = 2;
 	private static final int TOOLTIP_WIDTH = 200;
-	private static final int CONTENT_TOP = 14;
-	private static final int NO_PARTY_HEADER_TOP = 16;
+	private static final int CONTENT_TOP = HubTabBar.CONTENT_TOP;//[Team Claims] below the tab bar of the hub
+	private static final int NO_PARTY_HEADER_TOP = CONTENT_TOP + 2;
 	private static final int NO_PARTY_MAX_HEADER_LINES = 2;
 	private static final long MILLIS_PER_MINUTE = 60_000;
 	private static final long MINUTES_PER_HOUR = 60;
@@ -238,11 +237,11 @@ public class PartyScreen extends XPACScreen implements PartyEntryList.Actions {
 		return value == Integer.MAX_VALUE ? "∞" : String.valueOf(value);
 	}
 
-	private static Component formatBudget(int amount, int limit) {
+	public static Component formatBudget(int amount, int limit) {//[Team Claims] public for the Claims tab of the hub
 		return Component.literal(amount + " / " + formatLimit(limit)).withStyle(s -> s.withColor(VALUE_COLOR));
 	}
 
-	private static Component formatTimeLeft(long millis) {
+	public static Component formatTimeLeft(long millis) {//[Team Claims] public for the Claims tab of the hub
 		long minutes = Math.max(1, (millis + MILLIS_PER_MINUTE - 1) / MILLIS_PER_MINUTE);
 		if(minutes >= MINUTES_PER_DAY)
 			return Component.translatable("gui.xaero_pac_party_screen_time_days", minutes / MINUTES_PER_DAY, minutes % MINUTES_PER_DAY / MINUTES_PER_HOUR);
@@ -305,6 +304,8 @@ public class PartyScreen extends XPACScreen implements PartyEntryList.Actions {
 	@Override
 	protected void init() {
 		super.init();
+		for(Button tabButton : HubTabBar.create(minecraft, width, HubTab.PARTY, escape, parent))//[Team Claims] the party screen is the Party tab of the hub
+			addRenderableWidget(tabButton);
 		state = computeState();
 		contentWidth = Math.min(width - 16, MAX_CONTENT_WIDTH);
 		contentLeft = (width - contentWidth) / 2;
@@ -334,13 +335,13 @@ public class PartyScreen extends XPACScreen implements PartyEntryList.Actions {
 	}
 
 	private void initMessageOnly() {
-		messageY = 40;
+		messageY = CONTENT_TOP + 26;
 		addBackButton(width / 2 - 100, height - 26, 200);
 	}
 
 	private void initNoParty() {
 		headerTop = NO_PARTY_HEADER_TOP;
-		createLabelY = headerLines.isEmpty() ? 18 : headerTop + headerLines.size() * HEADER_LINE_STEP + 3;
+		createLabelY = headerLines.isEmpty() ? CONTENT_TOP + 4 : headerTop + headerLines.size() * HEADER_LINE_STEP + 3;
 		int createButtonWidth = font.width(CREATE) + 20;
 		createBox = new EditBox(font, contentLeft, createLabelY + font.lineHeight + 3, contentWidth - createButtonWidth - ROW_GAP, BUTTON_HEIGHT, CREATE_NAME_HINT);
 		createBox.setMaxLength(PartyRules.getPartyNameMaxLength());
@@ -760,9 +761,7 @@ public class PartyScreen extends XPACScreen implements PartyEntryList.Actions {
 
 	@Override
 	public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
-		KeyMapping keyMapping = OpenPartiesAndClaims.INSTANCE.getClientDataInternal().getKeyBindings().openPartyMenu;
-		InputConstants.Key boundKey = Services.PLATFORM.getKeyBindingHelper().getBoundKey(keyMapping);
-		if(!isTextFieldFocused() && boundKey.getType() == InputConstants.Type.KEYSYM && keyCode == boundKey.getValue()) {
+		if(!isTextFieldFocused() && HubTabs.isHubKey(keyCode)) {
 			onClose();
 			return true;
 		}
@@ -771,14 +770,19 @@ public class PartyScreen extends XPACScreen implements PartyEntryList.Actions {
 
 	@Override
 	public boolean mouseClicked(double mouseX, double mouseY, int button) {
-		KeyMapping keyMapping = OpenPartiesAndClaims.INSTANCE.getClientDataInternal().getKeyBindings().openPartyMenu;
-		IKeyBindingHelper keyBindingHelper = Services.PLATFORM.getKeyBindingHelper();
-		InputConstants.Key boundKey = keyBindingHelper.getBoundKey(keyMapping);
-		if(!isTextFieldFocused() && boundKey.getType() == InputConstants.Type.MOUSE && button == boundKey.getValue()) {
+		if(!isTextFieldFocused() && HubTabs.isHubMouseButton(button)) {
 			onClose();
 			return true;
 		}
 		return super.mouseClicked(mouseX, mouseY, button);
+	}
+
+	/**
+	 * [Team Claims] The OPAC title is where the tab bar of the hub is.
+	 */
+	@Override
+	protected boolean isTitleShown() {
+		return false;
 	}
 
 	@Override

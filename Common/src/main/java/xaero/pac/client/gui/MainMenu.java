@@ -37,7 +37,7 @@ import xaero.pac.client.claims.player.mode.ClientClaimingModeHandler;
 import xaero.pac.client.command.util.CommandUtil;
 import xaero.pac.client.controls.keybinding.IKeyBindingHelper;
 import xaero.pac.client.gui.component.CachedComponentSupplier;
-import xaero.pac.client.gui.party.PartyScreen;
+import xaero.pac.client.gui.hub.HubTabs;
 import xaero.pac.client.gui.widget.dropdown.DropDownWidget;
 import xaero.pac.client.parties.party.IClientParty;
 import xaero.pac.client.parties.party.IClientPartyAllyInfo;
@@ -319,7 +319,7 @@ public class MainMenu extends XPACScreen {
 	}
 
 	private void onPartyScreenButton(Button b) {
-		minecraft.setScreen(new PartyScreen(escape, this));
+		HubTabs.openLast(minecraft, escape, this);//[Team Claims] the party screen is a tab of the hub
 	}
 
 	private boolean wouldClaim(IPlayerChunkClaim currentClaim){
