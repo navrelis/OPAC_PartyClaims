@@ -18,6 +18,8 @@
 
 package xaero.pac.client.gui.hub;
 
+import javax.annotation.Nullable;
+
 /**
  * The rectangle of chunks that a player selected on the grid of the Claims tab, by dragging from one chunk to another or
  * by clicking one chunk. The two corners are kept as they were picked, so that the selection can be extended while the
@@ -31,12 +33,6 @@ package xaero.pac.client.gui.hub;
  * @param endZ  the Z of the chunk where the selection currently ends
  */
 public record ChunkSelection(int anchorX, int anchorZ, int endX, int endZ) {
-
-	/**
-	 * The default of the server option {@code maxSingleClaimActionSize}. The client is not told the real value, so this
-	 * only decides when to warn that the server may refuse the selection, never whether the buttons work.
-	 */
-	public static final int DEFAULT_MAX_SINGLE_ACTION_SIZE = 121;
 
 	/**
 	 * Creates a selection of a single chunk.
@@ -116,11 +112,13 @@ public record ChunkSelection(int anchorX, int anchorZ, int endX, int endZ) {
 	}
 
 	/**
-	 * Checks whether the selection is bigger than the default limit of one claim action of the server, in which case the
-	 * server probably refuses it.
+	 * Checks whether the selection is bigger than the server allows for one claim, unclaim or forceload action (the server
+	 * option {@code maxSingleClaimActionSize}, which the server sends with the team information).
+	 *
+	 * @param maxActionSize  the limit of the server, null if it is not known yet, in which case nothing is too big
 	 */
-	public boolean exceedsDefaultActionSize() {
-		return count() > DEFAULT_MAX_SINGLE_ACTION_SIZE;
+	public boolean exceedsActionSize(@Nullable Integer maxActionSize) {
+		return maxActionSize != null && count() > maxActionSize;
 	}
 
 }

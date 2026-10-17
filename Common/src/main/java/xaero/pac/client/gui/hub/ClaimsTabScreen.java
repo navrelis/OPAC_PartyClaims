@@ -18,12 +18,10 @@
 
 package xaero.pac.client.gui.hub;
 
-import com.google.common.collect.Lists;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.Tooltip;
 import net.minecraft.client.gui.screens.Screen;
-import net.minecraft.client.multiplayer.ClientPacketListener;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.util.FormattedCharSequence;
@@ -35,22 +33,16 @@ import xaero.pac.client.claims.player.api.IClientPlayerClaimInfoAPI;
 import xaero.pac.client.gui.MainMenu;
 import xaero.pac.client.gui.party.PartyScreen;
 import xaero.pac.client.parties.party.IClientPartyStorage;
+import xaero.pac.client.teamclaims.TeamClaimsClientData;
 import xaero.pac.client.player.config.IPlayerConfigClientStorage;
-import xaero.pac.client.player.config.IPlayerConfigStringableOptionClientStorage;
 import xaero.pac.client.world.capability.ClientWorldMainCapability;
 import xaero.pac.client.world.capability.api.ClientWorldCapabilityTypes;
 import xaero.pac.common.claims.api.SpecialClaimOwners;
 import xaero.pac.common.claims.player.api.IPlayerChunkClaimAPI;
 import xaero.pac.common.claims.player.mode.api.ClaimingModes;
 import xaero.pac.common.claims.player.mode.api.IClaimingModeAPI;
-import xaero.pac.common.packet.config.PlayerConfigOptionValuePacket;
-import xaero.pac.common.packet.config.ServerboundPlayerConfigOptionValuePacket;
 import xaero.pac.common.packet.parties.PartyBudgetData;
-import xaero.pac.common.packet.parties.ServerboundPartyInvitesRequestPacket;
-import xaero.pac.common.server.player.config.PlayerConfig;
-import xaero.pac.common.server.player.config.PlayerConfigOptionSpec;
-import xaero.pac.common.server.player.config.api.PlayerConfigType;
-import xaero.pac.common.server.player.config.api.v2.PlayerConfigOptions;
+import xaero.pac.common.packet.teamclaims.TeamInfoData;
 
 import javax.annotation.Nullable;
 import java.util.ArrayList;
@@ -70,11 +62,6 @@ import java.util.UUID;
 public class ClaimsTabScreen extends HubTabScreen {
 
 	private static final Component TITLE = Component.translatable("gui.xaero_pac_hub_tab_claims");
-	private static final Component CLAIM_AS_PRIVATE = Component.translatable("gui.xaero_pac_hub_claim_as_private");
-	private static final Component CLAIM_AS_TEAM = Component.translatable("gui.xaero_pac_hub_claim_as_team");
-	private static final Tooltip CLAIM_AS_TOOLTIP = Tooltip.create(Component.translatable("gui.xaero_pac_hub_claim_as_tooltip"));
-	private static final Tooltip CLAIM_AS_NO_TEAM_TOOLTIP = Tooltip.create(Component.translatable("gui.xaero_pac_hub_claim_as_no_team_tooltip"));
-	private static final Tooltip CLAIM_AS_OTHER_MODE_TOOLTIP = Tooltip.create(Component.translatable("gui.xaero_pac_hub_claim_as_other_mode_tooltip"));
 	private static final Tooltip CLAIM_TOOLTIP = Tooltip.create(Component.translatable("gui.xaero_pac_hub_claim_tooltip"));
 	private static final Tooltip UNCLAIM_TOOLTIP = Tooltip.create(Component.translatable("gui.xaero_pac_hub_unclaim_tooltip"));
 	private static final Tooltip FORCELOAD_TOOLTIP = Tooltip.create(Component.translatable("gui.xaero_pac_hub_forceload_tooltip"));
@@ -100,8 +87,8 @@ public class ClaimsTabScreen extends HubTabScreen {
 	private static final int LINE_STEP = 10;
 	private static final int SECTION_GAP = 5;
 	private static final int TOOLTIP_WIDTH = 200;
-	private static final int BUDGET_REQUEST_INTERVAL_TICKS = 40;
-	private static final int BUDGET_REFRESH_AFTER_ACTION_TICKS = 25;
+	private static final int REFRESH_INTERVAL_TICKS = 40;
+	private static final int REFRESH_AFTER_ACTION_TICKS = 25;
 	private static final int SWATCH_SIZE = 8;
 	private static final int TWO_COLUMN_LEGEND_WIDTH = 150;
 
@@ -119,15 +106,10 @@ public class ClaimsTabScreen extends HubTabScreen {
 	private static final int PARTY_BADGE_COLOR = 0xFF55FF55;
 	private static final int SERVER_BADGE_COLOR = 0xFF55FFFF;
 	private static final int EXPIRED_BADGE_COLOR = 0xFF888888;
-	private static final int TEXT_COLOR = 0xFFE0E0E0;
+	private static final int TEXT_COLOR = HubBudgetLines.TEXT_COLOR;
 	private static final int VALUE_COLOR = 0xFFAAAAAA;
-	private static final int WARNING_COLOR = 0xFFFF5555;
-	private static final int HINT_COLOR = 0xFFFFCC55;
-
-	/**
-	 * Remembers across screens which sub-config index the team sub-config has, see {@link TeamSubIndexMemory}.
-	 */
-	private static final TeamSubIndexMemory TEAM_SUB_INDEX_MEMORY = new TeamSubIndexMemory();
+	private static final int WARNING_COLOR = HubBudgetLines.WARNING_COLOR;
+	private static final int HINT_COLOR = HubBudgetLines.HINT_COLOR;
 
 	private enum State {
 		NO_MOD, NO_CLAIMS, SYNCING, READY
@@ -194,8 +176,12 @@ public class ClaimsTabScreen extends HubTabScreen {
 	@Nullable
 	private String teamSubId;
 	private boolean hasOtherSubConfigs;
-	private int budgetRequestCounter;
-	private int budgetRefreshCountdown;
+	@Nullable
+	private Integer teamSubIndex;
+	private final RefreshSchedule refreshSchedule = new RefreshSchedule(REFRESH_INTERVAL_TICKS, REFRESH_AFTER_ACTION_TICKS);
+	@Nullable
+	private Tooltip tooLargeTooltip;
+	private int tooLargeTooltipLimit;
 
 	public ClaimsTabScreen(Screen escape, Screen parent) {
 		super(escape, parent, TITLE);
@@ -220,10 +206,6 @@ public class ClaimsTabScreen extends HubTabScreen {
 		return OpenPartiesAndClaims.INSTANCE.getClientDataInternal().getPlayerConfigStorageManager().getMyPlayerConfig();
 	}
 
-	private IPlayerConfigStringableOptionClientStorage<String> getUsedSubOption() {
-		return getMyConfig().getOption(PlayerConfigOptions.USED_SUBCLAIM);
-	}
-
 	private ResourceLocation getDimension() {
 		return minecraft.level.dimension().location();
 	}
@@ -241,32 +223,30 @@ public class ClaimsTabScreen extends HubTabScreen {
 		return State.READY;
 	}
 
-	private boolean serverHasPartiesEnabled() {
-		ClientWorldMainCapability mainCap = (ClientWorldMainCapability) OpenPartiesAndClaims.INSTANCE.getCapabilityHelper().getCapability(minecraft.level, ClientWorldCapabilityTypes.MAIN_CAP);
-		return mainCap.getClientWorldData().serverHasPartiesEnabled();
-	}
-
 	/**
-	 * Reads the sub-configs of the player and learns the index of the team sub-config whenever it is the one in use.
+	 * Reads the sub-configs of the player and works out the index that the team claims of the player carry, from the team
+	 * information of the server.
 	 */
 	private void updateSubConfigKnowledge() {
 		List<String> subConfigIds = getMyConfig().getSubConfigIds();
 		teamSubId = ClaimsHubLogic.findTeamSubId(subConfigIds);
 		hasOtherSubConfigs = ClaimsHubLogic.hasOtherSubConfigs(subConfigIds);
-		if(state != State.READY)
+		if(state != State.READY) {
+			teamSubIndex = null;
 			return;//the sub-config in use is only known once the claims are synced
+		}
 		IClientClaimsManagerAPI claimsManager = getClaimsManager();
-		ClientPacketListener connection = minecraft.getConnection();
-		TEAM_SUB_INDEX_MEMORY.observe(connection, claimsManager.getCurrentSubConfigId(ClaimingModes.PLAYER), claimsManager.getCurrentSubConfigIndex(ClaimingModes.PLAYER));
+		teamSubIndex = ClaimsHubLogic.resolveTeamSubIndex(TeamClaimsClientData.INSTANCE.getTeamInfo(), teamSubId,
+				claimsManager.getCurrentSubConfigId(ClaimingModes.PLAYER), claimsManager.getCurrentSubConfigIndex(ClaimingModes.PLAYER));
 	}
 
-	private String getUsedSub() {
-		String used = getUsedSubOption().getValue();
-		return used == null ? PlayerConfig.MAIN_SUB_ID : used;
-	}
-
-	private boolean isClaimingAsPlayer() {
-		return getClaimsManager().getClaimingMode() == ClaimingModes.PLAYER;
+	/**
+	 * Gets the most chunks one claim action may cover on this server, null until the server has said.
+	 */
+	@Nullable
+	private Integer getMaxActionSize() {
+		TeamInfoData info = TeamClaimsClientData.INSTANCE.getTeamInfo();
+		return info == null ? null : info.maxClaimActionSize();
 	}
 
 	private Cell computeCell(IClientClaimsManagerAPI claimsManager, ResourceLocation dimension, UUID me, int chunkX, int chunkZ) {
@@ -280,7 +260,7 @@ public class ClaimsTabScreen extends HubTabScreen {
 		boolean partyOwned = !serverOwner && !expiredOwner && claimsManager.hasPlayerInfo(owner) && claimsManager.getPlayerInfo(owner).isPartyOwned();
 		boolean partyMember = !self && !serverOwner && !expiredOwner && getPartyStorage().getParty() != null
 				&& getPartyStorage().getParty().getMemberInfo(owner) != null;
-		boolean team = self && ClaimsHubLogic.isOwnTeamClaim(claim.getSubConfigIndex(), TEAM_SUB_INDEX_MEMORY.get(minecraft.getConnection(), teamSubId), teamSubId != null, hasOtherSubConfigs);
+		boolean team = self && ClaimsHubLogic.isOwnTeamClaim(claim.getSubConfigIndex(), teamSubIndex, teamSubId != null, hasOtherSubConfigs);
 		ClaimCategory category = ClaimCategory.classify(serverOwner, expiredOwner, self, partyMember, partyOwned, team);
 		int rgb = claimsManager.getColor(claim, dimension) & 0xFFFFFF;
 		if(rgb == 0)
@@ -343,7 +323,7 @@ public class ClaimsTabScreen extends HubTabScreen {
 		addRenderableWidget(Button.builder(BACK, b -> goBack()).bounds(state == State.READY ? panelLeft : width / 2 - 100, backTop, state == State.READY ? panelWidth : 200, buttonHeight).build());
 		if(minecraft.player != null && state != State.NO_MOD) {
 			updateSubConfigKnowledge();
-			requestBudget();
+			requestTeamInfo();
 		}
 		rebuildCells();
 		updateWidgets();
@@ -367,7 +347,7 @@ public class ClaimsTabScreen extends HubTabScreen {
 		panelLeft = gridLeft + gridSize + PANEL_GAP;
 
 		int y = top;
-		claimAsButton = addRenderableWidget(Button.builder(CLAIM_AS_PRIVATE, b -> onClaimAsButton()).bounds(panelLeft, y, panelWidth, buttonHeight).build());
+		claimAsButton = addRenderableWidget(Button.builder(Component.empty(), b -> onClaimAsButton()).bounds(panelLeft, y, panelWidth, buttonHeight).build());
 		y += buttonHeight + BUTTON_GAP;
 		int halfWidth = (panelWidth - BUTTON_GAP) / 2;
 		int rightLeft = panelLeft + panelWidth - halfWidth;
@@ -395,13 +375,8 @@ public class ClaimsTabScreen extends HubTabScreen {
 	}
 
 	private void onClaimAsButton() {
-		boolean toTeam = !ClaimsHubLogic.isTeamSelected(getUsedSub());
-		String value = ClaimsHubLogic.usedSubFor(toTeam, teamSubId);
-		getUsedSubOption().setValue(value);
-		PlayerConfigOptionValuePacket.Entry entry = PlayerConfigOptionValuePacket.Entry.of((PlayerConfigOptionSpec<String>) PlayerConfigOptions.USED_SUBCLAIM, value);
-		OpenPartiesAndClaims.INSTANCE.getPacketHandler().sendToServer(
-				new ServerboundPlayerConfigOptionValuePacket(PlayerConfigType.PLAYER, null, null, Lists.newArrayList(entry)));
-		budgetRefreshCountdown = BUDGET_REFRESH_AFTER_ACTION_TICKS;
+		ClaimAsToggle.toggle(teamSubId);
+		refreshSchedule.afterAction();
 		updateWidgets();
 	}
 
@@ -410,7 +385,7 @@ public class ClaimsTabScreen extends HubTabScreen {
 	 * (OPAC's main menu and the World Map do the same). The server answers with its normal claim result message.
 	 */
 	private void onActionButton(Action action) {
-		if(selection == null || state != State.READY)
+		if(selection == null || state != State.READY || selection.exceedsActionSize(getMaxActionSize()))
 			return;
 		IClientClaimsManagerAPI claimsManager = getClaimsManager();
 		ResourceLocation dimension = getDimension();
@@ -425,13 +400,15 @@ public class ClaimsTabScreen extends HubTabScreen {
 			case FORCELOAD -> claimsManager.requestAreaForceload(dimension, left, top, right, bottom, true, currentMode);
 			case UNFORCELOAD -> claimsManager.requestAreaForceload(dimension, left, top, right, bottom, false, currentMode);
 		}
-		budgetRefreshCountdown = BUDGET_REFRESH_AFTER_ACTION_TICKS;
+		refreshSchedule.afterAction();
 	}
 
-	private void requestBudget() {
-		budgetRequestCounter = 0;
-		if(serverHasPartiesEnabled())
-			OpenPartiesAndClaims.INSTANCE.getPacketHandler().sendToServer(new ServerboundPartyInvitesRequestPacket());
+	/**
+	 * Asks for the team information, which the server answers together with the budgets and the limit of one claim action.
+	 */
+	private void requestTeamInfo() {
+		if(TeamInfoRefresh.request())
+			refreshSchedule.onRequestSent();
 	}
 
 	// ---- widget state ----
@@ -439,29 +416,32 @@ public class ClaimsTabScreen extends HubTabScreen {
 	private void updateWidgets() {
 		if(state != State.READY || claimAsButton == null)
 			return;
-		boolean team = ClaimsHubLogic.isTeamSelected(getUsedSub());
-		claimAsButton.setMessage(team ? CLAIM_AS_TEAM : CLAIM_AS_PRIVATE);
-		if(!isClaimingAsPlayer()) {
-			claimAsButton.active = false;
-			claimAsButton.setTooltip(CLAIM_AS_OTHER_MODE_TOOLTIP);
-		} else if(teamSubId == null) {
-			claimAsButton.active = false;
-			claimAsButton.setTooltip(CLAIM_AS_NO_TEAM_TOOLTIP);
-		} else {
-			claimAsButton.active = true;
-			claimAsButton.setTooltip(CLAIM_AS_TOOLTIP);
-		}
+		ClaimAsToggle.update(claimAsButton, teamSubId);
 		boolean hasSelection = selection != null;
-		setActionButton(claimButton, hasSelection, CLAIM_TOOLTIP);
-		setActionButton(unclaimButton, hasSelection, UNCLAIM_TOOLTIP);
-		setActionButton(forceloadButton, hasSelection, FORCELOAD_TOOLTIP);
-		setActionButton(unforceloadButton, hasSelection, UNFORCELOAD_TOOLTIP);
+		boolean tooLarge = hasSelection && selection.exceedsActionSize(getMaxActionSize());
+		setActionButton(claimButton, hasSelection, tooLarge, CLAIM_TOOLTIP);
+		setActionButton(unclaimButton, hasSelection, tooLarge, UNCLAIM_TOOLTIP);
+		setActionButton(forceloadButton, hasSelection, tooLarge, FORCELOAD_TOOLTIP);
+		setActionButton(unforceloadButton, hasSelection, tooLarge, UNFORCELOAD_TOOLTIP);
 		clearButton.active = hasSelection;
 	}
 
-	private void setActionButton(Button button, boolean hasSelection, Tooltip tooltip) {
-		button.active = hasSelection;
-		button.setTooltip(hasSelection ? tooltip : SELECT_FIRST_TOOLTIP);
+	private void setActionButton(Button button, boolean hasSelection, boolean tooLarge, Tooltip tooltip) {
+		button.active = hasSelection && !tooLarge;
+		button.setTooltip(!hasSelection ? SELECT_FIRST_TOOLTIP : tooLarge ? getTooLargeTooltip() : tooltip);
+	}
+
+	/**
+	 * Gets the tooltip of the action buttons for a selection that is bigger than the server allows, which names the limit.
+	 */
+	private Tooltip getTooLargeTooltip() {
+		Integer limit = getMaxActionSize();
+		int safeLimit = limit == null ? 0 : limit;
+		if(tooLargeTooltip == null || tooLargeTooltipLimit != safeLimit) {
+			tooLargeTooltip = Tooltip.create(Component.translatable("gui.xaero_pac_hub_too_large_tooltip", safeLimit));
+			tooLargeTooltipLimit = safeLimit;
+		}
+		return tooLargeTooltip;
 	}
 
 	// ---- screen ----
@@ -477,8 +457,8 @@ public class ClaimsTabScreen extends HubTabScreen {
 		if(state == State.NO_MOD)
 			return;
 		updateSubConfigKnowledge();
-		if(budgetRefreshCountdown > 0 && --budgetRefreshCountdown == 0 || ++budgetRequestCounter >= BUDGET_REQUEST_INTERVAL_TICKS)
-			requestBudget();
+		if(refreshSchedule.tick())
+			requestTeamInfo();
 		rebuildCells();
 		updateWidgets();
 	}
@@ -684,8 +664,8 @@ public class ClaimsTabScreen extends HubTabScreen {
 			selectionLines.addAll(font.split(Component.translatable("gui.xaero_pac_hub_selection_none"), panelWidth));
 		else {
 			selectionLines.addAll(font.split(Component.translatable("gui.xaero_pac_hub_selection", selection.width(), selection.height(), selection.count()), panelWidth));
-			if(selection.exceedsDefaultActionSize()) {
-				for(FormattedCharSequence line : font.split(Component.translatable("gui.xaero_pac_hub_selection_large", ChunkSelection.DEFAULT_MAX_SINGLE_ACTION_SIZE), panelWidth))
+			if(selection.exceedsActionSize(getMaxActionSize())) {
+				for(FormattedCharSequence line : font.split(Component.translatable("gui.xaero_pac_hub_selection_large", getMaxActionSize()), panelWidth))
 					selectionLines.add(line);
 			}
 		}
@@ -750,20 +730,8 @@ public class ClaimsTabScreen extends HubTabScreen {
 			lines.add(new BudgetLine(Component.translatable("gui.xaero_pac_party_screen_budget_private",
 					PartyScreen.formatBudget(budget.privateClaims(), budget.privateClaimLimit()),
 					PartyScreen.formatBudget(budget.privateForceloads(), budget.privateForceloadLimit())), TEXT_COLOR));
-			if(budget.inTeam()) {
-				if(budget.memberCount() < budget.minMembers())
-					lines.add(new BudgetLine(Component.translatable("gui.xaero_pac_party_screen_budget_team_too_small", budget.minMembers(), budget.memberCount()), HINT_COLOR));
-				else
-					lines.add(new BudgetLine(Component.translatable("gui.xaero_pac_party_screen_budget_team",
-							PartyScreen.formatBudget(budget.teamClaims(), budget.teamClaimLimit()),
-							PartyScreen.formatBudget(budget.teamForceloads(), budget.teamForceloadLimit())), TEXT_COLOR));
-				if(budget.claimsOverLimit() > 0 && budget.claimMillisLeft() > 0)
-					lines.add(new BudgetLine(Component.translatable("gui.xaero_pac_party_screen_budget_claims_warning",
-							budget.claimsOverLimit(), PartyScreen.formatTimeLeft(budget.claimMillisLeft() - elapsed)), WARNING_COLOR));
-				if(budget.forceloadsOverLimit() > 0 && budget.forceloadMillisLeft() > 0)
-					lines.add(new BudgetLine(Component.translatable("gui.xaero_pac_party_screen_budget_forceloads_warning",
-							budget.forceloadsOverLimit(), PartyScreen.formatTimeLeft(budget.forceloadMillisLeft() - elapsed)), WARNING_COLOR));
-			}
+			for(HubBudgetLines.Line line : HubBudgetLines.teamLines(budget, elapsed, TeamClaimsClientData.INSTANCE.getTeamInfo()))
+				lines.add(new BudgetLine(line.text(), line.color()));
 			return lines;
 		}
 		IClientClaimsManagerAPI claimsManager = getClaimsManager();

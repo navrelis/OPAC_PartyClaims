@@ -17,11 +17,6 @@ public class TeamClaimsHubTest implements FabricGameTest {
     }
 
     @GameTest(template = FabricGameTest.EMPTY_STRUCTURE)
-    public void selectionWarnsOnlyAboveTheDefaultActionSize(GameTestHelper helper) {
-        TeamClaimsHubTestCases.selectionWarnsOnlyAboveTheDefaultActionSize(helper);
-    }
-
-    @GameTest(template = FabricGameTest.EMPTY_STRUCTURE)
     public void gridFitNeverOverflowsAndKeepsEightChunksWhenItCan(GameTestHelper helper) {
         TeamClaimsHubTestCases.gridFitNeverOverflowsAndKeepsEightChunksWhenItCan(helper);
     }
@@ -47,7 +42,37 @@ public class TeamClaimsHubTest implements FabricGameTest {
     }
 
     @GameTest(template = FabricGameTest.EMPTY_STRUCTURE)
-    public void teamSubIndexMemoryForgetsWhenTheSessionChanges(GameTestHelper helper) {
-        TeamClaimsHubTestCases.teamSubIndexMemoryForgetsWhenTheSessionChanges(helper);
+    public void selectionIsTooBigOnlyAboveTheServerActionSize(GameTestHelper helper) {
+        TeamClaimsHubTestCases.selectionIsTooBigOnlyAboveTheServerActionSize(helper);
+    }
+
+    @GameTest(template = FabricGameTest.EMPTY_STRUCTURE)
+    public void teamSubIndexComesFromTheTeamInfoBeforeTheSubInUse(GameTestHelper helper) {
+        TeamClaimsHubTestCases.teamSubIndexComesFromTheTeamInfoBeforeTheSubInUse(helper);
+    }
+
+    @GameTest(template = FabricGameTest.EMPTY_STRUCTURE)
+    public void roleAndRadiusButtonsCycleAndWrap(GameTestHelper helper) {
+        TeamClaimsHubTestCases.roleAndRadiusButtonsCycleAndWrap(helper);
+    }
+
+    @GameTest(template = FabricGameTest.EMPTY_STRUCTURE)
+    public void teamCommandsAreBuiltFromEnumValuesOnly(GameTestHelper helper) {
+        TeamClaimsHubTestCases.teamCommandsAreBuiltFromEnumValuesOnly(helper);
+    }
+
+    @GameTest(template = FabricGameTest.EMPTY_STRUCTURE)
+    public void teamTabVisibilityFollowsTheTeamInfoThenTheBudget(GameTestHelper helper) {
+        TeamClaimsHubTestCases.teamTabVisibilityFollowsTheTeamInfoThenTheBudget(helper);
+    }
+
+    @GameTest(template = FabricGameTest.EMPTY_STRUCTURE)
+    public void refreshScheduleAsksPeriodicallyAndAfterActions(GameTestHelper helper) {
+        TeamClaimsHubTestCases.refreshScheduleAsksPeriodicallyAndAfterActions(helper);
+    }
+
+    @GameTest(template = FabricGameTest.EMPTY_STRUCTURE)
+    public void requestThrottleLetsOneRequestPerInterval(GameTestHelper helper) {
+        TeamClaimsHubTestCases.requestThrottleLetsOneRequestPerInterval(helper);
     }
 }

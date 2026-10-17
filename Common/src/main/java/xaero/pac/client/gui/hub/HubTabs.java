@@ -25,7 +25,7 @@ import net.minecraft.client.gui.screens.Screen;
 import xaero.pac.OpenPartiesAndClaims;
 import xaero.pac.client.gui.party.PartyScreen;
 import xaero.pac.client.parties.party.IClientPartyStorage;
-import xaero.pac.common.packet.parties.PartyBudgetData;
+import xaero.pac.client.teamclaims.TeamClaimsClientData;
 import xaero.pac.common.platform.Services;
 
 import java.util.ArrayList;
@@ -57,13 +57,12 @@ public final class HubTabs {
 	}
 
 	/**
-	 * Checks whether the player is in a party that has a team, which is what the Team tab is for. The server tells the
-	 * client with the budgets that the party screen and the Claims tab request.
+	 * Checks whether the player is in a party that has a team, which is what the Team tab is for. The team information that
+	 * the server sends decides; before it has arrived, the budget that the server sends with the party information does.
 	 */
 	public static boolean isTeamTabVisible() {
 		IClientPartyStorage<?, ?, ?> partyStorage = OpenPartiesAndClaims.INSTANCE.getClientDataInternal().getClientPartyStorage();
-		PartyBudgetData budget = partyStorage.getBudget();
-		return partyStorage.getParty() != null && budget != null && budget.available() && budget.inTeam();
+		return TeamHubLogic.isTeamTabVisible(partyStorage.getParty() != null, TeamClaimsClientData.INSTANCE.getTeamInfo(), partyStorage.getBudget());
 	}
 
 	/**

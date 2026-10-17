@@ -36,6 +36,7 @@ import xaero.pac.client.gui.XPACScreen;
 import xaero.pac.client.gui.hub.HubTab;
 import xaero.pac.client.gui.hub.HubTabBar;
 import xaero.pac.client.gui.hub.HubTabs;
+import xaero.pac.client.gui.hub.TeamInfoRefresh;
 import xaero.pac.common.parties.party.ReceivedPartyInvite;
 import xaero.pac.client.parties.party.IClientParty;
 import xaero.pac.client.parties.party.IClientPartyAllyInfo;
@@ -537,6 +538,7 @@ public class PartyScreen extends XPACScreen implements PartyEntryList.Actions {
 		lastInvitesRequestTime = now;
 		invitesRequestCounter = 0;
 		OpenPartiesAndClaims.INSTANCE.getPacketHandler().sendToServer(new ServerboundPartyInvitesRequestPacket());
+		TeamInfoRefresh.request();//[Team Claims] keeps the Team tab of the hub up to date (the answer carries the budget as well)
 	}
 
 	private boolean isCreateAllowed() {

@@ -23,11 +23,6 @@ public final class TeamClaimsHubTestNeoForge {
     }
 
     @GameTest(template = TeamClaimsGameTestMod.EMPTY_STRUCTURE)
-    public static void selectionWarnsOnlyAboveTheDefaultActionSize(GameTestHelper helper) {
-        TeamClaimsHubTestCases.selectionWarnsOnlyAboveTheDefaultActionSize(helper);
-    }
-
-    @GameTest(template = TeamClaimsGameTestMod.EMPTY_STRUCTURE)
     public static void gridFitNeverOverflowsAndKeepsEightChunksWhenItCan(GameTestHelper helper) {
         TeamClaimsHubTestCases.gridFitNeverOverflowsAndKeepsEightChunksWhenItCan(helper);
     }
@@ -53,7 +48,37 @@ public final class TeamClaimsHubTestNeoForge {
     }
 
     @GameTest(template = TeamClaimsGameTestMod.EMPTY_STRUCTURE)
-    public static void teamSubIndexMemoryForgetsWhenTheSessionChanges(GameTestHelper helper) {
-        TeamClaimsHubTestCases.teamSubIndexMemoryForgetsWhenTheSessionChanges(helper);
+    public static void selectionIsTooBigOnlyAboveTheServerActionSize(GameTestHelper helper) {
+        TeamClaimsHubTestCases.selectionIsTooBigOnlyAboveTheServerActionSize(helper);
+    }
+
+    @GameTest(template = TeamClaimsGameTestMod.EMPTY_STRUCTURE)
+    public static void teamSubIndexComesFromTheTeamInfoBeforeTheSubInUse(GameTestHelper helper) {
+        TeamClaimsHubTestCases.teamSubIndexComesFromTheTeamInfoBeforeTheSubInUse(helper);
+    }
+
+    @GameTest(template = TeamClaimsGameTestMod.EMPTY_STRUCTURE)
+    public static void roleAndRadiusButtonsCycleAndWrap(GameTestHelper helper) {
+        TeamClaimsHubTestCases.roleAndRadiusButtonsCycleAndWrap(helper);
+    }
+
+    @GameTest(template = TeamClaimsGameTestMod.EMPTY_STRUCTURE)
+    public static void teamCommandsAreBuiltFromEnumValuesOnly(GameTestHelper helper) {
+        TeamClaimsHubTestCases.teamCommandsAreBuiltFromEnumValuesOnly(helper);
+    }
+
+    @GameTest(template = TeamClaimsGameTestMod.EMPTY_STRUCTURE)
+    public static void teamTabVisibilityFollowsTheTeamInfoThenTheBudget(GameTestHelper helper) {
+        TeamClaimsHubTestCases.teamTabVisibilityFollowsTheTeamInfoThenTheBudget(helper);
+    }
+
+    @GameTest(template = TeamClaimsGameTestMod.EMPTY_STRUCTURE)
+    public static void refreshScheduleAsksPeriodicallyAndAfterActions(GameTestHelper helper) {
+        TeamClaimsHubTestCases.refreshScheduleAsksPeriodicallyAndAfterActions(helper);
+    }
+
+    @GameTest(template = TeamClaimsGameTestMod.EMPTY_STRUCTURE)
+    public static void requestThrottleLetsOneRequestPerInterval(GameTestHelper helper) {
+        TeamClaimsHubTestCases.requestThrottleLetsOneRequestPerInterval(helper);
     }
 }

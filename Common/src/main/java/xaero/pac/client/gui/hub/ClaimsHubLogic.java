@@ -18,6 +18,7 @@
 
 package xaero.pac.client.gui.hub;
 
+import xaero.pac.common.packet.teamclaims.TeamInfoData;
 import xaero.pac.common.server.claims.TeamClaimsIntegration;
 import xaero.pac.common.server.player.config.PlayerConfig;
 
@@ -88,17 +89,37 @@ public final class ClaimsHubLogic {
 	}
 
 	/**
-	 * Decides whether a claim of the local player is a team claim. The client is only told the sub-config index of the
-	 * sub-config that is currently in use, not the index of every sub-config, so:
+	 * Gets the sub-config index that the team claims of the local player carry. The server sends it with the team
+	 * information; until that has arrived, it is known when the team sub-config is the one in use, because the client is
+	 * told the index of the sub-config in use.
+	 *
+	 * @param info  the team information of the server, null if it has not arrived
+	 * @param teamSubId  the ID of the team sub-config of the player, null if there is none
+	 * @param usedSubId  the ID of the sub-config in use for claiming as a player, null if unknown
+	 * @param usedSubIndex  the index of the sub-config in use, {@value #MAIN_SUB_INDEX} if unknown
+	 * @return the index, null if it cannot be told
+	 */
+	@Nullable
+	public static Integer resolveTeamSubIndex(@Nullable TeamInfoData info, @Nullable String teamSubId, @Nullable String usedSubId, int usedSubIndex) {
+		if(info != null && info.available() && info.subConfigIndex() >= 0)
+			return info.subConfigIndex();
+		if(teamSubId != null && teamSubId.equals(usedSubId) && usedSubIndex >= 0)
+			return usedSubIndex;
+		return null;
+	}
+
+	/**
+	 * Decides whether a claim of the local player is a team claim:
 	 * <ul>
-	 * <li>if the index of the team sub-config has been seen, a claim is a team claim if it has that index;</li>
+	 * <li>if the index of the team sub-config is known (see {@link #resolveTeamSubIndex}), a claim is a team claim if it
+	 * has that index;</li>
 	 * <li>otherwise, if the team sub-config is the only sub-config besides the main one, every claim that does not
 	 * use the main config can only be a team claim;</li>
 	 * <li>otherwise it cannot be told, and the claim counts as a private one.</li>
 	 * </ul>
 	 *
 	 * @param subIndex  the sub-config index of the claim
-	 * @param knownTeamSubIndex  the index of the team sub-config if it has been seen, otherwise null
+	 * @param knownTeamSubIndex  the index of the team sub-config if it is known, otherwise null
 	 * @param teamSubConfigExists  whether the player has a team sub-config
 	 * @param hasOtherSubConfigs  whether the player has other sub-configs besides the main and the team one
 	 */
