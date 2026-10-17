@@ -1,17 +1,15 @@
-# Plan — v1.3.0: port to upstream OPAC 0.32.7
+# Plan — v1.4.0: claims hub and admin menu
 
 Status: open / in progress / in review / done. Size S/L, difficulty E/H. One Gradle invocation per checkout at a time.
-(v1.2.0 plan: git history of this file.)
+(v1.3.0 plan: git history of this file.) Design: `design-1.4.md`.
 
 | # | Task | Size/Diff | Model | Depends | Status | Definition of done |
 |---|------|-----------|-------|---------|--------|--------------------|
-| 0 | Analysis, branch `v1.3-dev`, upstream fetched, merge strategy, trial merge | – | lead | – | done | requirements.md, plan.md, decisions.md |
-| 1 | Merge upstream `1.21` (0.32.7): resolve the 9 conflicted files, adapt the Team Claims layer and hooks to the changed upstream code (limits packet, anchors, claim results, transfer, unclaim, spread-out tasks), move the fork's packet ids, anchors together with team claims | L/H | Opus (this checkout) | 0 | done | no conflict markers; both loaders build; 77/77 twice and 111/111 twice; behaviour of 1.2.0 kept; anchor behaviour documented; upstream delta marked |
-| 2 | Linkage checker `tools/linkcheck/`: every `xaero.pac.*` class, method, field referenced by given mod jars exists in a given OPAC jar (incl. nested jars, inherited members, static / interface mismatches); self-test | S/E | Sonnet (same checkout, own folder, no Gradle) | 0 | done | self-test passes; exit code 1 and a list on missing members; JDK 21 only, no dependencies |
-| 3 | New gametests: budgets and limits with the new claim limits packet, anchors with team claiming mode, loading a 1.2.0 world save | L/E | Sonnet | 1 | done (93 / 127 per loader, save-compat 4 per loader) | same new test count on both loaders, all green with and without FTB Teams |
-| 4 | Release prep: version `1.3.0+opac.0.32.7`, README upgrade notes, changelog, `ExportedJars/v1.3.0/CURSEFORGE.md`, de_de for new fork strings, leftover scan | S/E | Sonnet (parallel to 3, no Gradle) | 1 | done | docs match behaviour; metadata shows 1.3.0 |
-| 7 | Option `overLimitEnforcement` (default true = as 1.2.0): false = a team above its team claim / forceload limit keeps everything, no deadline, no warnings, no countdown in chat, `/teamclaims info` and party screen; running deadlines are dropped; new team claims above the limit stay refused. Tests on both loaders, lang en + de if texts change, README + CURSEFORGE.md | S/E | Sonnet | 3, 4 | done | option off: no unclaim and no message after the deadline in a test with the test clock; option on: all existing over-limit tests unchanged and green |
-| 5 | Linkage check on the built jars with World Map 1.47.0 + Minimap 26.6.0 (both loaders); control: the 1.2.0 jar must fail; if possible dev-client run with World Map (open map, right-click) | S/E | lead (+ Sonnet for the client run) | 1, 2, owner OK for the jars | done (linkage; client run not done, manual checklist) | zero missing references on both loaders; control run reports `usingAnchorBasedClaiming` |
-| 6 | Final acceptance: clean build, all four test runs, jars to `ExportedJars/v1.3.0/`, Graphify update, report.md, push, CurseForge upload (both loaders, Beta), shared log line | – | lead | 1–5 | done (no Graphify update) | report.md; pushed; two file ids |
-
-Model tally (delegated work, long task counts double): Opus 2 (T1) / Sonnet 1 (T2) + 2 (T3, long) + 1 (T4) + 1 (T7) = Opus 2 of 7.
+| 0 | Mapping, design, owner question round | – | lead | – | done | design-1.4.md, requirements.md |
+| 1 | Rank-button bug: stable member order (owner, name, uuid) + gametest | S/E | Sonnet | 0 | in progress | test fails with old order, passes with new; both loaders green |
+| 2 | Server backend: admin permission (op 2 or node), config registry of both specs (scalar options, ranges, restart flag, pending values), get/set packets, per-team bonus (JSON, budget, command), player bonus read/write, team info packet for the Team tab, network version bump, gametests | L/H | Opus (own worktree) | 0 | open | all new packets with codec + handler tests; non-admin rejected; restart-only values pending; old team JSON loads; both loaders green |
+| 3 | Hub frame + Claims tab: P key, tab bar, Party tab = party screen, chunk grid, selection + area requests, Private/Team toggle, budget bars | L/E | Sonnet (own worktree) | 1 | open | builds both loaders; screen works in dev client |
+| 4 | Team tab + Admin tab UI on top of 2 and 3 | L/E | Sonnet | 2, 3 | open | builds; every admin action goes through task 2's packets |
+| 5 | Docs/release prep: version 1.4.0+opac.0.32.7, README, changelog, CURSEFORGE.md, lang en + de complete | S/E | Sonnet | 4 | open | docs match behaviour |
+| 6 | Acceptance: all test runs, dedicated server with two players, linkcheck vs World Map/Minimap | – | lead | 1–5 | open | checklist in report.md |
+| 7 | Release: jars to ExportedJars/v1.4.0, dev instance mods/, push, CurseForge upload both loaders, report | – | lead | 6 | open | file ids in report.md |

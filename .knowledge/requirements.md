@@ -1,29 +1,23 @@
-# Requirements (session 2026-10-12, v1.3.0)
+# Requirements (session 2026-10-17, v1.4.0)
 
-Earlier state: `1.2.0+opac.0.31.6` on `fabric-port` (`50d1919`) — fork of OPAC v0.31.6 (`c0d97b37`), MC 1.21.1, Fabric + NeoForge, Team Claims layer in `Common/src/main/java/xaero/pac/teamclaims/`. Requirements of v1.2.0: git history of this file.
+Earlier state: `1.3.0+opac.0.32.7` on `v1.3-dev` (`197a2225`), shipped in Nytheria as `opac-team-claims-fabric-1.21.1-v1.3.0.jar`.
+Requirements of v1.3.0 and older: git history of this file. Design and owner decisions: `design-1.4.md`.
 
-## Why
-Xaero's World Map 1.47.0 crashes on every right-click on the map (`NoSuchMethodError IClientClaimsManagerAPI.usingAnchorBasedClaiming()`): it calls client API that upstream OPAC added in 0.32.x and the fork lacks.
+## Goals (owner, via the Nytheria lead session)
+1. Easier in-game UI for party/claim settings and for claiming and unclaiming.
+2. Same for team claims: configurable in a GUI, limits can be raised.
+3. Admin menu: every server/admin setting that /opac exposes (claim, forceload, team claim limits and config, per-player
+   and per-party overrides), editable in a GUI, permission-gated.
+4. Bug: party screen rank button changes a different row. Fix first, own commit, proven by test or in game.
 
-## Goals (owner)
-1. Fork contains upstream OPAC 0.32.7 (`thexaero/open-parties-and-claims`, branch `1.21`, `75ce21d6`) completely (API, packets, config, commands, save format, lang) with Team Claims on top. Version `1.3.0+opac.0.32.7`.
-2. Proof the crash is gone: automated linkage check of every `xaero.pac.*` class/method/field referenced by World Map 1.47.0 and Minimap 26.6.0 (NeoForge + Fabric 1.21.1 jars) against the built jars; if possible a dev-client run with World Map 1.47.0 (open map, right-click).
-3. All existing tests green on both loaders, with and without FTB Teams (77 / 111), plus new tests: limits and budgets with the new upstream claim limit packet, anchors together with team claiming mode, loading a 1.2.0 world save.
-4. README upgrade notes: server and all clients update together (network version changed); what happens to existing worlds.
-5. Changelog, both jars in `ExportedJars/v1.3.0/`, `CURSEFORGE.md` updated.
-6. Upload to CurseForge project 1704256, both loaders, Beta, with the owner's uploader in `F:\Coding\CurseForgeUpload` (dry run, remote dry run, review, upload). Token never printed. Only jars that passed every check. Nothing goes to project 1704237.
-7. Final acceptance, Graphify update, `report.md`, push, one line in `F:\Coding\.knowledge\log.md`.
-
-8. (owner, added 2026-10-12 during the session, to be done after the port tasks) Server option to turn the over-limit rule off: when a team shrinks below what its team claims or team forceloads need, nothing expires, nothing is unclaimed and no warning is sent. Default stays the 1.2.0 behaviour.
-
-## Owner decisions / defaults
-- Full port, own worktree and session. Working branch `v1.3-dev` off `50d1919`, pushed to origin; no merge into `fabric-port` / `main` without the owner's word. Never force-push.
-- Behaviour of 1.2.0 stays: budgets, limits, over-limit auto-unclaim, FTB Teams sync, party screen. Anchor-based claiming keeps upstream's default (off) and must work together with team claims.
-- No new shipped dependencies. Refactoring of the Team Claims layer allowed where the port needs it.
-- Downloading the Xaero jars needs the owner's OK (ask once: file name, source, size).
+## Done means
+- Features work on a dedicated server with two players in game; tests green (both loaders, with and without FTB Teams).
+- Version 1.4.0; Fabric jar into the Nytheria dev instance `mods/` replacing 1.3.0 (do not commit there, list changed
+  pack files in the report); pushed to `claude/opac-admin-rework-d73a06` (never main, never force).
+- CurseForge upload (project 1704256, both loaders) after build, tests and in-game check pass.
+- `.knowledge/report.md` with a manual in-game checklist.
 
 ## Standing constraints
-- MC 1.21.1; Fabric Loader 0.19.5, Fabric API 0.116.17+1.21.1, FCAP 21.1.6; NeoForge 21.1.168 (range `[21.0.0-beta, 21.2)`), NeoGradle 7.0.181, Gradle 8.14.5, loom 1.11.8, Java 21.
-- Mod id `openpartiesandclaims`. Existing world data (claims, `<world>/data/opacteamclaims/**`, `opacteamclaims_data`) must keep loading.
-- Upstream OPAC behaviour unchanged when Team Claims is disabled; Common delta to upstream minimal, additive, marked `[Team Claims]`.
-- HARD BOUNDARY: never touch the Nytheria modpack instance; all work stays inside this repo.
+- As in 1.3.0 (git history of this file) plus: commit as Navrelis <111079703+navrelis@users.noreply.github.com>, no
+  Co-Authored-By, no real name or local paths in commits. Never kill javaw; game lock `F:\Coding\.knowledge\game.lock`.
+- Never overwrite an existing handoff file; own handoff = `.knowledge/handoff-opac-admin-rework-2026-10-17.md`.
