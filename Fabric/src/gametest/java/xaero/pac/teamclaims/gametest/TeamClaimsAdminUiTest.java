@@ -12,6 +12,11 @@ public class TeamClaimsAdminUiTest implements FabricGameTest {
     }
 
     @GameTest(template = FabricGameTest.EMPTY_STRUCTURE)
+    public void valueRulesCheckLongRangesAndTheUnlimitedValue(GameTestHelper helper) {
+        TeamClaimsAdminUiTestCases.valueRulesCheckLongRangesAndTheUnlimitedValue(helper);
+    }
+
+    @GameTest(template = FabricGameTest.EMPTY_STRUCTURE)
     public void saveIsOnlyEnabledForAValidChangedValue(GameTestHelper helper) {
         TeamClaimsAdminUiTestCases.saveIsOnlyEnabledForAValidChangedValue(helper);
     }

@@ -18,6 +18,11 @@ public final class TeamClaimsAdminUiTestNeoForge {
     }
 
     @GameTest(template = TeamClaimsGameTestMod.EMPTY_STRUCTURE)
+    public static void valueRulesCheckLongRangesAndTheUnlimitedValue(GameTestHelper helper) {
+        TeamClaimsAdminUiTestCases.valueRulesCheckLongRangesAndTheUnlimitedValue(helper);
+    }
+
+    @GameTest(template = TeamClaimsGameTestMod.EMPTY_STRUCTURE)
     public static void saveIsOnlyEnabledForAValidChangedValue(GameTestHelper helper) {
         TeamClaimsAdminUiTestCases.saveIsOnlyEnabledForAValidChangedValue(helper);
     }

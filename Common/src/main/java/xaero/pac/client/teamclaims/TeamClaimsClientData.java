@@ -56,6 +56,7 @@ public final class TeamClaimsClientData {
 	@Nullable
 	private TeamInfoData teamInfo;
 	private int revision;
+	private int adminRevision;
 
 	private TeamClaimsClientData() {
 	}
@@ -63,6 +64,11 @@ public final class TeamClaimsClientData {
 	/** Grows by one on every change of anything here. */
 	public int getRevision() {
 		return revision;
+	}
+
+	/** Grows by one on every change of the admin data (config options, teams, player, last result, permission), so that the Admin tab does not rebuild for the rest. */
+	public int getAdminRevision() {
+		return adminRevision;
 	}
 
 	/** Whether the server says this player may use the admin menu (only for showing the tab; the server checks). */
@@ -123,6 +129,7 @@ public final class TeamClaimsClientData {
 		if(!allowed)
 			clearAdminData();
 		revision++;
+		adminRevision++;
 	}
 
 	public void onConfigPacket(ClientboundAdminConfigPacket packet) {
@@ -132,6 +139,7 @@ public final class TeamClaimsClientData {
 				updated.put(entry.key(), entry);
 			configEntries = updated;
 			revision++;
+			adminRevision++;
 			return;
 		}
 		if(packet.getSnapshotId() != pendingSnapshotId || packet.getPage() == 0) {
@@ -152,22 +160,26 @@ public final class TeamClaimsClientData {
 		pendingPages.clear();
 		pendingSnapshotId = -1;
 		revision++;
+		adminRevision++;
 	}
 
 	public void setTeams(List<AdminTeamData> teams) {
 		this.teams = List.copyOf(teams);
 		teamsReceived = true;
 		revision++;
+		adminRevision++;
 	}
 
 	public void setPlayer(@Nullable AdminPlayerData player) {
 		this.player = player;
 		revision++;
+		adminRevision++;
 	}
 
 	public void setLastResult(@Nullable ClientboundAdminResultPacket.Result result) {
 		this.lastResult = result;
 		revision++;
+		adminRevision++;
 	}
 
 	public void setTeamInfo(@Nullable TeamInfoData teamInfo) {
@@ -192,6 +204,7 @@ public final class TeamClaimsClientData {
 		clearAdminData();
 		teamInfo = null;
 		revision++;
+		adminRevision++;
 	}
 
 }

@@ -73,6 +73,7 @@ public class AdminTabScreen extends HubTabScreen {
 	private static final Component OFF = Component.translatable("gui.xaero_pac_hub_admin_off").withStyle(ChatFormatting.RED);
 	private static final Component FILTER_HINT = Component.translatable("gui.xaero_pac_hub_admin_filter_hint");
 	private static final Component TEAM_FILTER_HINT = Component.translatable("gui.xaero_pac_hub_admin_team_filter_hint");
+	private static final Component TOO_SMALL = Component.translatable("gui.xaero_pac_hub_admin_too_small");
 	private static final Component PLAYER_HINT = Component.translatable("gui.xaero_pac_hub_admin_player_hint");
 	private static final Tooltip REFRESH_TOOLTIP = Tooltip.create(Component.translatable("gui.xaero_pac_hub_admin_refresh_tooltip"));
 	private static final Tooltip LOOK_UP_TOOLTIP = Tooltip.create(Component.translatable("gui.xaero_pac_hub_admin_lookup_tooltip"));
@@ -307,7 +308,7 @@ public class AdminTabScreen extends HubTabScreen {
 		listHeight = Math.max(0, resultTop - 2 - listTop);
 
 		requestData();
-		seenRevision = getData().getRevision();
+		seenRevision = getData().getAdminRevision();
 		rebuildRows();
 	}
 
@@ -326,7 +327,7 @@ public class AdminTabScreen extends HubTabScreen {
 
 	private void initFilterHeader(int y) {
 		int refreshWidth = Math.min(80, Math.max(50, font.width(REFRESH) + 14));
-		int boxWidth = Math.min(200, listWidth - refreshWidth - BUTTON_GAP);
+		int boxWidth = Math.max(30, Math.min(200, listWidth - refreshWidth - BUTTON_GAP));
 		filterBox = new EditBox(font, listLeft, y, boxWidth, buttonHeight, FILTER_HINT);
 		filterBox.setMaxLength(64);
 		filterBox.setHint(section == Section.TEAMS ? TEAM_FILTER_HINT : FILTER_HINT);
@@ -344,7 +345,7 @@ public class AdminTabScreen extends HubTabScreen {
 
 	private void initPlayerHeader(int y) {
 		int lookUpWidth = Math.min(80, Math.max(50, font.width(LOOK_UP) + 14));
-		int boxWidth = Math.min(220, listWidth - lookUpWidth - BUTTON_GAP);
+		int boxWidth = Math.max(30, Math.min(220, listWidth - lookUpWidth - BUTTON_GAP));
 		playerBox = new EnterBox(font, listLeft, y, boxWidth, buttonHeight, PLAYER_HINT, () -> lookUp(playerBox.getValue()));
 		playerBox.setMaxLength(MAX_PLAYER_QUERY_LENGTH);
 		playerBox.setHint(PLAYER_HINT);
@@ -477,7 +478,8 @@ public class AdminTabScreen extends HubTabScreen {
 	}
 
 	/**
-	 * Puts the rows that fit below the scroll position on the screen and hides the others.
+	 * Puts the rows that fit below the scroll position on the screen and hides the others. A window that is too small for
+	 * even one row shows none, so that no widget ends up over the buttons around the list.
 	 */
 	private void layoutList() {
 		int used = 0;
@@ -494,7 +496,7 @@ public class AdminTabScreen extends HubTabScreen {
 		visibleCount = 0;
 		for(int i = 0; i < rows.size(); i++) {
 			ListRow row = rows.get(i);
-			boolean show = i >= scroll && fits && (y + row.height <= limit || visibleCount == 0);
+			boolean show = i >= scroll && fits && y + row.height <= limit;
 			if(i >= scroll && !show)
 				fits = false;
 			row.y = show ? y : -1;
@@ -934,7 +936,7 @@ public class AdminTabScreen extends HubTabScreen {
 				requestConfigs();
 			}
 		}
-		int revision = getData().getRevision();
+		int revision = getData().getAdminRevision();
 		if(revision != seenRevision) {
 			seenRevision = revision;
 			onDataChanged();
@@ -955,20 +957,6 @@ public class AdminTabScreen extends HubTabScreen {
 				shownResult = null;//a failed lookup, and now a player was found
 		}
 		rebuildRows();
-	}
-
-	private boolean isTextFieldFocused() {
-		return getFocused() instanceof EditBox box && box.isFocused();
-	}
-
-	/**
-	 * Lets the key that opens the hub be typed into a box instead of closing the screen.
-	 */
-	@Override
-	public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
-		if(isTextFieldFocused() && HubTabs.isHubKey(keyCode))
-			return getFocused().keyPressed(keyCode, scanCode, modifiers);
-		return super.keyPressed(keyCode, scanCode, modifiers);
 	}
 
 	private boolean isOverList(double mouseX, double mouseY) {
@@ -1051,11 +1039,13 @@ public class AdminTabScreen extends HubTabScreen {
 		for(ListRow row : rows)
 			if(row.y >= 0 && row.painter != null)
 				row.painter.paint(guiGraphics, row.y);
-		if(rows.isEmpty() || getRowsHeight() == 0) {
-			for(FormattedCharSequence line : font.split(emptyMessage, listWidth - 16)) {
-				guiGraphics.drawCenteredString(font, line, width / 2, listTop + 8, VALUE_COLOR);
-				break;
-			}
+		if(listHeight >= font.lineHeight + 2) {
+			Component message = rows.isEmpty() || getRowsHeight() == 0 ? emptyMessage : visibleCount == 0 ? TOO_SMALL : null;
+			if(message != null)
+				for(FormattedCharSequence line : font.split(message, listWidth - 16)) {
+					guiGraphics.drawCenteredString(font, line, width / 2, listTop + Math.min(8, listHeight - font.lineHeight - 1), VALUE_COLOR);
+					break;
+				}
 		}
 		if(filterBox != null && section.isConfig() && getData().hasConfigs())
 			renderCount(guiGraphics);

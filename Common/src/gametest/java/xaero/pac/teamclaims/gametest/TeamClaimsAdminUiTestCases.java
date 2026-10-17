@@ -81,6 +81,30 @@ public final class TeamClaimsAdminUiTestCases {
     }
 
     /**
+     * The ends of a range are inclusive for whole numbers of any size: a long range reaches beyond int, an int range that
+     * ends at {@link Integer#MAX_VALUE} (the "unlimited" value) takes it but nothing above, the largest long is the end of
+     * the long type, and a value without an upper end takes any number of its type.
+     */
+    public static void valueRulesCheckLongRangesAndTheUnlimitedValue(GameTestHelper helper) {
+        AdminConfigEntry wide = number(ValueType.LONG, "5", "-5000000000", "5000000000");
+        helper.assertTrue(AdminValueRules.check(wide, "5000000000") == Status.OK && AdminValueRules.check(wide, "-5000000000") == Status.OK
+                && AdminValueRules.check(wide, "5000000001") == Status.OUT_OF_RANGE && AdminValueRules.check(wide, "-5000000001") == Status.OUT_OF_RANGE,
+                "expected both ends of a long range beyond int to be valid and the next numbers out of range");
+        AdminConfigEntry unlimited = number(ValueType.INT, "5", "0", Integer.toString(Integer.MAX_VALUE));
+        helper.assertTrue(AdminValueRules.check(unlimited, "2147483647") == Status.OK && AdminValueRules.check(unlimited, "2147483648") == Status.NOT_A_NUMBER
+                && AdminValueRules.check(unlimited, "-1") == Status.OUT_OF_RANGE, "expected the unlimited value to be the last valid int");
+        AdminConfigEntry longOpen = number(ValueType.LONG, "5", "0", null);
+        helper.assertTrue(AdminValueRules.check(longOpen, Long.toString(Long.MAX_VALUE)) == Status.OK && AdminValueRules.check(longOpen, "-1") == Status.OUT_OF_RANGE,
+                "expected a range without an upper end to take the largest long");
+        helper.assertTrue(AdminValueRules.isSameValue(ValueType.LONG, " 007 ", "7") && !AdminValueRules.isSameValue(ValueType.INT, "7", "8")
+                && AdminValueRules.isSameValue(ValueType.ENUM, "all", " ALL") && AdminValueRules.isSameValue(ValueType.BOOLEAN, "TRUE", "true"),
+                "expected numbers to be compared by value and booleans and enums without regard to the case");
+        helper.assertTrue(AdminConfigView.getTotal(Integer.MAX_VALUE, 0) == Integer.MAX_VALUE && AdminConfigView.getTotal(0, AdminPlayerBonus.MAX_ABS_VALUE) == AdminPlayerBonus.MAX_ABS_VALUE,
+                "expected an unlimited base to stay unlimited and a bonus on a zero base to be the bonus");
+        helper.succeed();
+    }
+
+    /**
      * The Save button is enabled for a valid text that is not the saved value: 5 and 5.0 are the same number, a restart-only
      * option compares with its pending (saved) value rather than the running one so that it can be set back, and an
      * invalid text never saves.
