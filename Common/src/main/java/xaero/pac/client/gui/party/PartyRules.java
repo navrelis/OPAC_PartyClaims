@@ -24,6 +24,8 @@ import xaero.pac.common.server.player.config.PlayerConfigStringOptionSpec;
 import xaero.pac.common.server.player.config.api.v2.PlayerConfigOptions;
 
 import javax.annotation.Nullable;
+import java.util.Comparator;
+import java.util.Locale;
 import java.util.regex.Pattern;
 
 /**
@@ -36,6 +38,17 @@ public final class PartyRules {
 	 * Player names that are safe to send as a single word argument of a party command.
 	 */
 	private static final Pattern SAFE_PLAYER_NAME = Pattern.compile("^[A-Za-z0-9_.\\-]{1,32}$");
+
+	/**
+	 * The order of the member rows of the party screen: the owner first, then by name without regard to case, with the
+	 * id as the final tie-breaker so that the order is stable. The rank is deliberately not part of it: a member must
+	 * keep their row when their rank changes, otherwise the row under the cursor shows somebody else after a click on a
+	 * rank button, and the rank buttons seem to change the wrong member.
+	 */
+	public static final Comparator<IPartyMemberAPI> MEMBER_ORDER = Comparator
+			.comparing(IPartyMemberAPI::isOwner, Comparator.reverseOrder())
+			.thenComparing(member -> member.getUsername() == null ? "" : member.getUsername().toLowerCase(Locale.ROOT))
+			.thenComparing(IPartyMemberAPI::getUUID);
 
 	private PartyRules() {
 	}

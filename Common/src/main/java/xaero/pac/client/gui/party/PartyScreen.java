@@ -569,9 +569,7 @@ public class PartyScreen extends XPACScreen implements PartyEntryList.Actions {
 			return rows;
 		IPartyMember local = getLocalMember();
 		List<IPartyMember> members = new ArrayList<>(party.getTypedMemberInfoStream().toList());
-		members.sort(Comparator.comparing(IPartyMember::isOwner).reversed()
-				.thenComparing(Comparator.comparing((IPartyMember member) -> member.getRank().ordinal()).reversed())
-				.thenComparing(member -> member.getUsername().toLowerCase(Locale.ROOT)));
+		members.sort(PartyRules.MEMBER_ORDER);
 		for(IPartyMember member : members) {
 			boolean safeName = PartyRules.isSafePlayerName(member.getUsername());
 			boolean self = minecraft.player != null && member.getUUID().equals(minecraft.player.getUUID());
