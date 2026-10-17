@@ -19,6 +19,9 @@
 package xaero.pac.client.gui.hub;
 
 import net.minecraft.client.gui.components.Button;
+import net.minecraft.client.gui.components.EditBox;
+import net.minecraft.client.gui.components.events.ContainerEventHandler;
+import net.minecraft.client.gui.components.events.GuiEventListener;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 import xaero.pac.client.gui.XPACScreen;
@@ -66,9 +69,20 @@ public abstract class HubTabScreen extends XPACScreen {
 			HubTabs.open(minecraft, HubTab.PARTY, escape, parent);
 	}
 
+	/**
+	 * Checks whether a text field has the focus, in which case the key that opens the hub is text for the field and does
+	 * not close the hub.
+	 */
+	protected boolean isTextFieldFocused() {
+		GuiEventListener focused = getFocused();
+		while(focused instanceof ContainerEventHandler container && container.getFocused() != null)
+			focused = container.getFocused();
+		return focused instanceof EditBox editBox && editBox.isFocused();
+	}
+
 	@Override
 	public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
-		if(HubTabs.isHubKey(keyCode)) {
+		if(!isTextFieldFocused() && HubTabs.isHubKey(keyCode)) {
 			onClose();
 			return true;
 		}
@@ -77,7 +91,7 @@ public abstract class HubTabScreen extends XPACScreen {
 
 	@Override
 	public boolean mouseClicked(double mouseX, double mouseY, int button) {
-		if(HubTabs.isHubMouseButton(button)) {
+		if(!isTextFieldFocused() && HubTabs.isHubMouseButton(button)) {
 			onClose();
 			return true;
 		}

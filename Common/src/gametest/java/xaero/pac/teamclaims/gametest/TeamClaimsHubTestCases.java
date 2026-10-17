@@ -5,13 +5,22 @@ import xaero.pac.client.gui.hub.ChunkSelection;
 import xaero.pac.client.gui.hub.ClaimCategory;
 import xaero.pac.client.gui.hub.ClaimsHubLogic;
 import xaero.pac.client.gui.hub.HubGridFit;
-import xaero.pac.client.gui.hub.TeamSubIndexMemory;
+import xaero.pac.client.gui.hub.RefreshSchedule;
+import xaero.pac.client.gui.hub.RequestThrottle;
+import xaero.pac.client.gui.hub.TeamHubLogic;
+import xaero.pac.common.packet.parties.PartyBudgetData;
+import xaero.pac.common.packet.teamclaims.TeamInfoData;
+import xaero.pac.teamclaims.config.TeamAction;
+import xaero.pac.teamclaims.config.TeamRole;
 
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
+import java.util.UUID;
 
 /**
  * Dev/test-only, loader-neutral test bodies for the pure rules behind the Claims tab of the hub screen
- * ({@link ChunkSelection}, {@link HubGridFit}, {@link ClaimCategory}, {@link ClaimsHubLogic}, {@link TeamSubIndexMemory}).
+ * ({@link ChunkSelection}, {@link HubGridFit}, {@link ClaimCategory}, {@link ClaimsHubLogic}, {@link TeamHubLogic}, {@link RefreshSchedule}, {@link RequestThrottle}).
  * None of them touches a client class, so they run on the headless gametest server. Same conventions as
  * {@link TeamClaimsPartyScreenTestCases}: every test is registered with the loader's empty structure template and ends
  * with {@code helper.succeed()}.
@@ -61,16 +70,20 @@ public final class TeamClaimsHubTestCases {
     }
 
     /**
-     * The warning for selections that the server probably refuses starts right after the default limit of 121 chunks,
-     * which is 11 x 11: 11 x 11 is fine, 11 x 12 is not.
+     * A selection is too big for the buttons when it has more chunks than the limit the server sent: 11 x 11 = 121 is fine
+     * at the default limit of 121, 11 x 12 is not; a limit of 0 blocks everything; while the limit is not known, nothing is
+     * blocked.
      */
-    public static void selectionWarnsOnlyAboveTheDefaultActionSize(GameTestHelper helper) {
-        helper.assertTrue(ChunkSelection.DEFAULT_MAX_SINGLE_ACTION_SIZE == 121, "expected the default limit to be 121");
+    public static void selectionIsTooBigOnlyAboveTheServerActionSize(GameTestHelper helper) {
         ChunkSelection exactly = ChunkSelection.single(0, 0).withEnd(10, 10);
-        helper.assertTrue(exactly.count() == 121 && !exactly.exceedsDefaultActionSize(), "expected 11 x 11 = 121 chunks not to exceed the limit, got " + exactly.count());
+        helper.assertTrue(exactly.count() == 121 && !exactly.exceedsActionSize(121), "expected 11 x 11 = 121 chunks not to exceed a limit of 121, got " + exactly.count());
         ChunkSelection above = ChunkSelection.single(0, 0).withEnd(10, 11);
-        helper.assertTrue(above.count() == 132 && above.exceedsDefaultActionSize(), "expected 11 x 12 = 132 chunks to exceed the limit, got " + above.count());
-        helper.assertTrue(!ChunkSelection.single(5, 5).exceedsDefaultActionSize(), "expected one chunk not to exceed the limit");
+        helper.assertTrue(above.count() == 132 && above.exceedsActionSize(121), "expected 11 x 12 = 132 chunks to exceed a limit of 121, got " + above.count());
+        helper.assertTrue(!above.exceedsActionSize(132) && above.exceedsActionSize(131), "expected the limit to be inclusive");
+        helper.assertTrue(!ChunkSelection.single(5, 5).exceedsActionSize(1) && ChunkSelection.single(5, 5).exceedsActionSize(0), "expected one chunk to fit a limit of 1 but not 0");
+        helper.assertTrue(!above.exceedsActionSize(null), "expected nothing to be too big while the limit is unknown");
+        ChunkSelection huge = ChunkSelection.single(Integer.MIN_VALUE / 2, 0).withEnd(Integer.MAX_VALUE / 2, 100000);
+        helper.assertTrue(huge.exceedsActionSize(Integer.MAX_VALUE), "expected a huge selection to exceed even the biggest limit");
         helper.succeed();
     }
 
@@ -177,8 +190,8 @@ public final class TeamClaimsHubTestCases {
     }
 
     /**
-     * A claim of the local player is a team claim if it has the index of the team sub-config; while that index has not
-     * been seen, it is one if the team sub-config is the only one besides main and the claim is not on the main config.
+     * A claim of the local player is a team claim if it has the index of the team sub-config; while that index is not
+     * known, it is one if the team sub-config is the only one besides main and the claim is not on the main config.
      */
     public static void ownTeamClaimIsRecognisedByTheSubIndex(GameTestHelper helper) {
         // isOwnTeamClaim(subIndex, knownTeamSubIndex, teamSubConfigExists, hasOtherSubConfigs)
@@ -194,27 +207,175 @@ public final class TeamClaimsHubTestCases {
     }
 
     /**
-     * The remembered sub-config indices: only team sub-configs are kept, the latest index wins, and a new session (a new
-     * connection) forgets everything, since indices of different servers must not be mixed up.
+     * The index of the team claims comes from the team information of the server; before it arrives, it is known when the
+     * team sub-config is the one in use; otherwise it is unknown (null).
      */
-    public static void teamSubIndexMemoryForgetsWhenTheSessionChanges(GameTestHelper helper) {
-        Object sessionA = new Object();
-        Object sessionB = new Object();
-        TeamSubIndexMemory memory = new TeamSubIndexMemory();
-        helper.assertTrue(memory.get(sessionA, "team_nytheria") == null, "expected nothing to be remembered at first");
-        memory.observe(sessionA, "main", -1);
-        memory.observe(sessionA, "base", 4);
-        helper.assertTrue(memory.get(sessionA, "main") == null && memory.get(sessionA, "base") == null, "expected only team sub-configs to be remembered");
-        memory.observe(sessionA, "team_nytheria", 5);
-        helper.assertTrue(Integer.valueOf(5).equals(memory.get(sessionA, "team_nytheria")), "expected the index 5 to be remembered");
-        memory.observe(sessionA, "team_nytheria", 6);
-        helper.assertTrue(Integer.valueOf(6).equals(memory.get(sessionA, "team_nytheria")), "expected the latest index 6 to win");
-        helper.assertTrue(memory.get(sessionA, null) == null, "expected no index for no sub-config");
-        helper.assertTrue(memory.get(sessionB, "team_nytheria") == null, "expected a new session to forget the index");
-        helper.assertTrue(memory.get(sessionA, "team_nytheria") == null, "expected going back to the old session not to bring it back");
-        memory.observe(sessionB, "team_other", 1);
-        helper.assertTrue(Integer.valueOf(1).equals(memory.get(sessionB, "team_other")), "expected the index of the new session to be remembered");
+    public static void teamSubIndexComesFromTheTeamInfoBeforeTheSubInUse(GameTestHelper helper) {
+        TeamInfoData info = teamInfo(true, 4, TeamRole.MEMBER, TeamRole.MEMBER, TeamRole.MEMBER, true);
+        // resolveTeamSubIndex(info, teamSubId, usedSubId, usedSubIndex)
+        helper.assertTrue(Integer.valueOf(4).equals(ClaimsHubLogic.resolveTeamSubIndex(info, "team_nytheria", "main", -1)), "expected the index of the team information");
+        helper.assertTrue(Integer.valueOf(4).equals(ClaimsHubLogic.resolveTeamSubIndex(info, "team_nytheria", "team_nytheria", 9)), "expected the team information to win over the sub-config in use");
+        helper.assertTrue(Integer.valueOf(9).equals(ClaimsHubLogic.resolveTeamSubIndex(null, "team_nytheria", "team_nytheria", 9)), "expected the index of the sub-config in use while the team information is missing");
+        helper.assertTrue(ClaimsHubLogic.resolveTeamSubIndex(null, "team_nytheria", "main", -1) == null, "expected no index when the team sub-config is not in use");
+        helper.assertTrue(ClaimsHubLogic.resolveTeamSubIndex(null, "team_nytheria", "team_other", 2) == null, "expected no index when another sub-config is in use");
+        helper.assertTrue(ClaimsHubLogic.resolveTeamSubIndex(null, null, "main", -1) == null, "expected no index without a team sub-config");
+        TeamInfoData noIndex = teamInfo(true, -1, TeamRole.MEMBER, TeamRole.MEMBER, TeamRole.MEMBER, true);
+        helper.assertTrue(Integer.valueOf(7).equals(ClaimsHubLogic.resolveTeamSubIndex(noIndex, "team_nytheria", "team_nytheria", 7)), "expected the sub-config in use when the team information has no index");
+        helper.assertTrue(ClaimsHubLogic.resolveTeamSubIndex(TeamInfoData.unavailable(121), "team_nytheria", "main", -1) == null, "expected an unavailable team information to give no index");
         helper.succeed();
+    }
+
+    /**
+     * A click on a role button picks the next rank and wraps around after the owner, so five clicks make a full circle; the
+     * radius button does the same up to its maximum and never beyond the largest radius the server allows.
+     */
+    public static void roleAndRadiusButtonsCycleAndWrap(GameTestHelper helper) {
+        helper.assertTrue(TeamHubLogic.nextRole(TeamRole.MEMBER) == TeamRole.CLAIMER, "expected claimer after member");
+        helper.assertTrue(TeamHubLogic.nextRole(TeamRole.CLAIMER) == TeamRole.MODERATOR, "expected moderator after claimer");
+        helper.assertTrue(TeamHubLogic.nextRole(TeamRole.MODERATOR) == TeamRole.ADMIN, "expected admin after moderator");
+        helper.assertTrue(TeamHubLogic.nextRole(TeamRole.ADMIN) == TeamRole.OWNER, "expected owner after admin");
+        helper.assertTrue(TeamHubLogic.nextRole(TeamRole.OWNER) == TeamRole.MEMBER, "expected the circle to close with member after owner");
+        for (TeamRole start : TeamRole.values()) {
+            TeamRole role = start;
+            Set<TeamRole> seen = new HashSet<>();
+            for (int i = 0; i < TeamRole.values().length; i++) {
+                seen.add(role);
+                role = TeamHubLogic.nextRole(role);
+            }
+            helper.assertTrue(role == start && seen.size() == TeamRole.values().length, "expected five clicks from " + start + " to visit every role and come back, got " + role);
+        }
+
+        int max = TeamHubLogic.DEFAULT_MAX_CONVERT_RADIUS;
+        helper.assertTrue(max == 4, "expected the default maximum radius to be the server default 4");
+        helper.assertTrue(TeamHubLogic.nextRadius(0, max) == 1 && TeamHubLogic.nextRadius(3, max) == 4, "expected the radius to grow by one");
+        helper.assertTrue(TeamHubLogic.nextRadius(max, max) == 0, "expected the radius to wrap to 0 after the maximum");
+        helper.assertTrue(TeamHubLogic.nextRadius(-3, max) == 0 && TeamHubLogic.nextRadius(99, max) == 0, "expected an out-of-range radius to go back to 0");
+        helper.assertTrue(TeamHubLogic.nextRadius(5, 1000) == 6 && TeamHubLogic.nextRadius(TeamHubLogic.ABSOLUTE_MAX_CONVERT_RADIUS, 1000) == 0,
+                "expected the radius never to go beyond the largest radius the server allows");
+        helper.succeed();
+    }
+
+    /**
+     * The commands of the Team tab are exactly the ones the command trees accept: every combination of action and role for
+     * {@code roles}, on and off for the territory messages, and {@code convert} with a radius from 0 to 16, built from enum
+     * values and numbers only. A radius outside of that gives no command at all.
+     */
+    public static void teamCommandsAreBuiltFromEnumValuesOnly(GameTestHelper helper) {
+        helper.assertTrue("teamclaims roles claim member".equals(TeamHubLogic.rolesCommand(TeamAction.CLAIM, TeamRole.MEMBER)), "expected the claim/member roles command");
+        helper.assertTrue("teamclaims roles unclaim moderator".equals(TeamHubLogic.rolesCommand(TeamAction.UNCLAIM, TeamRole.MODERATOR)), "expected the unclaim/moderator roles command");
+        helper.assertTrue("teamclaims roles forceload owner".equals(TeamHubLogic.rolesCommand(TeamAction.FORCELOAD, TeamRole.OWNER)), "expected the forceload/owner roles command");
+        Set<String> commands = new HashSet<>();
+        for (TeamAction action : TeamAction.values())
+            for (TeamRole role : TeamRole.values()) {
+                String command = TeamHubLogic.rolesCommand(action, role);
+                helper.assertTrue(command.matches("teamclaims roles (claim|unclaim|forceload) (member|claimer|moderator|admin|owner)"), "expected a command of the roles syntax, got " + command);
+                commands.add(command);
+            }
+        helper.assertTrue(commands.size() == 15, "expected 15 different roles commands, got " + commands.size());
+
+        helper.assertTrue("teamclaims territorymessages on".equals(TeamHubLogic.territoryMessagesCommand(true)), "expected the territory messages on command");
+        helper.assertTrue("teamclaims territorymessages off".equals(TeamHubLogic.territoryMessagesCommand(false)), "expected the territory messages off command");
+
+        helper.assertTrue("teamclaims convert toteam 0".equals(TeamHubLogic.convertCommand(true, 0)), "expected the convert toteam command with radius 0");
+        helper.assertTrue("teamclaims convert topersonal 4".equals(TeamHubLogic.convertCommand(false, 4)), "expected the convert topersonal command with radius 4");
+        helper.assertTrue("teamclaims convert toteam 16".equals(TeamHubLogic.convertCommand(true, 16)), "expected the largest radius to be accepted");
+        helper.assertTrue(TeamHubLogic.convertCommand(true, -1) == null && TeamHubLogic.convertCommand(false, 17) == null && TeamHubLogic.convertCommand(true, Integer.MAX_VALUE) == null,
+                "expected no command for a radius outside of 0 to 16");
+        for (int radius = 0; radius <= TeamHubLogic.ABSOLUTE_MAX_CONVERT_RADIUS; radius++)
+            helper.assertTrue(TeamHubLogic.convertCommand(radius % 2 == 0, radius).matches("teamclaims convert (toteam|topersonal) \\d{1,2}"), "expected a command of the convert syntax for the radius " + radius);
+        helper.succeed();
+    }
+
+    /**
+     * The Team tab is only for players in a party. The team information decides once it has arrived (available or not),
+     * before that the budget does (in a team or not, and only if the server has budgets at all).
+     */
+    public static void teamTabVisibilityFollowsTheTeamInfoThenTheBudget(GameTestHelper helper) {
+        TeamInfoData available = teamInfo(true, 2, TeamRole.MEMBER, TeamRole.MEMBER, TeamRole.MEMBER, false);
+        TeamInfoData unavailable = TeamInfoData.unavailable(121);
+        PartyBudgetData inTeam = budget(true, true);
+        PartyBudgetData noTeam = budget(true, false);
+        // isTeamTabVisible(inParty, info, budget)
+        helper.assertTrue(TeamHubLogic.isTeamTabVisible(true, available, null), "expected the tab with available team information");
+        helper.assertTrue(TeamHubLogic.isTeamTabVisible(true, available, noTeam), "expected the team information to win over an older budget");
+        helper.assertTrue(!TeamHubLogic.isTeamTabVisible(true, unavailable, inTeam), "expected no tab with unavailable team information, whatever the budget says");
+        helper.assertTrue(!TeamHubLogic.isTeamTabVisible(false, available, inTeam), "expected no tab outside of a party, whatever the information says");
+        helper.assertTrue(TeamHubLogic.isTeamTabVisible(true, null, inTeam), "expected the budget to decide without team information");
+        helper.assertTrue(!TeamHubLogic.isTeamTabVisible(true, null, noTeam), "expected no tab without a team in the budget");
+        helper.assertTrue(!TeamHubLogic.isTeamTabVisible(true, null, PartyBudgetData.UNAVAILABLE), "expected no tab without budgets");
+        helper.assertTrue(!TeamHubLogic.isTeamTabVisible(true, null, null), "expected no tab without any information");
+        helper.succeed();
+    }
+
+    /**
+     * The refresh schedule asks once per period, asks a set time after an action (a series of actions makes one request),
+     * and starts the period over after any request.
+     */
+    public static void refreshScheduleAsksPeriodicallyAndAfterActions(GameTestHelper helper) {
+        RefreshSchedule schedule = new RefreshSchedule(40, 20);
+        int due = 0;
+        for (int tick = 1; tick <= 120; tick++) {
+            boolean fired = schedule.tick();
+            if (fired) {
+                due++;
+                helper.assertTrue(tick % 40 == 0, "expected a periodic request only every 40 ticks, got one at " + tick);
+            }
+        }
+        helper.assertTrue(due == 3, "expected 3 periodic requests in 120 ticks, got " + due);
+
+        schedule = new RefreshSchedule(40, 20);
+        for (int i = 0; i < 5; i++)
+            helper.assertTrue(!schedule.tick(), "expected nothing to be due at first");
+        schedule.afterAction();
+        for (int i = 0; i < 10; i++)
+            schedule.tick();
+        schedule.afterAction();//another action restarts the wait
+        int fireTick = -1;
+        for (int tick = 1; tick <= 30 && fireTick < 0; tick++)
+            if (schedule.tick())
+                fireTick = tick;
+        helper.assertTrue(fireTick == 20, "expected the request 20 ticks after the last action, got " + fireTick);
+        // the period starts over after that request: the next periodic one is 40 ticks later
+        int next = -1;
+        for (int tick = 1; tick <= 60 && next < 0; tick++)
+            if (schedule.tick())
+                next = tick;
+        helper.assertTrue(next == 40, "expected the next periodic request 40 ticks after the action request, got " + next);
+
+        schedule = new RefreshSchedule(40, 20);
+        for (int i = 0; i < 30; i++)
+            schedule.tick();
+        schedule.onRequestSent();
+        for (int i = 0; i < 39; i++)
+            helper.assertTrue(!schedule.tick(), "expected a request made elsewhere to push the periodic one back");
+        helper.assertTrue(schedule.tick(), "expected the periodic request 40 ticks after the request made elsewhere");
+        helper.succeed();
+    }
+
+    /**
+     * The shared throttle lets the first request through, refuses the ones within the interval, lets one through again
+     * after it (also if the clock jumped back), and starts over after a reset.
+     */
+    public static void requestThrottleLetsOneRequestPerInterval(GameTestHelper helper) {
+        RequestThrottle throttle = new RequestThrottle(400);
+        helper.assertTrue(throttle.tryAcquire(1000), "expected the first request to go through");
+        helper.assertTrue(!throttle.tryAcquire(1000) && !throttle.tryAcquire(1399), "expected requests within 400 ms to be refused");
+        helper.assertTrue(throttle.tryAcquire(1400), "expected a request after 400 ms to go through");
+        helper.assertTrue(!throttle.tryAcquire(1500), "expected the interval to count from the last request that went through");
+        helper.assertTrue(throttle.tryAcquire(0), "expected a request to go through when the clock went back");
+        throttle.reset();
+        helper.assertTrue(throttle.tryAcquire(1), "expected a request to go through after a reset");
+        helper.succeed();
+    }
+
+    // ==================== Helpers ====================
+
+    private static TeamInfoData teamInfo(boolean canEdit, int subIndex, TeamRole claim, TeamRole unclaim, TeamRole forceload, boolean territory) {
+        return new TeamInfoData(121, true, new UUID(1, 2), "Nytheria", "team_nytheria", subIndex, 3, claim, unclaim, forceload, territory, canEdit, 0, 0, 0x336699, "Home");
+    }
+
+    private static PartyBudgetData budget(boolean available, boolean inTeam) {
+        return new PartyBudgetData(available, 1, 10, 0, 5, inTeam, inTeam ? 3 : 0, 2, 4, 20, 1, 5, 0, 0, 0, 0, 2, 1);
     }
 
 }
