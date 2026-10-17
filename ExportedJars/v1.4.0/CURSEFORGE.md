@@ -42,7 +42,7 @@ Paste this into the CurseForge "Changelog" field of each file:
 Open Parties and Claims 0.32.7 for Minecraft 1.21.1, with Team Claims 1.4.0
 
 New since 1.3.0:
-- Hub screen on the P key (new key binding "Open Parties and Claims Hub"; P is also vanilla's "Social Interactions" key, rebind either one in Controls). Tabs: Party (the party screen of 1.3.0), Claims, Team and Admin.
+- Hub screen on the P key (new key binding "Open Parties and Claims Hub"; P is also vanilla's "Social Interactions" key: while both are on P, P opens the hub, rebind Social Interactions in Controls to use it). Tabs: Party (the party screen of 1.3.0), Claims, Team and Admin.
 - Claims tab: a chunk grid around you in the claim colours. Click or drag to select, then claim, unclaim, forceload or unforceload; hover for owner, claim name and forceload state; budget lines. The "Claim as: Private / Team" button decides who owns what you claim and also what Xaero's World Map "Claim Selected" claims.
 - Team tab: team name, team budget (bonus included) and the over-limit countdown, the roles for claim, unclaim and forceload, your own territory-message switch, convert to team and to personal with a radius and a confirmation, the Private / Team switch, and a button to the team's protection and appearance settings. The roles and the settings are editable for the party owner and admins and read-only for everybody else; the server enforces it as before.
 - Admin menu (permission level 2 or the permission node xaero.pac_admin_menu): every number, on/off, choice and text option of OPAC's server config and of the Team Claims server config, with search, a restart badge and the "after restart" value; the bonus claims, bonus forceloads, bonus anchors and bonus anchor range of players; the bonus of teams. List options (protection lists etc.) stay toml-only. Restart-only options are written to the toml and take effect after a restart, all others apply at once. Every change is logged in the server log. The server checks every request.
@@ -83,7 +83,7 @@ Team Claims makes the party the unit that matters, while keeping every personal 
 
 - **Update the server and every client together.** The network version changed (7 to 7001, NeoForge protocol 1.11.0-teamclaims.1) and ten new packets (ids 104-113) belong to the hub and the admin menu. A 1.3.0 client cannot join a 1.4.0 server and a 1.4.0 client cannot join a 1.3.0 server.
 - **Existing worlds load as they are.** Nothing is unclaimed by the update. The team JSON files get the optional fields `bonusClaims` and `bonusForceloads` only for teams that have a bonus.
-- **The hub key is P.** The party screen (key O) is now the Party tab of the hub. It is a new key binding, so everybody gets P by default, also players who had rebound O (that rebinding is lost). P is also vanilla's "Social Interactions" key: if both open, rebind either one in Controls.
+- **The hub key is P.** The party screen (key O) is now the Party tab of the hub. It is a new key binding, so everybody gets P by default, also players who had rebound O (that rebinding is lost). P is also vanilla's "Social Interactions" key: while both are on P, P opens the hub; rebind Social Interactions in Controls to use it.
 - **Fixed:** in the party screen the member rows no longer move when a rank changes.
 - Servers that do not use the new features see no change: the Admin tab and `/teamclaims bonus` are only for permission level 2 or the node `xaero.pac_admin_menu`, and a team without a bonus behaves as in 1.3.0.
 
@@ -193,7 +193,7 @@ Budgets, limits and the rest of Team Claims are the same as with anchors off.
 
 ## The hub (P)
 
-Press **P** (the default; rebindable in Controls under "Open Parties and Claims" as "Open Parties and Claims Hub") or click **Party** in the OPAC menu. P is also vanilla's "Social Interactions" key, so Controls shows a conflict until one of the two is rebound. The hub has the tabs **Party**, **Claims**, **Team** (only while your party is a team) and, only for admins, **Admin**, and opens on the tab you used last.
+Press **P** (the default; rebindable in Controls under "Open Parties and Claims" as "Open Parties and Claims Hub") or click **Party** in the OPAC menu. P is also vanilla's "Social Interactions" key: while both are on P, P opens the hub; rebind Social Interactions in Controls to use it. The hub has the tabs **Party**, **Claims**, **Team** (only while your party is a team) and, only for admins, **Admin**, and opens on the tab you used last.
 
 ### Claims tab
 A grid of the chunks around you in the claim colours (no terrain, Xaero's World Map shows that). Click a chunk or drag a rectangle to select it, then press **Claim**, **Unclaim**, **Forceload** or **Unforceload**. Every OPAC rule still applies (limits, anchors, team roles) and the server answers as usual. The four buttons are disabled while the selection is larger than the OPAC option `maxSingleClaimActionSize` (121 chunks by default). The arrow keys move the grid (Shift moves it further), **Centre** brings it back to your chunk.

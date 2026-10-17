@@ -27,4 +27,7 @@ public interface IKeyBindingHelper {
 
 	public InputConstants.Key getBoundKey(KeyMapping keyBinding);
 
+	//[Team Claims] whether two key mappings have the same key modifier (always true on loaders without key modifiers)
+	public boolean haveSameKeyModifier(KeyMapping first, KeyMapping second);
+
 }

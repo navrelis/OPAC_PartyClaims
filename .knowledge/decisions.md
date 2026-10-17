@@ -46,3 +46,4 @@
 - 2026-10-17 v1.4: in-game acceptance is an automated scripted two-player run (owner: "make it a automated test ... just like all other clients"), no computer-use; modelled on QuestBridge's -PjournalTour unattended tour (dev-only, gated by a Gradle property, nothing shipped).
 - 2026-10-17 v1.4: P conflict: vanilla keeps one KeyMapping per key, so with Social Interactions also on P the hub never got the press; fix routes social clicks to the hub while both share the key (no change to vanilla bindings or the user's options).
 - 2026-10-17 v1.4: T9 (harness core) to Opus: client-driving tour across two clients + server with real assertions is new architecture where silent false-greens are costly.
+- 2026-10-17 v1.4: shared-key check compares bound key + key modifier via IKeyBindingHelper, not KeyMapping.same() (NeoForge's same() treats P and Ctrl+P as conflicting).

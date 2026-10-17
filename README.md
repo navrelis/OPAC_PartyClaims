@@ -21,8 +21,8 @@ and a per-team bonus for team claims and team forceloads. It is still based on O
   `bonusClaims` and `bonusForceloads` only for teams that have a bonus; a file without them means a bonus of 0.
 * **The hub key is P.** The party screen (key **O**, "Open Party Menu") is now the Party tab of the hub, and the hub has
   a new key binding, "Open Parties and Claims Hub", default **P**. A new binding means everybody gets P, also players
-  who had rebound or kept O; a rebinding of the old key is lost. P is also vanilla's "Social Interactions" key: if both
-  open at once, rebind either of them in Minecraft's Controls.
+  who had rebound or kept O; a rebinding of the old key is lost. P is also vanilla's "Social Interactions" key: while both
+  are on P, P opens the hub; rebind Social Interactions in Minecraft's Controls to use it.
 * **Fixed:** in the party screen the member rows no longer move when a rank changes (they were sorted by rank, so the
   row you had just clicked jumped to another place). The rows are now ordered by owner, then name.
 * **Servers that do not use the new features see no change:** the Admin tab and `/teamclaims bonus` are only for
@@ -253,8 +253,8 @@ The budgets, the limits and the rest of Team Claims are the same as with anchors
 
 One screen with tabs, opened with the key **P** (the default; rebindable in Minecraft's Controls under the category
 "Open Parties and Claims" as "Open Parties and Claims Hub"). It opens on the tab you used last, and pressing the key
-again closes it while no text field has the focus. P is also vanilla's "Social Interactions" key, so Controls shows a
-conflict until one of the two is rebound. The tabs are **Party**, **Claims**, **Team** (only while your party is a team) and,
+again closes it while no text field has the focus. P is also vanilla's "Social Interactions" key: while both
+are on P, P opens the hub; rebind Social Interactions in Controls to use it. The tabs are **Party**, **Claims**, **Team** (only while your party is a team) and,
 only for admins, **Admin**.
 The hub can also be opened with the **Party** button in the OPAC menu (the menu of the apostrophe key). On a server
 without the mod, or with parties disabled, the party parts of it only say so.
@@ -608,7 +608,7 @@ the one of 1.2.0 with World Map 1.47.0 is found without starting the game:
 ### 1.4.0
 
 * **Hub screen on the P key** (new key binding "Open Parties and Claims Hub"; P is also vanilla's "Social Interactions"
-  key, rebind either one). Tabs **Party** (the party screen of 1.3.0), **Claims**, **Team** and **Admin**. See "Hub (P)".
+  key: while both are on P, P opens the hub, rebind Social Interactions to use it). Tabs **Party** (the party screen of 1.3.0), **Claims**, **Team** and **Admin**. See "Hub (P)".
 * **Claims tab:** a chunk grid around you in the claim colours; click or drag to select, then claim, unclaim, forceload
   or unforceload; hover for owner, name and forceload state; budget lines; a **Claim as: Private / Team** button that
   also decides what Xaero's World Map "Claim Selected" claims.

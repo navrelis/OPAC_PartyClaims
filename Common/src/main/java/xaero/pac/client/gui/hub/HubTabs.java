@@ -140,6 +140,21 @@ public final class HubTabs {
 		return boundKey.getType() == InputConstants.Type.MOUSE && button == boundKey.getValue();
 	}
 
+	/**
+	 * Checks whether the hub key and vanilla's Social Interactions key are bound to the same key (and key modifier). They
+	 * both default to P, and vanilla only gives key presses to one mapping per key, so the hub key would never fire. Then
+	 * the hub takes the presses of both keys. An unbound key is never shared.
+	 */
+	public static boolean isSharedWithSocialInteractions(Minecraft minecraft) {//[Team Claims]
+		KeyMapping hubMapping = OpenPartiesAndClaims.INSTANCE.getClientDataInternal().getKeyBindings().openHubMenu;
+		KeyMapping socialMapping = minecraft.options.keySocialInteractions;
+		InputConstants.Key hubKey = Services.PLATFORM.getKeyBindingHelper().getBoundKey(hubMapping);
+		if(hubKey.equals(InputConstants.UNKNOWN))
+			return false;
+		return hubKey.equals(Services.PLATFORM.getKeyBindingHelper().getBoundKey(socialMapping))
+				&& Services.PLATFORM.getKeyBindingHelper().haveSameKeyModifier(hubMapping, socialMapping);
+	}
+
 	private static InputConstants.Key getHubBoundKey() {
 		KeyMapping keyMapping = OpenPartiesAndClaims.INSTANCE.getClientDataInternal().getKeyBindings().openHubMenu;
 		return Services.PLATFORM.getKeyBindingHelper().getBoundKey(keyMapping);

@@ -37,4 +37,9 @@ public class KeyBindingHelperNeoForge implements IKeyBindingHelper {
 		return keyBinding.getKey();
 	}
 
+	@Override
+	public boolean haveSameKeyModifier(KeyMapping first, KeyMapping second) {//[Team Claims]
+		return first.getKeyModifier() == second.getKeyModifier();
+	}
+
 }
