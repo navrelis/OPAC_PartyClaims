@@ -98,3 +98,10 @@
 - Lead local_14a71120: P fix approved, cover in test; never take the game lock on own — report when T9 builds + headless parts pass, lead slots OPAC into the chain and has the previous session hand the lock over.
 - 2026-10-17 session 3 (resumed from handoff d9a49a83): T8 re-delegated (Sonnet, this checkout), T9 re-delegated (Opus, ../opac-clienttest, phase 1 headless only).
 - T8 done (Sonnet, 0 corrections): hub takes Social Interactions clicks while both share key+modifier (NeoForge same() rejected: true for P vs Ctrl+P); lead run 135 / 135 both loaders; docs 3 spots each in README + CURSEFORGE.md.
+- T9 phase 1 done (Opus): harness (46 assertion ids, self-check 6/6, dry run OK, jar listing unchanged, 135 / 135); lead reviewed gradle gating, kill logic, results rules; committed 04e77a06 on claude/opac-clienttest; hub branch (T8) merged in f70d6c3a.
+- Lead took game.lock 23:32 (lead local_14a71120: lock free, OPAC last); T9 phase 2 (real runs, iterate, max ~6 runs) to the same Opus agent.
+- T9 phase 2 done (Opus): real run 55 / 55 PASS first time, second run identical (results build/twoPlayerTest/20261017-233735 in ../opac-clienttest); lead checked results.json counts and screenshots; merged into hub (ff).
+- Lead: runner script was not in commit 04e77a06 (Windows case-insensitive match of the run-* ignore rule); force-added 60606a99.
+- Instance: v1.3.0 jar moved to NytheriaDevelopment\mods_backup, v1.4.0 Fabric jar in mods; perf harness startup (player profile, owner chose it because they were playing): title after 139.6 s, 647 mods, no OPAC WARN/ERROR; game.lock released 00:37.
+- Full test pass on hub head (lead): 135 / 169 / 4 on Fabric and NeoForge, build green.
+- README two-player test section + changelog line (Sonnet, 0 corrections, lead read the diff).

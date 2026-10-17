@@ -22,3 +22,4 @@ Requirements of v1.3.0 and older: git history of this file. Design and owner dec
   Co-Authored-By, no real name or local paths in commits. Never kill javaw; game lock `F:\Coding\.knowledge\game.lock`.
 - Never overwrite an existing handoff file; own handoff = `.knowledge/handoff-opac-admin-rework-2026-10-17.md`.
 - 2026-10-17 owner: CurseForge 1.4.0 release type = Release (both loaders); relation-slug check override OK for this upload.
+- 2026-10-17 lead local_14a71120 (23:28): game.lock free, OPAC last workstream; take the lock when T9 headless passes; old instance jar goes to F:\Coding\NytheriaDevelopment\mods_backup\ (not deleted); short instance client start with all jars, check OPAC WARN/ERROR; then release lock, CF upload, push.

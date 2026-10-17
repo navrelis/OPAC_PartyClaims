@@ -47,3 +47,4 @@
 - 2026-10-17 v1.4: P conflict: vanilla keeps one KeyMapping per key, so with Social Interactions also on P the hub never got the press; fix routes social clicks to the hub while both share the key (no change to vanilla bindings or the user's options).
 - 2026-10-17 v1.4: T9 (harness core) to Opus: client-driving tour across two clients + server with real assertions is new architecture where silent false-greens are costly.
 - 2026-10-17 v1.4: shared-key check compares bound key + key modifier via IKeyBindingHelper, not KeyMapping.same() (NeoForge's same() treats P and Ctrl+P as conflicting).
+- 2026-10-17 v1.4: instance start check uses the pack's perf harness (py perf_client.py run startup --profile owner); py (Python 3.14) is available, the earlier 'Python not installed' note only meant 'python' on PATH.

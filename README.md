@@ -603,6 +603,24 @@ the one of 1.2.0 with World Map 1.47.0 is found without starting the game:
 `java tools/linkcheck/LinkCheck.java --provider <our jar> --consumer <other mod's jar>`. Its own self-test is
 `java tools/linkcheck/LinkCheckSelfTest.java`; see `tools/linkcheck/README.md`.
 
+**Automated two-player test (Fabric, dev only).** One command starts a dedicated Fabric server and two Fabric dev clients,
+Player1 (op) and Player2, and drives them with a script: the P key with the default key bindings, party create, invite and
+accept, a click on a rank button, in the Claims tab claim, unclaim, the Private / Team switch and an oversize selection,
+the roles of the Team tab, a live and a restart-only option of the Admin tab, the team and the player bonus, a crafted
+admin request of the non-admin that must be rejected, and screenshots of every tab at GUI scale 2 and 4. Every assertion
+is checked against a snapshot of the server state, not only against what the screen shows. The command is
+`pwsh -File tools/twoplayertest/Run-TwoPlayerTest.ps1`; options: `-DryRun` (prerequisites, world preparation, build and a check of
+the run tasks and of the result merge, without starting the server or a client), `-SkipBuild`, `-OutDir <folder>`.
+Exit code 0: every assertion passed; 1: one failed or a wait timed out; 2: none failed, but one was skipped; 3: the run
+could not start. An assertion that no client reported counts as failed. The current scenario has 55 assertions (46 of
+the two drivers, 9 of the run itself).
+
+Prerequisites: the `run-server/` setup from above (`eula=true`, `online-mode=false`) and an `ops.json` that makes Player1
+an op; port 25565 free. The test opens two game windows, so on a shared machine take the game lock first. The output goes
+to `build/twoPlayerTest/<timestamp>/`: `results.json` (one entry per assertion), `summary.md`, the screenshots and the logs.
+The headless self-check of the harness (no window, 6 gametests) is `gradlew.bat :Fabric:runTwoPlayerTestSelfCheck -PtwoPlayerTest`.
+All of it exists only with `-PtwoPlayerTest`; without the property there is no source set, run or task, and the jars are unchanged.
+
 ## Changelog
 
 ### 1.4.0
@@ -631,6 +649,8 @@ the one of 1.2.0 with World Map 1.47.0 is found without starting the game:
   1.4.0 server and the other way round. Existing worlds load as they are. See "Updating from 1.3.0".
 * New automated gametests for the hub logic, the admin permission, the config registry (live and restart-only writes),
   the team and player bonus and the new packets, run on both loaders.
+* Automated two-player client test of the hub (Fabric, development only, not shipped): a dedicated server and two game
+  clients driven by a script, with a report and screenshots. See "Development / testing".
 
 ### 1.3.0
 
