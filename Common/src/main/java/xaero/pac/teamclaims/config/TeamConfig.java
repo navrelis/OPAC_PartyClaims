@@ -21,6 +21,8 @@ import java.util.function.Predicate;
  * unchanged. {@code roles}: the {@link TeamRole} each {@link TeamAction} requires, e.g.
  * {@code "roles": {"claim": "MODERATOR", "unclaim": "MEMBER", "forceload": "MEMBER"}}; a missing or unknown value is
  * the {@linkplain TeamRole#DEFAULT default}, so files without {@code roles} load with the behaviour without roles.
+ * {@code bonusClaims} / {@code bonusForceloads}: the per-team bonus an admin granted on top of the team limits (see
+ * {@code TeamClaimManager}); only written when not 0, a missing value is 0, so files of 1.3.0 load unchanged.
  * <p>
  * Server-thread confined: an instance is only ever read or modified on the server thread. Saving serialises it to
  * a String there ({@link #toJsonString()}); only that String is handed to the IO thread.
@@ -54,6 +56,12 @@ public class TeamConfig {
     private final Set<UUID> memberUUIDs = new LinkedHashSet<>();
     /** The level every team action requires, never null. */
     private final EnumMap<TeamAction, TeamRole> roles = new EnumMap<>(TeamAction.class);
+    /** The per-team bonus team claims and team forceloads, in {@code [0, MAX_BONUS]}. */
+    private int bonusClaims;
+    private int bonusForceloads;
+
+    /** The largest per-team bonus, the same bound as the base and per-member options of the Team Claims config. */
+    public static final int MAX_BONUS = TeamClaimsServerConfig.MAX_TEAM_BUDGET_VALUE;
 
     public TeamConfig(UUID partyId, @Nullable String teamName, String subConfigId) {
         this.partyId = Objects.requireNonNull(partyId);
@@ -213,6 +221,27 @@ public class TeamConfig {
         return roles.put(action, Objects.requireNonNull(role)) != role;
     }
 
+    // ==================== Per-team bonus ====================
+
+    /** The bonus team claims an admin granted this team, added to its team claim limit. */
+    public int getBonusClaims() { return bonusClaims; }
+
+    /** The bonus team forceloads an admin granted this team, added to its team forceload limit. */
+    public int getBonusForceloads() { return bonusForceloads; }
+
+    /**
+     * @param value  in {@code [0, MAX_BONUS]}
+     * @return true if the stored value changed
+     * @throws IllegalArgumentException for a value outside the range
+     */
+    public boolean setBonus(boolean forceloads, int value) {
+        if (value < 0 || value > MAX_BONUS) throw new IllegalArgumentException("bonus out of range: " + value);
+        int previous = forceloads ? bonusForceloads : bonusClaims;
+        if (forceloads) bonusForceloads = value;
+        else bonusClaims = value;
+        return previous != value;
+    }
+
     // ==================== JSON ====================
 
     public JsonObject toJson() {
@@ -234,6 +263,8 @@ public class TeamConfig {
         JsonObject rolesObj = new JsonObject();
         for (Map.Entry<TeamAction, TeamRole> entry : roles.entrySet()) rolesObj.addProperty(entry.getKey().id(), entry.getValue().name());
         json.add("roles", rolesObj);
+        if (bonusClaims != 0) json.addProperty("bonusClaims", bonusClaims);
+        if (bonusForceloads != 0) json.addProperty("bonusForceloads", bonusForceloads);
         return json;
     }
 
@@ -287,6 +318,8 @@ public class TeamConfig {
                 }
             }
         }
+        config.bonusClaims = readBonus(json, "bonusClaims", partyId);
+        config.bonusForceloads = readBonus(json, "bonusForceloads", partyId);
         if (json.has("members")) {
             for (JsonElement el : json.getAsJsonArray("members")) {
                 try {
@@ -297,6 +330,21 @@ public class TeamConfig {
             }
         }
         return config;
+    }
+
+    /** A bonus field, 0 if it is missing; an invalid or out-of-range value is logged and read as 0. */
+    private static int readBonus(JsonObject json, String key, UUID partyId) {
+        JsonElement element = json.get(key);
+        if (element == null) return 0;
+        try {
+            if (element.isJsonPrimitive() && element.getAsJsonPrimitive().isNumber()) {
+                int value = element.getAsInt();
+                if (value >= 0 && value <= MAX_BONUS && element.getAsDouble() == value) return value;
+            }
+        } catch (RuntimeException ignored) {
+        }
+        LOGGER.warn("[TeamClaims] Ignoring the invalid team {} {} of party {}", key, element, partyId);
+        return 0;
     }
 
     @Nullable

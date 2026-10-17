@@ -22,7 +22,15 @@ import net.minecraft.network.chat.Component;
 
 public class PacketConstants {
 
-	public static final int NETWORK_VERSION = 7;
+	/**
+	 * [Team Claims] Upstream's network version (7 in OPAC 0.32.7) times 1000 plus the protocol revision of the fork
+	 * ({@link #TEAM_CLAIMS_PROTOCOL_REVISION}), so that it can never equal a version of upstream OPAC or of another
+	 * Team Claims release with other packets. Team Claims 1.3.0 and older sent upstream's plain 7.
+	 */
+	public static final int UPSTREAM_NETWORK_VERSION = 7;
+	/** [Team Claims] Raised whenever the fork's packets change: 1 = 1.4.0 (packets 104 to 113). */
+	public static final int TEAM_CLAIMS_PROTOCOL_REVISION = 1;
+	public static final int NETWORK_VERSION = UPSTREAM_NETWORK_VERSION * 1000 + TEAM_CLAIMS_PROTOCOL_REVISION;
 	public static final Component NETWORK_VERSION_MISMATCH =
 			Component.literal("Open Parties and Claims versions between server and client aren't compatible!");
 

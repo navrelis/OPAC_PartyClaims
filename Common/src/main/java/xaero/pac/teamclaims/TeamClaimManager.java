@@ -21,6 +21,7 @@ import xaero.pac.common.claims.player.api.IPlayerChunkClaimAPI;
 import xaero.pac.common.claims.player.api.IPlayerDimensionClaimsAPI;
 import xaero.pac.common.claims.result.api.ClaimResult;
 import xaero.pac.common.claims.tracker.api.IClaimsManagerListenerAPI;
+import xaero.pac.common.packet.parties.PartyBudgetSender;
 import xaero.pac.common.parties.party.member.api.IPartyMemberAPI;
 import xaero.pac.common.server.IServerData;
 import xaero.pac.common.server.ServerData;
@@ -912,10 +913,13 @@ public class TeamClaimManager implements IClaimsManagerListenerAPI {
         this.clock = clock == null ? System::currentTimeMillis : clock;
     }
 
-    /** The team budget of one party. */
+    /**
+     * The team budget of one party. The limits include the per-team bonus ({@code bonusClaims}, {@code bonusForceloads},
+     * see {@link #teamClaimLimit}).
+     */
     public record TeamBudget(UUID partyId, int memberCount, int minMembers, int claims, int claimLimit, int forceloads,
             int forceloadLimit, int nextMemberClaims, int nextMemberForceloads, long claimDeadline,
-            long forceloadDeadline) {
+            long forceloadDeadline, int bonusClaims, int bonusForceloads) {
 
         /** How many team claims the team has above its limit, 0 if it is within it. */
         public int claimsOverLimit() {
@@ -945,14 +949,71 @@ public class TeamClaimManager implements IClaimsManagerListenerAPI {
         TeamData teamData = teams().get(partyId);
         BudgetSettings settings = getBudgetSettings(partyId);
         int members = party.getMemberCount();
-        int claimLimit = settings.claimLimit(members);
-        int forceloadLimit = settings.forceloadLimit(members);
+        int claimLimit = teamClaimLimit(partyId, settings, members);
+        int forceloadLimit = teamForceloadLimit(partyId, settings, members);
         return new TeamBudget(partyId, members, settings.minMembers(),
                 teamData == null ? 0 : teamData.getClaimCount(), claimLimit,
                 teamData == null ? 0 : teamData.getForceloadCount(), forceloadLimit,
-                settings.claimLimit(members + 1) - claimLimit, settings.forceloadLimit(members + 1) - forceloadLimit,
+                settings.claimLimit(members + 1) - settings.claimLimit(members),
+                settings.forceloadLimit(members + 1) - settings.forceloadLimit(members),
                 teamData == null || !settings.overLimitEnforcement() ? 0 : teamData.getClaimDeadline(),
-                teamData == null || !settings.overLimitEnforcement() ? 0 : teamData.getForceloadDeadline());
+                teamData == null || !settings.overLimitEnforcement() ? 0 : teamData.getForceloadDeadline(),
+                teamBonus(partyId, false), teamBonus(partyId, true));
+    }
+
+    // ==================== Per-team bonus ====================
+
+    /**
+     * The per-team bonus an admin granted a party ({@link TeamConfig#getBonusClaims()} or
+     * {@link TeamConfig#getBonusForceloads()}), 0 for a party without team config.
+     */
+    public int teamBonus(UUID partyId, boolean forceloads) {
+        TeamConfigManager tcm = TeamClaimsCommon.getTeamConfigManager();
+        TeamConfig config = tcm == null ? null : tcm.getTeamConfig(partyId);
+        if (config == null) return 0;
+        return forceloads ? config.getBonusForceloads() : config.getBonusClaims();
+    }
+
+    /**
+     * The enforced team claim limit of a party: the limit of the budget settings for its member count (0 below
+     * {@code teamClaimsMinMembers}) plus its per-team bonus. The bonus applies below {@code teamClaimsMinMembers} too, so
+     * an admin can give a single-player team land.
+     */
+    public int teamClaimLimit(UUID partyId, BudgetSettings settings, int members) {
+        return withBonus(settings.claimLimit(members), teamBonus(partyId, false));
+    }
+
+    /** The enforced team forceload limit of a party, the same way as {@link #teamClaimLimit}. */
+    public int teamForceloadLimit(UUID partyId, BudgetSettings settings, int members) {
+        return withBonus(settings.forceloadLimit(members), teamBonus(partyId, true));
+    }
+
+    private static int withBonus(int limit, int bonus) {
+        return (int) Math.max(0, Math.min(Integer.MAX_VALUE, (long) limit + bonus));
+    }
+
+    /**
+     * Sets the per-team bonus team claims ({@code forceloads} false) or team forceloads of a party, saves the team
+     * config, and applies it at once: the members' claim limits and budgets are pushed again, and a team that the lower
+     * value puts above its limit goes through the over-limit rule like after a member left ({@link #checkOverLimit}).
+     *
+     * @param value  in {@code [0, TeamConfig.MAX_BONUS]}
+     * @return false if the party has no team config (nothing changed)
+     * @throws IllegalArgumentException for a value outside the range
+     */
+    public boolean setTeamBonus(UUID partyId, boolean forceloads, int value) {
+        TeamConfigManager tcm = TeamClaimsCommon.getTeamConfigManager();
+        TeamConfig config = tcm == null ? null : tcm.getTeamConfig(partyId);
+        if (config == null) return false;
+        if (!config.setBonus(forceloads, value)) return true;
+        tcm.markDirty(config);
+        LOGGER.info("[TeamClaims] The bonus team {} of party {} is now {}", forceloads ? "forceloads" : "claims", partyId, value);
+        markPartyLimitSync(partyId);
+        checkOverLimit(partyId);
+        IServerPartyAPI party = OpenPACServerAPI.get(server).getPartyManager().getPartyById(partyId);
+        if (party != null)
+            party.getOnlineMemberStream().forEach(PartyBudgetSender::send);
+        return true;
     }
 
     /**
@@ -1164,11 +1225,11 @@ public class TeamClaimManager implements IClaimsManagerListenerAPI {
         int members = party == null ? 0 : party.getMemberCount();
         int teamClaims = teamData == null ? 0 : teamData.getClaimCount();
         int teamForceloads = teamData == null ? 0 : teamData.getForceloadCount();
-        int claimLimit = settings.claimLimit(members);
-        int forceloadLimit = settings.forceloadLimit(members);
+        int claimLimit = teamClaimLimit(partyId, settings, members);
+        int forceloadLimit = teamForceloadLimit(partyId, settings, members);
         ServerPlayer player = budgetMessagesSuppressed ? null : server.getPlayerList().getPlayer(playerId);
         if (addsClaim && teamClaims >= claimLimit) {
-            if (members < settings.minMembers())
+            if (members < settings.minMembers() && teamBonus(partyId, false) == 0)
                 tell(player, ChatFormatting.RED, "team_too_small", String.valueOf(settings.minMembers()), String.valueOf(members));
             else
                 tell(player, ChatFormatting.RED, "team_claim_limit", String.valueOf(teamClaims), String.valueOf(claimLimit));
@@ -1267,8 +1328,8 @@ public class TeamClaimManager implements IClaimsManagerListenerAPI {
         int members = party.getMemberCount();
         long now = clock.getAsLong();
         // Claims first: unclaiming a forceloaded team claim also takes a team forceload away
-        checkOverLimit(party, teamData, settings, now, false, settings.claimLimit(members));
-        checkOverLimit(party, teamData, settings, now, true, settings.forceloadLimit(members));
+        checkOverLimit(party, teamData, settings, now, false, teamClaimLimit(partyId, settings, members));
+        checkOverLimit(party, teamData, settings, now, true, teamForceloadLimit(partyId, settings, members));
     }
 
     private void checkOverLimit(IServerPartyAPI party, TeamData teamData, BudgetSettings settings, long now,

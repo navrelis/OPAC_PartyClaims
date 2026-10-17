@@ -31,6 +31,7 @@ import xaero.pac.common.packet.parties.ClientboundPartyPacket;
 import xaero.pac.common.packet.parties.ClientboundPartyPlayerPacket;
 import xaero.pac.common.packet.parties.ServerboundPartyInviteDeclinePacket;
 import xaero.pac.common.packet.parties.ServerboundPartyInvitesRequestPacket;
+import xaero.pac.common.packet.teamclaims.*;
 import xaero.pac.common.parties.party.PartyMemberDynamicInfoSyncable;
 
 public class PacketRegister {
@@ -228,6 +229,67 @@ public class PacketRegister {
 		packetHandler.register(103, ClientboundPartyBudgetPacket.class,
 				partyBudgetCodec, partyBudgetCodec,
 				null, new ClientboundPartyBudgetPacket.ClientHandler()
+		);
+
+		// [Team Claims] the hub screen's Team and Admin tabs use the ids 104 to 113
+		ClientboundAdminFlagPacket.Codec adminFlagCodec = new ClientboundAdminFlagPacket.Codec();
+		packetHandler.register(104, ClientboundAdminFlagPacket.class,
+				adminFlagCodec, adminFlagCodec,
+				null, new ClientboundAdminFlagPacket.ClientHandler()
+		);
+
+		ServerboundTeamClaimsRequestPacket.Codec teamClaimsRequestCodec = new ServerboundTeamClaimsRequestPacket.Codec();
+		packetHandler.register(105, ServerboundTeamClaimsRequestPacket.class,
+				teamClaimsRequestCodec, teamClaimsRequestCodec,
+				new ServerboundTeamClaimsRequestPacket.ServerHandler(), null
+		);
+
+		ClientboundAdminConfigPacket.Codec adminConfigCodec = new ClientboundAdminConfigPacket.Codec();
+		packetHandler.register(106, ClientboundAdminConfigPacket.class,
+				adminConfigCodec, adminConfigCodec,
+				null, new ClientboundAdminConfigPacket.ClientHandler()
+		);
+
+		ServerboundAdminConfigSetPacket.Codec adminConfigSetCodec = new ServerboundAdminConfigSetPacket.Codec();
+		packetHandler.register(107, ServerboundAdminConfigSetPacket.class,
+				adminConfigSetCodec, adminConfigSetCodec,
+				new ServerboundAdminConfigSetPacket.ServerHandler(), null
+		);
+
+		ClientboundAdminResultPacket.Codec adminResultCodec = new ClientboundAdminResultPacket.Codec();
+		packetHandler.register(108, ClientboundAdminResultPacket.class,
+				adminResultCodec, adminResultCodec,
+				null, new ClientboundAdminResultPacket.ClientHandler()
+		);
+
+		ClientboundAdminTeamsPacket.Codec adminTeamsCodec = new ClientboundAdminTeamsPacket.Codec();
+		packetHandler.register(109, ClientboundAdminTeamsPacket.class,
+				adminTeamsCodec, adminTeamsCodec,
+				null, new ClientboundAdminTeamsPacket.ClientHandler()
+		);
+
+		ServerboundAdminTeamBonusSetPacket.Codec adminTeamBonusCodec = new ServerboundAdminTeamBonusSetPacket.Codec();
+		packetHandler.register(110, ServerboundAdminTeamBonusSetPacket.class,
+				adminTeamBonusCodec, adminTeamBonusCodec,
+				new ServerboundAdminTeamBonusSetPacket.ServerHandler(), null
+		);
+
+		ClientboundAdminPlayerPacket.Codec adminPlayerCodec = new ClientboundAdminPlayerPacket.Codec();
+		packetHandler.register(111, ClientboundAdminPlayerPacket.class,
+				adminPlayerCodec, adminPlayerCodec,
+				null, new ClientboundAdminPlayerPacket.ClientHandler()
+		);
+
+		ServerboundAdminPlayerBonusSetPacket.Codec adminPlayerBonusCodec = new ServerboundAdminPlayerBonusSetPacket.Codec();
+		packetHandler.register(112, ServerboundAdminPlayerBonusSetPacket.class,
+				adminPlayerBonusCodec, adminPlayerBonusCodec,
+				new ServerboundAdminPlayerBonusSetPacket.ServerHandler(), null
+		);
+
+		ClientboundTeamInfoPacket.Codec teamInfoCodec = new ClientboundTeamInfoPacket.Codec();
+		packetHandler.register(113, ClientboundTeamInfoPacket.class,
+				teamInfoCodec, teamInfoCodec,
+				null, new ClientboundTeamInfoPacket.ClientHandler()
 		);
 	}
 

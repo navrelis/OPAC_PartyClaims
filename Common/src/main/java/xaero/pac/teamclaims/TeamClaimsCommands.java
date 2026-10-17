@@ -24,6 +24,7 @@ import xaero.pac.common.server.player.config.api.v2.IPlayerConfigManagerAPI;
 import xaero.pac.common.server.player.config.api.v2.PlayerConfigOptions;
 import xaero.pac.common.server.player.data.ServerPlayerData;
 import xaero.pac.common.server.player.localization.AdaptiveLocalizer;
+import xaero.pac.teamclaims.admin.TeamBonusCommands;
 import xaero.pac.teamclaims.config.TeamConfigManager;
 import xaero.pac.teamclaims.ftbsync.FtbSyncCommands;
 
@@ -43,7 +44,8 @@ public class TeamClaimsCommands {
         // read-only overviews of the caller's team ("info <player>" of any player's, for permission level 2), "roles"
         // shows the team roles to any member and lets the party owner and admins change them, "convert" turns the
         // caller's own claims around them into team claims or back, "ftbsync" (permission level 2) reports on and
-        // triggers the optional sync with FTB Teams.
+        // triggers the optional sync with FTB Teams, "bonus" (permission level 2 or the admin menu permission) shows and
+        // sets the per-team bonus of any team.
         Predicate<CommandSourceStack> nonMemberRequirement = new CommandRequirementProvider().getNonMemberRequirement(p -> true, false);
         dispatcher.register(
                 Commands.literal("teamclaims")
@@ -63,6 +65,7 @@ public class TeamClaimsCommands {
                         .then(TeamRoles.rolesNode())
                         .then(TeamClaimsConvert.convertNode())
                         .then(FtbSyncCommands.ftbSyncNode())
+                        .then(TeamBonusCommands.bonusNode())
         );
         LOGGER.info("Registered /teamclaims commands");
     }
