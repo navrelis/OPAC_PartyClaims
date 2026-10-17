@@ -92,3 +92,4 @@
 - Linkcheck 1.4.0 jars vs World Map 1.47.0 + Minimap 26.6.0: Fabric and NeoForge 0 errors, exit 0.
 - Docs recheck to Sonnet (README, CURSEFORGE.md; release type Release).
 - Docs recheck done (Sonnet, 1 correction): README + CURSEFORGE.md match the final UI, test table 135 / 169 / 4, release type Release.
+- Lead changed: report to local_14a71120-35a6-429d-b561-ecf58ba39d51 (still second in game-lock queue after QuestBridge).
