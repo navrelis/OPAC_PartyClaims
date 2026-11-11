@@ -17,8 +17,8 @@ public class TeamClaimsHubTest implements FabricGameTest {
     }
 
     @GameTest(template = FabricGameTest.EMPTY_STRUCTURE)
-    public void gridFitNeverOverflowsAndKeepsEightChunksWhenItCan(GameTestHelper helper) {
-        TeamClaimsHubTestCases.gridFitNeverOverflowsAndKeepsEightChunksWhenItCan(helper);
+    public void gridFitNeverOverflowsAndFollowsTheZoomStep(GameTestHelper helper) {
+        TeamClaimsHubTestCases.gridFitNeverOverflowsAndFollowsTheZoomStep(helper);
     }
 
     @GameTest(template = FabricGameTest.EMPTY_STRUCTURE)

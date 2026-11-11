@@ -23,8 +23,8 @@ public final class TeamClaimsHubTestNeoForge {
     }
 
     @GameTest(template = TeamClaimsGameTestMod.EMPTY_STRUCTURE)
-    public static void gridFitNeverOverflowsAndKeepsEightChunksWhenItCan(GameTestHelper helper) {
-        TeamClaimsHubTestCases.gridFitNeverOverflowsAndKeepsEightChunksWhenItCan(helper);
+    public static void gridFitNeverOverflowsAndFollowsTheZoomStep(GameTestHelper helper) {
+        TeamClaimsHubTestCases.gridFitNeverOverflowsAndFollowsTheZoomStep(helper);
     }
 
     @GameTest(template = TeamClaimsGameTestMod.EMPTY_STRUCTURE)

@@ -35,8 +35,12 @@ import xaero.pac.client.claims.player.mode.ClaimingModeClientHandlers;
 import xaero.pac.client.claims.player.mode.ClientClaimingModeHandler;
 import xaero.pac.client.command.util.CommandUtil;
 import xaero.pac.client.gui.MainMenu;
+import xaero.pac.client.gui.hub.map.ChunkMapImage;
+import xaero.pac.client.gui.hub.map.ClaimOverlay;
+import xaero.pac.client.gui.hub.map.TerrainCache;
 import xaero.pac.client.gui.widget.dropdown.DropDownWidget;
 import xaero.pac.client.parties.party.IClientPartyStorage;
+import xaero.pac.client.parties.party.api.IClientPartyAllyInfoAPI;
 import xaero.pac.client.teamclaims.TeamClaimsClientData;
 import xaero.pac.client.player.config.IPlayerConfigClientStorage;
 import xaero.pac.client.player.config.IPlayerConfigClientStorageManager;
@@ -58,7 +62,8 @@ import java.util.List;
 import java.util.UUID;
 
 /**
- * The Claims tab of the hub: a map of the claimed chunks around the player (colours of the claims, no terrain) where the
+ * The Claims tab of the hub: a map of the claimed chunks around the player (the terrain of the chunks the client has
+ * loaded, drawn like a vanilla map, with the colours of the claims over it; the mouse wheel and two buttons zoom) where the
  * player selects chunks by clicking and dragging and then claims, unclaims, forceloads or unforceloads them with the
  * area requests of the client claims API, in the claiming mode they are in. Next to the map are the toggle between
  * private and team claims (the player config option {@code claims.usedSub}, which also decides what the World Map's
@@ -78,6 +83,8 @@ public class ClaimsTabScreen extends HubTabScreen {
 	private static final Tooltip SELECT_FIRST_TOOLTIP = Tooltip.create(Component.translatable("gui.xaero_pac_hub_select_first_tooltip"));
 	private static final Tooltip CLEAR_TOOLTIP = Tooltip.create(Component.translatable("gui.xaero_pac_hub_clear_selection_tooltip"));
 	private static final Tooltip CENTRE_TOOLTIP = Tooltip.create(Component.translatable("gui.xaero_pac_hub_centre_tooltip"));
+	private static final Tooltip ZOOM_OUT_TOOLTIP = Tooltip.create(Component.translatable("gui.xaero_pac_hub_zoom_out_tooltip"));
+	private static final Tooltip ZOOM_IN_TOOLTIP = Tooltip.create(Component.translatable("gui.xaero_pac_hub_zoom_in_tooltip"));
 	private static final Component CLAIM = MainMenu.CLAIM;
 	private static final Component UNCLAIM = MainMenu.UNCLAIM;
 	private static final Component FORCELOAD = MainMenu.FORCELOAD;
@@ -101,8 +108,6 @@ public class ClaimsTabScreen extends HubTabScreen {
 	private static final long CLAIMING_MODE_ANSWER_MILLIS = 1000;
 
 	private static final int GRID_BORDER_COLOR = 0xFF000000;
-	private static final int UNCLAIMED_COLOR_A = 0xFF262626;
-	private static final int UNCLAIMED_COLOR_B = 0xFF2D2D2D;
 	private static final int UNSYNCED_COLOR = 0x707070;
 	private static final int PLAYER_MARKER_COLOR = 0xFFFF3030;
 	private static final int SELECTION_FILL_COLOR = 0x66FFFFFF;
@@ -112,6 +117,7 @@ public class ClaimsTabScreen extends HubTabScreen {
 	private static final int OWN_BADGE_COLOR = 0xFFFFFFFF;
 	private static final int TEAM_BADGE_COLOR = 0xFFFFD23C;
 	private static final int PARTY_BADGE_COLOR = 0xFF55FF55;
+	private static final int ALLY_BADGE_COLOR = 0xFFFF77FF;
 	private static final int SERVER_BADGE_COLOR = 0xFF55FFFF;
 	private static final int EXPIRED_BADGE_COLOR = 0xFF888888;
 	private static final int TEXT_COLOR = HubBudgetLines.TEXT_COLOR;
@@ -134,9 +140,13 @@ public class ClaimsTabScreen extends HubTabScreen {
 	 * @param category  the kind of claim, {@link ClaimCategory#NONE} if the chunk is not claimed
 	 * @param forceloaded  whether the claim is marked for forceloading
 	 * @param claim  the claim, null if the chunk is not claimed
+	 * @param owner  tells the owners (and their sub-configs) apart for the lines between claims, null if the chunk is not claimed
 	 */
-	private record Cell(int rgb, ClaimCategory category, boolean forceloaded, @Nullable IPlayerChunkClaimAPI claim) {
-		static final Cell EMPTY = new Cell(0, ClaimCategory.NONE, false, null);
+	private record Cell(int rgb, ClaimCategory category, boolean forceloaded, @Nullable IPlayerChunkClaimAPI claim, @Nullable OwnerKey owner) {
+		static final Cell EMPTY = new Cell(0, ClaimCategory.NONE, false, null, null);
+	}
+
+	private record OwnerKey(UUID owner, int subConfigIndex) {
 	}
 
 	/**
@@ -149,11 +159,17 @@ public class ClaimsTabScreen extends HubTabScreen {
 			new LegendEntry(Component.translatable("gui.xaero_pac_hub_legend_own"), OWN_BADGE_COLOR, false, false),
 			new LegendEntry(Component.translatable("gui.xaero_pac_hub_legend_team"), TEAM_BADGE_COLOR, false, false),
 			new LegendEntry(Component.translatable("gui.xaero_pac_hub_legend_party"), PARTY_BADGE_COLOR, false, false),
+			new LegendEntry(Component.translatable("gui.xaero_pac_hub_legend_ally"), ALLY_BADGE_COLOR, false, false),
 			new LegendEntry(Component.translatable("gui.xaero_pac_hub_legend_other"), 0, false, false),
 			new LegendEntry(Component.translatable("gui.xaero_pac_hub_legend_server"), SERVER_BADGE_COLOR, false, false),
 			new LegendEntry(Component.translatable("gui.xaero_pac_hub_legend_forceload"), FORCELOAD_DOT_COLOR, true, false),
 			new LegendEntry(Component.translatable("gui.xaero_pac_hub_legend_you"), PLAYER_MARKER_COLOR, false, true)
 	);
+
+	/**
+	 * The zoom step of the grid, kept while the game runs.
+	 */
+	private static int zoom = HubGridFit.DEFAULT_ZOOM;
 
 	private State state = State.NO_MOD;
 	private int centerX;
@@ -163,7 +179,7 @@ public class ClaimsTabScreen extends HubTabScreen {
 	private ChunkSelection selection;
 	private boolean dragging;
 
-	private HubGridFit.Fit fit = new HubGridFit.Fit(HubGridFit.PREFERRED_MIN_RADIUS, HubGridFit.MIN_CELL);
+	private HubGridFit.Fit fit = new HubGridFit.Fit(HubGridFit.MIN_RADIUS, HubGridFit.MIN_CELL);
 	private int gridLeft;
 	private int gridTop;
 	private int panelLeft;
@@ -172,6 +188,11 @@ public class ClaimsTabScreen extends HubTabScreen {
 	private int textTop;
 	private int backTop;
 	private Cell[] cells = new Cell[0];
+	private final TerrainCache terrain = new TerrainCache();
+	@Nullable
+	private ChunkMapImage mapImage;
+	private final List<String> allyNames = new ArrayList<>();
+	private final List<String> allyDefaultNames = new ArrayList<>();
 
 	private Button claimAsButton;
 	private Button claimButton;
@@ -180,6 +201,8 @@ public class ClaimsTabScreen extends HubTabScreen {
 	private Button unforceloadButton;
 	private Button clearButton;
 	private Button centreButton;
+	private Button zoomOutButton;
+	private Button zoomInButton;
 	@Nullable
 	private DropDownWidget claimingModeMenu;
 	private List<ClaimingMode> claimModeOptions = List.of();
@@ -276,11 +299,35 @@ public class ClaimsTabScreen extends HubTabScreen {
 		boolean partyMember = !self && !serverOwner && !expiredOwner && getPartyStorage().getParty() != null
 				&& getPartyStorage().getParty().getMemberInfo(owner) != null;
 		boolean team = self && ClaimsHubLogic.isOwnTeamClaim(claim.getSubConfigIndex(), teamSubIndex, teamSubId != null, hasOtherSubConfigs);
-		ClaimCategory category = ClaimCategory.classify(serverOwner, expiredOwner, self, partyMember, partyOwned, team);
+		boolean ally = false;
+		if(!self && !partyMember && !serverOwner && !expiredOwner && (!allyNames.isEmpty() || !allyDefaultNames.isEmpty()) && claimsManager.hasPlayerInfo(owner)) {
+			IClientPlayerClaimInfoAPI info = claimsManager.getPlayerInfo(owner);
+			Component partyName = partyOwned ? info.getPartyName() : null;
+			ally = ClaimCategory.isAllyOwner(allyNames, allyDefaultNames, partyName == null ? null : partyName.getString(), info.getPlayerUsername());
+		}
+		ClaimCategory category = ClaimCategory.classify(serverOwner, expiredOwner, self, partyMember, partyOwned, team, ally);
 		int rgb = claimsManager.getColor(claim, dimension) & 0xFFFFFF;
 		if(rgb == 0)
 			rgb = UNSYNCED_COLOR;
-		return new Cell(rgb, category, claim.isForceloadable(), claim);
+		return new Cell(rgb, category, claim.isForceloadable(), claim, new OwnerKey(owner, claim.getSubConfigIndex()));
+	}
+
+	/**
+	 * Reads the names of the allied parties of the player's party.
+	 */
+	private void readAllies() {
+		allyNames.clear();
+		allyDefaultNames.clear();
+		IClientPartyStorage<?, ?, ?> partyStorage = getPartyStorage();
+		if(partyStorage.getParty() == null)
+			return;
+		partyStorage.getParty().getAllyPartiesStream().forEach(ally -> {
+			Object info = partyStorage.getAllyInfoStorage().get(ally.getPartyId());
+			if(info instanceof IClientPartyAllyInfoAPI allyInfo) {
+				allyNames.add(allyInfo.getAllyName());
+				allyDefaultNames.add(allyInfo.getAllyDefaultName());
+			}
+		});
 	}
 
 	private void rebuildCells() {
@@ -290,12 +337,32 @@ public class ClaimsTabScreen extends HubTabScreen {
 			java.util.Arrays.fill(cells, Cell.EMPTY);
 			return;
 		}
+		readAllies();
 		IClientClaimsManagerAPI claimsManager = getClaimsManager();
 		ResourceLocation dimension = getDimension();
 		UUID me = minecraft.player.getUUID();
 		for(int gz = 0; gz < count; gz++)
 			for(int gx = 0; gx < count; gx++)
 				cells[gz * count + gx] = computeCell(claimsManager, dimension, me, chunkXAt(gx), chunkZAt(gz));
+		paintMap();
+	}
+
+	/**
+	 * Paints the chunks of the map picture whose terrain or claim changed since they were painted.
+	 */
+	private void paintMap() {
+		if(mapImage == null)
+			return;
+		int count = fit.cells();
+		for(int gz = 0; gz < count; gz++) {
+			for(int gx = 0; gx < count; gx++) {
+				Cell data = cells[gz * count + gx];
+				TerrainCache.Entry picture = terrain.get(chunkXAt(gx), chunkZAt(gz));
+				boolean claimed = data.category() != ClaimCategory.NONE;
+				long signature = (picture == null ? 0L : picture.version()) << 25 | (claimed ? 1L << 24 | data.rgb() : 0L);
+				mapImage.paint(gx, gz, signature, picture == null ? null : picture.argb(), claimed ? data.rgb() : -1);
+			}
+		}
 	}
 
 	private int chunkXAt(int gridX) {
@@ -329,6 +396,8 @@ public class ClaimsTabScreen extends HubTabScreen {
 		unforceloadButton = null;
 		clearButton = null;
 		centreButton = null;
+		zoomOutButton = null;
+		zoomInButton = null;
 		claimingModeMenu = null;
 		buttonHeight = height >= TALL_SCREEN_HEIGHT ? 20 : 16;
 		backTop = contentBottom() - buttonHeight;
@@ -347,7 +416,7 @@ public class ClaimsTabScreen extends HubTabScreen {
 	}
 
 	private void initMessageOnly() {
-		fit = new HubGridFit.Fit(HubGridFit.PREFERRED_MIN_RADIUS, HubGridFit.MIN_CELL);
+		fit = new HubGridFit.Fit(HubGridFit.MIN_RADIUS, HubGridFit.MIN_CELL);
 	}
 
 	private void initReady() {
@@ -355,7 +424,10 @@ public class ClaimsTabScreen extends HubTabScreen {
 		int totalWidth = contentWidth();
 		int availableHeight = contentBottom() - top;
 		int side = Math.max(MIN_GRID_SIDE, Math.min(availableHeight, totalWidth - PANEL_GAP - MIN_PANEL_WIDTH));
-		fit = HubGridFit.fit(side);
+		fit = HubGridFit.fit(side, zoom);
+		if(mapImage == null)
+			mapImage = new ChunkMapImage(minecraft.getTextureManager());
+		mapImage.resize(fit.cells());
 		int gridSize = fit.size();
 		panelWidth = Math.max(60, Math.min(MAX_PANEL_WIDTH, totalWidth - gridSize - PANEL_GAP));
 		int usedWidth = gridSize + PANEL_GAP + panelWidth;
@@ -380,10 +452,36 @@ public class ClaimsTabScreen extends HubTabScreen {
 		y += buttonHeight + BUTTON_GAP;
 		clearButton = addRenderableWidget(Button.builder(CLEAR_SELECTION, b -> clearSelection()).tooltip(CLEAR_TOOLTIP).bounds(panelLeft, y, halfWidth, buttonHeight).build());
 		centreButton = addRenderableWidget(Button.builder(CENTRE, b -> onCentreButton()).tooltip(CENTRE_TOOLTIP).bounds(rightLeft, y, halfWidth, buttonHeight).build());
+		y += buttonHeight + BUTTON_GAP;
+		zoomOutButton = addRenderableWidget(Button.builder(Component.literal("-"), b -> changeZoom(-1)).tooltip(ZOOM_OUT_TOOLTIP).bounds(panelLeft, y, buttonHeight, buttonHeight).build());
+		zoomInButton = addRenderableWidget(Button.builder(Component.literal("+"), b -> changeZoom(1)).tooltip(ZOOM_IN_TOOLTIP).bounds(panelLeft + buttonHeight + BUTTON_GAP, y, buttonHeight, buttonHeight).build());
 		textTop = y + buttonHeight + SECTION_GAP;
 	}
 
+	/**
+	 * Closes the texture of the map when the screen closes.
+	 */
+	@Override
+	public void removed() {
+		super.removed();
+		if(mapImage != null) {
+			mapImage.close();
+			mapImage = null;
+		}
+	}
+
 	// ---- actions ----
+
+	/**
+	 * Zooms one step in or out around the centre of the grid. The grid has another size then, so the screen is laid out again.
+	 */
+	private void changeZoom(int direction) {
+		int newZoom = HubGridFit.clampZoom(zoom + direction);
+		if(newZoom == zoom)
+			return;
+		zoom = newZoom;
+		rebuildWidgets();
+	}
 
 	private void clearSelection() {
 		selection = null;
@@ -524,6 +622,8 @@ public class ClaimsTabScreen extends HubTabScreen {
 		setActionButton(forceloadButton, hasSelection, tooLarge, FORCELOAD_TOOLTIP);
 		setActionButton(unforceloadButton, hasSelection, tooLarge, UNFORCELOAD_TOOLTIP);
 		clearButton.active = hasSelection;
+		zoomOutButton.active = zoom > 0;
+		zoomInButton.active = zoom < HubGridFit.ZOOM_STEPS - 1;
 		if(openDropdown != null) {
 			// the open dropdown of the claiming mode covers these buttons
 			for(Button button : List.of(claimAsButton, claimButton, unclaimButton, forceloadButton, unforceloadButton))
@@ -569,6 +669,8 @@ public class ClaimsTabScreen extends HubTabScreen {
 		updateSubConfigKnowledge();
 		if(refreshSchedule.tick())
 			requestTeamInfo();
+		if(state == State.READY)
+			terrain.tick(minecraft.level, minecraft.player.getBlockY(), centerX, centerZ, fit.radius());
 		rebuildCells();
 		updateWidgets();
 	}
@@ -632,6 +734,15 @@ public class ClaimsTabScreen extends HubTabScreen {
 	}
 
 	@Override
+	public boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
+		if(scrollY != 0 && openDropdown == null && getGridCellAt(mouseX, mouseY, false) != null) {
+			changeZoom(scrollY > 0 ? 1 : -1);
+			return true;
+		}
+		return super.mouseScrolled(mouseX, mouseY, scrollX, scrollY);
+	}
+
+	@Override
 	public boolean mouseDragged(double mouseX, double mouseY, int button, double dragX, double dragY) {
 		if(dragging && button == 0 && selection != null) {
 			int[] cell = getGridCellAt(mouseX, mouseY, true);
@@ -672,24 +783,26 @@ public class ClaimsTabScreen extends HubTabScreen {
 		int count = fit.cells();
 		int cell = fit.cell();
 		int size = fit.size();
-		int gap = cell >= 8 ? 1 : 0;
 		guiGraphics.fill(gridLeft - 1, gridTop - 1, gridLeft + size + 1, gridTop + size + 1, GRID_BORDER_COLOR);
+		// the terrain and the claim colours are one picture
+		mapImage.upload();
+		mapImage.setSmooth(cell < ChunkMapImage.CHUNK_PIXELS);
+		int pixels = mapImage.getPixelSize();
+		guiGraphics.blit(mapImage.getId(), gridLeft, gridTop, size, size, 0, 0, pixels, pixels, pixels, pixels);
 		ChunkPos playerChunk = minecraft.player.chunkPosition();
 		int[] hovered = getGridCellAt(mouseX, mouseY, false);
 		for(int gz = 0; gz < count; gz++) {
 			for(int gx = 0; gx < count; gx++) {
 				int x0 = gridLeft + gx * cell;
 				int y0 = gridTop + gz * cell;
-				int x1 = x0 + cell - gap;
-				int y1 = y0 + cell - gap;
+				int x1 = x0 + cell;
+				int y1 = y0 + cell;
 				Cell data = cells[gz * count + gx];
-				if(data.category() == ClaimCategory.NONE)
-					guiGraphics.fill(x0, y0, x1, y1, ((gx + gz) & 1) == 0 ? UNCLAIMED_COLOR_A : UNCLAIMED_COLOR_B);
-				else {
-					guiGraphics.fill(x0, y0, x1, y1, 0xFF000000 | data.rgb());
-					renderBadge(guiGraphics, data.category(), x0, y0, cell - gap);
+				if(data.category() != ClaimCategory.NONE) {
+					renderClaimBorders(guiGraphics, gx, gz, count, x0, y0, x1, y1, data);
+					renderBadge(guiGraphics, data.category(), x0, y0, cell);
 					if(data.forceloaded())
-						renderDot(guiGraphics, x0, y0, cell - gap);
+						renderDot(guiGraphics, x0, y0, cell);
 				}
 				int chunkX = chunkXAt(gx);
 				int chunkZ = chunkZAt(gz);
@@ -702,6 +815,31 @@ public class ClaimsTabScreen extends HubTabScreen {
 			}
 		}
 		renderSelectionOutline(guiGraphics, count, cell);
+	}
+
+	/**
+	 * Draws the 1 pixel lines along the edges of a claim where the next chunk has another owner or is not claimed.
+	 */
+	private void renderClaimBorders(GuiGraphics guiGraphics, int gx, int gz, int count, int x0, int y0, int x1, int y1, Cell data) {
+		int edges = ClaimOverlay.edges(data.owner(), ownerAt(gx, gz - 1, count), ownerAt(gx + 1, gz, count), ownerAt(gx, gz + 1, count), ownerAt(gx - 1, gz, count));
+		if(edges == 0)
+			return;
+		int color = ClaimOverlay.borderColor(data.rgb());
+		if((edges & ClaimOverlay.NORTH) != 0)
+			guiGraphics.fill(x0, y0, x1, y0 + 1, color);
+		if((edges & ClaimOverlay.SOUTH) != 0)
+			guiGraphics.fill(x0, y1 - 1, x1, y1, color);
+		if((edges & ClaimOverlay.WEST) != 0)
+			guiGraphics.fill(x0, y0, x0 + 1, y1, color);
+		if((edges & ClaimOverlay.EAST) != 0)
+			guiGraphics.fill(x1 - 1, y0, x1, y1, color);
+	}
+
+	@Nullable
+	private Object ownerAt(int gx, int gz, int count) {
+		if(gx < 0 || gz < 0 || gx >= count || gz >= count)
+			return ClaimOverlay.OUTSIDE;
+		return cells[gz * count + gx].owner();
 	}
 
 	private void renderSelectionOutline(GuiGraphics guiGraphics, int count, int cell) {
@@ -728,6 +866,7 @@ public class ClaimsTabScreen extends HubTabScreen {
 			case OWN_PRIVATE -> OWN_BADGE_COLOR;
 			case OWN_TEAM -> TEAM_BADGE_COLOR;
 			case PARTY -> PARTY_BADGE_COLOR;
+			case ALLY -> ALLY_BADGE_COLOR;
 			case SERVER -> SERVER_BADGE_COLOR;
 			case EXPIRED -> EXPIRED_BADGE_COLOR;
 			case OTHER, NONE -> 0;
@@ -841,6 +980,7 @@ public class ClaimsTabScreen extends HubTabScreen {
 			case OWN_PRIVATE -> "gui.xaero_pac_hub_tt_own_private";
 			case OWN_TEAM -> "gui.xaero_pac_hub_tt_own_team";
 			case PARTY -> "gui.xaero_pac_hub_tt_party";
+			case ALLY -> "gui.xaero_pac_hub_tt_ally";
 			case OTHER -> "gui.xaero_pac_hub_tt_other";
 			case SERVER -> "gui.xaero_pac_hub_tt_server";
 			case EXPIRED -> "gui.xaero_pac_hub_tt_expired";
