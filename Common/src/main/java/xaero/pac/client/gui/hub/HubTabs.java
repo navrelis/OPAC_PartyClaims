@@ -28,20 +28,25 @@ import xaero.pac.client.parties.party.IClientPartyStorage;
 import xaero.pac.client.teamclaims.TeamClaimsClientData;
 import xaero.pac.common.platform.Services;
 
-import java.util.ArrayList;
+import javax.annotation.Nullable;
 import java.util.List;
 
 /**
- * The tabs of the hub screen: which of them exist right now, which screen each one opens and which one the hub opens
- * with. Every tab is a screen of its own that draws the tab bar ({@link HubTabBar}), so opening a tab replaces the screen.
+ * The pages of the hub screen: which of them exist right now, which screen each one opens and which one the hub opens
+ * with. Every page is a screen of its own that has the sidebar ({@link HubSidebar}), so opening a page replaces the
+ * screen.
  * <p>
- * To add a tab or replace the placeholder of one: make a screen that extends {@link HubTabScreen} (or, like the
- * {@link PartyScreen}, adds the tab bar itself), return it from {@link #create} and decide in {@link #isVisible} when the
- * tab shows.
+ * To add a page: add it to {@link HubTab}, make a screen that extends {@link HubTabScreen} (or, like the
+ * {@link PartyScreen}, adds the sidebar itself), return it from {@link #create} and decide in
+ * {@link HubNavigation#isVisible} when the page shows.
  */
 public final class HubTabs {
 
-	private static HubTab lastTab = HubTab.PARTY;
+	/**
+	 * The page that was open the last time in this game session, null before the hub was first opened.
+	 */
+	@Nullable
+	private static HubTab lastTab;
 
 	private HubTabs() {
 	}
@@ -64,48 +69,43 @@ public final class HubTabs {
 	}
 
 	/**
-	 * Checks whether a tab is currently shown in the tab bar.
+	 * Checks whether a page is currently shown in the sidebar.
 	 */
 	public static boolean isVisible(HubTab tab) {
-		return switch(tab) {
-			case PARTY, CLAIMS -> true;
-			case TEAM -> isTeamTabVisible();
-			case ADMIN -> isAdminTabVisible();
-		};
+		return HubNavigation.isVisible(tab, isTeamTabVisible(), isAdminTabVisible());
 	}
 
 	/**
-	 * Gets the tabs that are currently shown, in the order of the tab bar.
+	 * Gets the pages that are currently shown, in the order of the sidebar.
 	 */
 	public static List<HubTab> getVisibleTabs() {
-		List<HubTab> tabs = new ArrayList<>();
-		for(HubTab tab : HubTab.values())
-			if(isVisible(tab))
-				tabs.add(tab);
-		return tabs;
+		return HubNavigation.getVisibleTabs(isTeamTabVisible(), isAdminTabVisible());
 	}
 
 	/**
-	 * Gets the tab that was open the last time in this session, the Party tab if that is not shown any more.
+	 * Gets the page that the hub opens with: the Overview the first time in this session, afterwards the page that was
+	 * open the last time (the Overview if that is not shown any more).
 	 */
 	public static HubTab getLastTab() {
-		return isVisible(lastTab) ? lastTab : HubTab.PARTY;
+		return HubNavigation.getOpeningTab(lastTab, isTeamTabVisible(), isAdminTabVisible());
 	}
 
 	/**
-	 * Creates the screen of a tab and remembers the tab as the last one.
+	 * Creates the screen of a page and remembers the page as the last one.
 	 *
 	 * @param escape  the screen to open when the hub is closed, as for every OPAC screen
 	 * @param parent  the screen to open when the Back button is pressed
 	 */
 	public static Screen create(HubTab tab, Screen escape, Screen parent) {
 		if(!isVisible(tab))
-			tab = HubTab.PARTY;
+			tab = HubTab.OVERVIEW;
 		lastTab = tab;
 		return switch(tab) {
+			case OVERVIEW -> new OverviewTabScreen(escape, parent);
 			case PARTY -> new PartyScreen(escape, parent);
 			case CLAIMS -> new ClaimsTabScreen(escape, parent);
 			case TEAM -> new TeamTabScreen(escape, parent);
+			case SETTINGS -> new SettingsTabScreen(escape, parent);
 			case ADMIN -> new AdminTabScreen(escape, parent);
 		};
 	}
@@ -141,6 +141,26 @@ public final class HubTabs {
 	}
 
 	/**
+	 * Checks whether a key closes the hub: the hub key, or OPAC's own menu key, which opens the hub as well.
+	 */
+	public static boolean isCloseKey(int keyCode) {
+		if(isHubKey(keyCode))
+			return true;
+		InputConstants.Key boundKey = getModMenuBoundKey();
+		return boundKey.getType() == InputConstants.Type.KEYSYM && keyCode == boundKey.getValue();
+	}
+
+	/**
+	 * Checks whether a mouse button closes the hub, see {@link #isCloseKey}.
+	 */
+	public static boolean isCloseMouseButton(int button) {
+		if(isHubMouseButton(button))
+			return true;
+		InputConstants.Key boundKey = getModMenuBoundKey();
+		return boundKey.getType() == InputConstants.Type.MOUSE && button == boundKey.getValue();
+	}
+
+	/**
 	 * Checks whether the hub key and vanilla's Social Interactions key are bound to the same key (and key modifier). They
 	 * both default to P, and vanilla only gives key presses to one mapping per key, so the hub key would never fire. Then
 	 * the hub takes the presses of both keys. An unbound key is never shared.
@@ -157,6 +177,11 @@ public final class HubTabs {
 
 	private static InputConstants.Key getHubBoundKey() {
 		KeyMapping keyMapping = OpenPartiesAndClaims.INSTANCE.getClientDataInternal().getKeyBindings().openHubMenu;
+		return Services.PLATFORM.getKeyBindingHelper().getBoundKey(keyMapping);
+	}
+
+	private static InputConstants.Key getModMenuBoundKey() {
+		KeyMapping keyMapping = OpenPartiesAndClaims.INSTANCE.getClientDataInternal().getKeyBindings().openModMenu;
 		return Services.PLATFORM.getKeyBindingHelper().getBoundKey(keyMapping);
 	}
 

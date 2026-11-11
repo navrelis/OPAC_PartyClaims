@@ -18,6 +18,7 @@
 
 package xaero.pac.client.gui.hub;
 
+import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.components.events.ContainerEventHandler;
@@ -27,32 +28,78 @@ import net.minecraft.network.chat.Component;
 import xaero.pac.client.gui.XPACScreen;
 
 /**
- * The base of the screens of the hub tabs other than the party screen: it draws the tab bar instead of the title, opens
- * the Party tab when its own tab is not shown any more, and closes with the key that opens the hub.
+ * The base of the screens of the hub pages other than the party screen: it adds the sidebar ({@link HubSidebar}) and
+ * draws the title of the page instead of the OPAC title, opens the Overview when its own page is not shown any more, and
+ * closes with the key that opens the hub. The page lays out its widgets in the content area right of the sidebar
+ * ({@link #contentLeft()} and the others).
  */
 public abstract class HubTabScreen extends XPACScreen {
 
 	protected static final Component BACK = Component.translatable("gui.xaero_pac_back");
+
+	private HubSidebar sidebar;
 
 	protected HubTabScreen(Screen escape, Screen parent, Component title) {
 		super(escape, parent, title);
 	}
 
 	/**
-	 * Gets the tab that this screen is the content of.
+	 * Gets the page that this screen is the content of.
 	 */
 	protected abstract HubTab getTab();
 
 	@Override
 	protected void init() {
 		super.init();
-		for(Button button : HubTabBar.create(minecraft, width, getTab(), escape, parent))
-			addRenderableWidget(button);
+		sidebar = HubSidebar.create(minecraft, width, height, getTab(), escape, parent);
+		for(Button entry : sidebar.getEntries())
+			addRenderableWidget(entry);
+	}
+
+	/**
+	 * Gets the X where the content area of the page starts, right of the sidebar.
+	 */
+	protected int contentLeft() {
+		return sidebar.contentLeft();
+	}
+
+	/**
+	 * Gets the width of the content area of the page.
+	 */
+	protected int contentWidth() {
+		return sidebar.contentWidth();
+	}
+
+	/**
+	 * Gets the Y where the content area of the page starts, below the title of the page.
+	 */
+	protected int contentTop() {
+		return sidebar.contentTop();
+	}
+
+	/**
+	 * Gets the Y where the content area of the page ends.
+	 */
+	protected int contentBottom() {
+		return sidebar.contentBottom();
+	}
+
+	/**
+	 * Gets the X of the middle of the content area.
+	 */
+	protected int contentCenterX() {
+		return contentLeft() + contentWidth() / 2;
 	}
 
 	@Override
 	protected boolean isTitleShown() {
 		return false;
+	}
+
+	@Override
+	public void renderBackground(GuiGraphics guiGraphics, int mouseX, int mouseY, float partial) {
+		super.renderBackground(guiGraphics, mouseX, mouseY, partial);
+		sidebar.renderPanel(guiGraphics, minecraft, getTab().getLabel());
 	}
 
 	/**
@@ -66,7 +113,7 @@ public abstract class HubTabScreen extends XPACScreen {
 	public void tick() {
 		super.tick();
 		if(!HubTabs.isVisible(getTab()))
-			HubTabs.open(minecraft, HubTab.PARTY, escape, parent);
+			HubTabs.open(minecraft, HubTab.OVERVIEW, escape, parent);
 	}
 
 	/**
@@ -82,7 +129,7 @@ public abstract class HubTabScreen extends XPACScreen {
 
 	@Override
 	public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
-		if(!isTextFieldFocused() && HubTabs.isHubKey(keyCode)) {
+		if(!isTextFieldFocused() && HubTabs.isCloseKey(keyCode)) {
 			onClose();
 			return true;
 		}
@@ -91,7 +138,7 @@ public abstract class HubTabScreen extends XPACScreen {
 
 	@Override
 	public boolean mouseClicked(double mouseX, double mouseY, int button) {
-		if(!isTextFieldFocused() && HubTabs.isHubMouseButton(button)) {
+		if(!isTextFieldFocused() && HubTabs.isCloseMouseButton(button)) {
 			onClose();
 			return true;
 		}
