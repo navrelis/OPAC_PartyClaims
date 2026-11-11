@@ -268,6 +268,9 @@ public final class ServerSnapshot {
 				bonus.addProperty(kind.name(), config == null ? null : config.getEffective(kind.option()));
 			player.add("bonus", bonus);
 			player.addProperty("usedSub", config == null ? null : config.getEffective(PlayerConfigOptions.USED_SUBCLAIM));
+			JsonObject options = new JsonObject();
+			options.addProperty("parties.shareLocationWithParty", config == null ? null : config.getEffective(PlayerConfigOptions.SHARE_LOCATION_WITH_PARTY));
+			player.add("options", options);
 			if(claimManager != null) {
 				TeamClaimManager.BudgetInfo budget = claimManager.getBudgetInfo(id);
 				JsonObject budgetObject = new JsonObject();

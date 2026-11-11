@@ -431,6 +431,12 @@ if (project.hasProperty('twoPlayerTest')) {
             compileClasspath += sourceSets.twoplayertest.compileClasspath + sourceSets.twoplayertest.output
             runtimeClasspath += sourceSets.twoplayertest.runtimeClasspath + sourceSets.twoplayertest.output + sourceSets.gametest.output.classesDirs
         }
+        // No code of its own: the runtime classpath of the two test clients, the twoplayertest mod plus Xaero's World
+        // Map and xaerolib (like clientWorldMap). The server and the self-check stay without World Map.
+        twoplayertestClient {
+            // not "+=": the source set's own output has no classes
+            runtimeClasspath = configurations.clientWorldMapRuntimeClasspath + sourceSets.twoplayertest.runtimeClasspath + sourceSets.twoplayertest.output
+        }
     }
 
     loom {
@@ -467,7 +473,7 @@ if (project.hasProperty('twoPlayerTest')) {
                 vmArg("-Dopac.twoplayertest.role=Player1")
                 vmArg("-Dopac.twoplayertest.timeoutMinutes=${tptTimeout}")
                 vmArg("-Dopac.twoplayertest.server=${tptServer}")
-                source(sourceSets.twoplayertest)
+                source(sourceSets.twoplayertestClient)
             }
             twoPlayerTestClient2 {
                 client()
@@ -479,7 +485,7 @@ if (project.hasProperty('twoPlayerTest')) {
                 vmArg("-Dopac.twoplayertest.role=Player2")
                 vmArg("-Dopac.twoplayertest.timeoutMinutes=${tptTimeout}")
                 vmArg("-Dopac.twoplayertest.server=${tptServer}")
-                source(sourceSets.twoplayertest)
+                source(sourceSets.twoplayertestClient)
             }
             // The headless self-check (gametest server, like runBootTest): needs no window and no game lock.
             twoPlayerTestSelfCheck {
