@@ -106,3 +106,4 @@
 - Full test pass on hub head (lead): 135 / 169 / 4 on Fabric and NeoForge, build green.
 - README two-player test section + changelog line (Sonnet, 0 corrections, lead read the diff).
 - 2026-10-18 release: CurseForge Release, NeoForge 9233929, Fabric 9233932 (slug override approved by the owner in chat); report.md written; graph rebuilt code-only in this worktree (untracked).
+- 2026-11-11 23:45 lead handoff: .knowledge/sessions/2026-11-11_2340_lead-9238a1f9/handoff.md
