@@ -54,6 +54,7 @@ import xaero.pac.common.claims.player.mode.api.IClaimingModeAPI;
 import xaero.pac.common.packet.teamclaims.TeamInfoData;
 import xaero.pac.common.server.claims.command.ClaimingModeCommand;
 import xaero.pac.common.server.claims.command.ClaimsCommandRegister;
+import xaero.pac.teamclaims.config.TeamClaimsClientConfig;
 
 import javax.annotation.Nullable;
 import java.util.ArrayList;
@@ -167,9 +168,10 @@ public class ClaimsTabScreen extends HubTabScreen {
 	);
 
 	/**
-	 * The zoom step of the grid, kept while the game runs.
+	 * The zoom step of the grid that was picked in the screen, kept while the game runs, negative if none was picked yet.
+	 * Until then the grid starts with the step of the client config (see {@link #zoomStep()}), which the screen never writes.
 	 */
-	private static int zoom = HubGridFit.DEFAULT_ZOOM;
+	private static int zoom = -1;
 
 	private State state = State.NO_MOD;
 	private int centerX;
@@ -424,7 +426,7 @@ public class ClaimsTabScreen extends HubTabScreen {
 		int totalWidth = contentWidth();
 		int availableHeight = contentBottom() - top;
 		int side = Math.max(MIN_GRID_SIDE, Math.min(availableHeight, totalWidth - PANEL_GAP - MIN_PANEL_WIDTH));
-		fit = HubGridFit.fit(side, zoom);
+		fit = HubGridFit.fit(side, zoomStep());
 		if(mapImage == null)
 			mapImage = new ChunkMapImage(minecraft.getTextureManager());
 		mapImage.resize(fit.cells());
@@ -472,12 +474,16 @@ public class ClaimsTabScreen extends HubTabScreen {
 
 	// ---- actions ----
 
+	private static int zoomStep() {
+		return HubGridFit.startZoom(zoom, TeamClaimsClientConfig.CONFIG.claimsMapZoom.get());
+	}
+
 	/**
 	 * Zooms one step in or out around the centre of the grid. The grid has another size then, so the screen is laid out again.
 	 */
 	private void changeZoom(int direction) {
-		int newZoom = HubGridFit.clampZoom(zoom + direction);
-		if(newZoom == zoom)
+		int newZoom = HubGridFit.clampZoom(zoomStep() + direction);
+		if(newZoom == zoomStep())
 			return;
 		zoom = newZoom;
 		rebuildWidgets();
@@ -622,8 +628,8 @@ public class ClaimsTabScreen extends HubTabScreen {
 		setActionButton(forceloadButton, hasSelection, tooLarge, FORCELOAD_TOOLTIP);
 		setActionButton(unforceloadButton, hasSelection, tooLarge, UNFORCELOAD_TOOLTIP);
 		clearButton.active = hasSelection;
-		zoomOutButton.active = zoom > 0;
-		zoomInButton.active = zoom < HubGridFit.ZOOM_STEPS - 1;
+		zoomOutButton.active = zoomStep() > 0;
+		zoomInButton.active = zoomStep() < HubGridFit.ZOOM_STEPS - 1;
 		if(openDropdown != null) {
 			// the open dropdown of the claiming mode covers these buttons
 			for(Button button : List.of(claimAsButton, claimButton, unclaimButton, forceloadButton, unforceloadButton))

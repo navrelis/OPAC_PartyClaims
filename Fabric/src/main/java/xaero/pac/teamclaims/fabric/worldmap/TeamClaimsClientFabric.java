@@ -17,8 +17,10 @@ public class TeamClaimsClientFabric implements ClientModInitializer {
 	public void onInitializeClient() {
 		NeoForgeConfigRegistry.INSTANCE.register(OpenPartiesAndClaims.MOD_ID, ModConfig.Type.CLIENT,
 				TeamClaimsClientConfig.SPEC, TeamClaimsClientConfig.FILE_NAME);
-		if(FabricLoader.getInstance().isModLoaded("xaeroworldmap"))
+		if(FabricLoader.getInstance().isModLoaded("xaeroworldmap")) {
+			TeamClaimsClientConfig.worldMapIntegration = true;
 			WorldMapClaimingButton.register();
+		}
 	}
 
 }
