@@ -45,6 +45,7 @@ public final class ConfigOptionRowListElement extends WidgetListElement<ConfigOp
 	private final WidgetListElement<?> valueElement;
 	private final BooleanSupplier resetVisible;
 	private final Runnable resetAction;
+	private Button resetButton;
 	private boolean odd;
 
 	public ConfigOptionRowListElement(int h, WidgetListElement<?> valueElement, BooleanSupplier resetVisible, Runnable resetAction) {
@@ -63,14 +64,14 @@ public final class ConfigOptionRowListElement extends WidgetListElement<ConfigOp
 		this.x = x;
 		this.y = y;
 		AbstractWidget widget = valueElement.screenInit(x, y, screen, tickableBoxes);
-		if(resetVisible.getAsBoolean()) {
-			Minecraft minecraft = Minecraft.getInstance();
-			screen.addRenderableWidget(Button.builder(Component.literal("↺"), b -> {
-				resetAction.run();
-				screen.init(minecraft, screen.width, screen.height);
-			}).bounds(x + w - RESET_WIDTH, y, RESET_WIDTH, h)
-					.tooltip(Tooltip.create(Component.translatable("gui.xaero_pac_config_reset_tooltip"))).build());
-		}
+		Minecraft minecraft = Minecraft.getInstance();
+		//the button is always there, render() shows it only while resetVisible says so (the value can change without a relayout)
+		resetButton = screen.addRenderableWidget(Button.builder(Component.literal("↺"), b -> {
+			resetAction.run();
+			screen.init(minecraft, screen.width, screen.height);
+		}).bounds(x + w - RESET_WIDTH, y, RESET_WIDTH, h)
+				.tooltip(Tooltip.create(Component.translatable("gui.xaero_pac_config_reset_tooltip"))).build());
+		resetButton.visible = resetButton.active = resetVisible.getAsBoolean();
 		return widget;
 	}
 
@@ -81,6 +82,8 @@ public final class ConfigOptionRowListElement extends WidgetListElement<ConfigOp
 
 	@Override
 	public void render(GuiGraphics guiGraphics) {
+		if(resetButton != null)
+			resetButton.visible = resetButton.active = resetVisible.getAsBoolean();
 		valueElement.render(guiGraphics);
 	}
 
