@@ -8,6 +8,33 @@ Supported: Minecraft 1.21.1 on **Fabric** (Fabric Loader 0.14 or newer, Fabric A
 **NeoForge** (21.1.x). The mod id is still `openpartiesandclaims`, so it replaces the original mod; it cannot be
 installed next to it. Install it on the server and on every client. FTB Teams is optional (see "FTB Teams sync").
 
+## Updating from 1.4.0
+
+Version 1.5.0 makes the hub the single OPAC menu and adds entries and a button for Xaero's World Map (Fabric). It is still
+based on Open Parties and Claims 0.32.7. Everything new is on the client; nothing about the world or the network changed.
+
+* **No world or protocol change.** The network version (7001), the NeoForge protocol version (`1.11.0-teamclaims.1`) and
+  the packets are the same as in 1.4.0, and claims, parties, team files and configs load as they are. The server
+  defaults (OPAC's and the Team Claims server config) are unchanged, and existing configs keep their values. Update the
+  clients and the server anyway: only a 1.5.0 client has the new pages, entries and options.
+* **New client config.** The first start of a 1.5.0 client creates `config/openpartiesandclaims-teamclaims-client.toml`
+  (World Map button on or off and its place, the zoom the Claims map starts with). See "Client config"; it is also
+  editable on the Settings page of the hub.
+* **The old OPAC menu is replaced by the hub.** The OPAC menu key (apostrophe), **P** and the OPAC button of Xaero's World Map
+  all open the hub, and its pages hold what the old main menu and config menu had; the detailed config screens got
+  groups, a search box and a reset-to-default button. There are no new key bindings and nothing is lost from your key
+  settings. See "Hub (P)" and "Config screens".
+* **Claims map:** the Claims page shows the terrain, has three zoom steps, borders and a category for allies.
+* **Team page:** the convert radius button goes up to 16 (the server option `convertMaxRadius`, 4 by default, still
+  limits it).
+* **Fabric only:** with Xaero's World Map 1.47.0, the right-click menu of the map has **Claim as Team**, **Claim as
+  Private**, a switch for the claim mode and **Open claims menu**, and the map has a button with the claim mode and the
+  claims used. See "Xaero's World Map". NeoForge builds are the same without it.
+* **Going back to 1.4.0:** put the 1.4.0 jar back (the file of 1.4.0 on CurseForge, or build the tag `v1.4.0` of
+  the repository with `gradlew.bat :Fabric:build :NeoForge:build`). Because nothing changed in the world or the network,
+  no conversion is needed, and 1.4.0 ignores the client toml, which you can delete.
+* Coming from 1.3.0 or older? "Updating from 1.3.0" and the sections after it apply to you as well.
+
 ## Updating from 1.3.0
 
 Version 1.4.0 adds the hub screen on the **P** key (see "Hub (P)"), an admin menu for server owners (see "Admin menu")
@@ -251,53 +278,165 @@ The budgets, the limits and the rest of Team Claims are the same as with anchors
 
 ## Hub (P)
 
-One screen with tabs, opened with the key **P** (the default; rebindable in Minecraft's Controls under the category
-"Open Parties and Claims" as "Open Parties and Claims Hub"). It opens on the tab you used last, and pressing the key
-again closes it while no text field has the focus. P is also vanilla's "Social Interactions" key: while both
-are on P, P opens the hub; rebind Social Interactions in Controls to use it. The tabs are **Party**, **Claims**, **Team** (only while your party is a team) and,
-only for admins, **Admin**.
-The hub can also be opened with the **Party** button in the OPAC menu (the menu of the apostrophe key). On a server
-without the mod, or with parties disabled, the party parts of it only say so.
+The hub is the one OPAC menu: a screen with a **sidebar** on the left (an icon and a label per page) and one page at a
+time on the right. All of these open it:
 
-**Claims tab.** A grid of the chunks around you, drawn in the claim colours (no terrain; Xaero's World Map shows that),
-for claiming without commands.
+* the key **P** (the default; "Open Parties and Claims Hub" in Minecraft's Controls under the category "Open Parties and
+  Claims"),
+* OPAC's own menu key ("Open Parties and Claims Menu", the apostrophe key by default), which used to open the old main
+  menu,
+* the OPAC button of Xaero's World Map and the **Open claims menu** entry of the map's right-click menu (see "Xaero's
+  World Map"),
+* other mods, through the API call `openMainMenuScreen`.
 
+The old OPAC main menu and config menu screens are not shown any more; their functions are pages of the hub. The hub
+opens on the **Overview** the first time in a game session and afterwards on the page you used last (on the Overview if
+that page is not shown any more). Pressing P or the OPAC menu key again closes it while no text field has the focus.
+P is also vanilla's "Social Interactions" key: while both are on P, P opens the hub; rebind Social Interactions in
+Controls to use it. When the window is narrow (less than 360 pixels left for the page at the current GUI scale) the
+sidebar shows only the icons. On a server without the mod, or with parties or claims disabled, the parts of the pages
+that need it only say so.
+
+The pages, in the order of the sidebar: **Overview**, **Party**, **Claims**, **Team** (only while your party is a team),
+**Settings** and, only for admins, **Admin**.
+
+**Overview page.** Three blocks. *Party*: the party name and member count, and a button to the Party page. *Claims*: the
+**Claim as: Private / Team** button (see the Claims page) and the budget lines (your private claims and forceloads and,
+in a team, the team claims and forceloads against the limits). *This chunk*: the coordinates of your chunk, whether it
+is claimed, its owner and the claim name, and the buttons **Claim** (it unclaims when the chunk is already yours),
+**Forceload**, **Anchor** (only while the server has `anchorBasedClaiming` on) and **About** (the party information in
+chat). They send the same commands as the buttons of the old main menu.
+
+**Claims page.** A map of the chunks around you, for claiming without commands.
+
+* The map shows the **terrain** of the chunks your client has loaded, drawn like a vanilla map (height shading, water
+  depth), and the claims over it in their colours, with a border along the edge of every claim. Chunks that are not
+  loaded show a checkerboard with the claim colour only. The map follows by itself when the server sends a claim change.
+* **Zoom:** three steps (a chunk is drawn 6, 12 or 24 pixels wide; the middle one is the default) with the **-** and **+**
+  buttons or the mouse wheel over the map. The map shows as many chunks as fit at that step, up to 24 to each side of you.
+  The step the map starts with is a client option ("Map zoom"), see "Client config"; a step you pick yourself is kept
+  until the game closes.
 * Click a chunk, or drag a rectangle, to select it, then press **Claim**, **Unclaim**, **Forceload** or **Unforceload**.
   The buttons send the same area requests as the claim UI of Xaero's World Map, so every OPAC rule applies (limits,
   anchors, team roles) and the server answers as usual. The four buttons are disabled while the selection is larger
-  than the OPAC server option `maxSingleClaimActionSize` (121 chunks by default); the tab then names the limit. A right
-  click on the grid or **Clear selection** deselects. The arrow keys move the grid (Shift moves it further) and
+  than the OPAC server option `maxSingleClaimActionSize` (121 chunks by default); the page then names the limit. A right
+  click on the map or **Clear selection** deselects. The arrow keys move the map (Shift moves it further) and
   **Centre** brings it back to your chunk.
-* Every chunk is drawn in the colour of its claim. A small mark in its top left corner tells whose claim it is: white for
-  your own private claims, yellow for your team's claims, green for claims of other party members and light blue for
+* A small mark in the top left corner of a chunk tells whose claim it is: white for your own private claims, yellow for
+  your team's claims, green for claims of other party members, pink for claims of an **ally** party and light blue for
   server claims (expired claims are grey); the claims of other players have no mark. Forceloaded chunks carry a white
   square in the bottom right corner and your own chunk a red outline. Hover a chunk for its coordinates, what kind of
-  claim it is, its owner, the claim name and the forceload state. A legend is shown next to the grid.
+  claim it is, its owner, the claim name and the forceload state. A legend is shown next to the map.
+  The client knows the names of the allied parties but not their members, so a claim counts as an ally's when the party
+  that owns it has an allied party's name (or, for the claims of an ally's owner, that party's default name "<owner>'s
+  Party"); members of an ally who claim privately show as other players.
 * The **Claim as: Private / Team** button decides who owns what you claim: only you, or your team. It switches the
   selected sub-claim (`claims.usedSub`, the main config or the team sub-config), and so it **also decides what Xaero's
   World Map "Claim Selected" claims**. Without a team only Private is possible. It applies while you claim as a player;
-  OPAC's claiming mode (player, party, server) is still chosen in the OPAC menu.
+  players who may claim as a party or as the server get a dropdown for the claiming mode above it.
 * The budget lines show your private claims and forceloads and, in a team, the team claims and forceloads against the
   limits.
 
-**Team tab.** Your team at a glance: the team name and member count, the team budget (team claims and team forceloads
+**Team page.** Your team at a glance: the team name and member count, the team budget (team claims and team forceloads
 against the limit, bonus included, a line with the bonus if the team has one, and the countdown while the team is over
 its limit), the lowest rank required to claim, unclaim and forceload (a click on the button picks the next rank; the
 party owner and admins can change them, everybody else sees them read-only), your own switch for the claim welcome
-messages, the claim colour and claims name of the team, the same Private / Team switch for claiming as the Claims tab,
+messages, the claim colour and claims name of the team, the same Private / Team switch for claiming as the Claims page,
 a button to the protection and appearance settings of the team (read-only for everybody but the party owner and
 admins), and **To team** and **To personal** under "Convert claims around you", with a radius button and a confirmation.
-The radius button goes from 0 to 4, and the server option `convertMaxRadius` still limits it; a larger radius needs
-the command. The tab does what `/teamclaims info`, `roles`, `territorymessages` and `convert` do, and the
-server checks everything as before.
+The radius button goes from 0 to 16 (a square of up to 33 x 33 chunks). The client does not know the server option
+`convertMaxRadius` (4 by default), so a bigger radius is offered but the server refuses it with a message: the option is
+the limit. The page does what `/teamclaims info`, `roles`, `territorymessages` and `convert` do, and the server checks
+everything as before.
 
-**Admin tab.** Only with the permission described in "Admin menu".
+**Settings page.** What the old config menu had, in two columns: *My settings* (My Player Config, and Party Claims Config
+while you are in a party that owns claims) and *Server* (Default Player Config, Server Claims Config, Expired Claims
+Config, Wilderness Config, and for operators **Edit Config** of another player by name). Each button opens the detailed
+config screen of that config, see "Config screens". Below *My settings* is the block **Client options**: the options of
+the client config (map zoom and, with Xaero's World Map on Fabric, the World Map button), see "Client config".
 
-**Party tab.** The party screen of 1.3.0, below.
+**Admin page.** Only with the permission described in "Admin menu".
+
+**Party page.** The party screen of 1.3.0, below.
+
+## Config screens
+
+The detailed player config screens (the ones the Settings page opens, and the player config of Xaero's World Map) are the
+same screens as before with three additions that make the long option lists easier to handle:
+
+* **Groups.** The options are sorted into groups by their id: Claims, Parties, General, and the protection options split
+  into Blocks, Block Triggers, Entities, Players, Portals and Teleporting, Item Use, Item Pickup, Spawning and Other. A
+  group header collapses and expands its options. A config with 12 options or fewer shows everything expanded; a longer
+  one starts with only its first group open. The state of the groups is kept per config type while the game runs. Options
+  that other mods add are grouped by the first part of their id.
+* **Search.** The search box under the list ("Search options...") filters the options: every word of the search has to be
+  in the option's name, its id or its tooltip, in any case. While a search is active the matching groups are open
+  whatever their state, and the headers do not collapse.
+* **Reset to default.** A button next to an option you may edit puts its default back; it only shows while the value
+  differs from the default. For a sub-config the default is "inherit from the main config" (the value is cleared); for the
+  main player config and the party claims config it is the value of the server's default player config; for every other
+  config it is the option's own default. A reset is saved like any other change.
+
+## Xaero's World Map
+
+**Fabric only.** With Xaero's World Map installed on a Fabric client (tested with 1.47.0), Team Claims adds claiming
+entries to the map screen. World Map is not needed and not included: without it nothing of this exists, and on NeoForge
+the map screen is unchanged (use the Claim as button of the hub to switch between private and team claims there).
+
+**Right-click menu.** Select an area on the map as usual and right-click. Next to World Map's own entries (they are
+only added where World Map offers **Claim Selected**, so on a server with the mod and with a selection) you get:
+
+* **Claim as Team** and **Claim as Private**: claim the selection once, as the team or as yourself, whatever the
+  claim mode is. This is a *one-shot*: the claim mode (`claims.usedSub`, the same switch as **Claim as** in the hub) is
+  set to your choice, the claim request goes out, and the mode is put back to what it was. Nothing is changed if the
+  choice is the mode you are in. The request is the one **Claim Selected** sends (the same area, limited to the claim
+  distance unless you are in admin mode, and the same message for a large area), so every OPAC rule applies. They are
+  disabled while the claiming mode is not "player" (party or server claiming), and Claim as Team also while you have
+  no team.
+* **Claim mode: Private (switch to Team)** (it names the current and the other mode): switches the claim mode for good,
+  exactly like the **Claim as** button of the hub; it decides what **Claim Selected** claims from then on.
+* **Open claims menu**: opens the hub on the page you used last. Back returns to the map.
+
+**Button on the map.** A button on the map screen shows the claim mode and what is used of its pool, for example
+**Claiming: Team 34/120** or **Claiming: Private 12/50**, and a click switches the mode like the entry above. The
+numbers are the private claims against your private limit, or the team claims against the team limit; the server sends
+them together with the team information, which the button asks for every five seconds while the map is open, so the
+numbers are missing for a moment after the map opens and the button is disabled when claiming as a team is not
+possible (it says why in a tooltip). It is hidden on a server without the mod. Its place and whether it is shown at all
+are options of the client config, see below. It is 150 pixels wide; the default place, top centre, is below the
+coordinates World Map writes there.
+
+**Known limitation.** The one-shot claim changes the claim mode first, and the server refuses that change when you are
+over a claim limit (and not an operator); the claim request is sent regardless. A one-shot claim then uses the mode you
+were in, not the one you picked (the server resends the old value, so the mode stays unchanged). If the entry claims the
+wrong kind of claim, switch the mode with the button or the hub first. A mode other than private or team (a third
+sub-config you made) is put back as Private after a one-shot.
+
+**If World Map changes.** The entries are added by a mixin into World Map's `SupportOpenPartiesAndClaims`
+(`addRightClickOptions`) and only applied when World Map is installed; the button is added to its map screen by name. If
+a World Map update changes either, the entries or the button are missing, and nothing crashes.
+
+## Client config
+
+The client options of Team Claims are in their own file, `openpartiesandclaims-teamclaims-client.toml`, in the `config/`
+folder of the game (next to the other configs; it is created at the first start of the client, on Fabric and on
+NeoForge, and it only exists on clients). You can edit it with a text editor, or in the game on the **Settings** page of
+the hub, in the block **Client options** below "My settings"; a change there is saved at once. The block shows the map
+zoom, and the two World Map options only on Fabric with Xaero's World Map installed. The button options are read when the
+map screen opens.
+
+| Option | Default | Meaning |
+| --- | --- | --- |
+| `worldMap.worldMapButton` | `true` | Whether the map screen of Xaero's World Map (Fabric only) shows the claim mode button. The entries of the right-click menu are not affected. Settings page: "World Map button". |
+| `worldMap.worldMapButtonPosition` | `TOP_CENTER` | Where the button sits: `TOP_LEFT`, `TOP_CENTER`, `TOP_RIGHT`, `BOTTOM_LEFT` or `BOTTOM_RIGHT`. Settings page: "Button position". |
+| `claimsMap.claimsMapZoom` | `1` (0..2) | The zoom step the map of the Claims page starts with: 0, 1 or 2 are chunks of 6, 12 or 24 pixels ("Small", "Medium", "Large" on the Settings page). It only decides the start: once you zoom the map in a game session, your step is kept until the game closes. Settings page: "Map zoom". |
+
+The client config has no effect on servers, and the server defaults (Team Claims server config, OPAC server config) are
+unchanged in 1.5.0.
 
 ## Party screen
 
-The Party tab: what used to be typed as `/oparties ...` commands. Every action sends the same `/oparties` command a
+The Party page of the hub: what used to be typed as `/oparties ...` commands. Every action sends the same `/oparties` command a
 player would type, so the server's checks and messages are the same; the screen only offers the actions the player's
 rank allows.
 
@@ -471,12 +610,12 @@ The private limits are not set here: they stay OPAC's own `maxPlayerClaims` and 
 
 ## Admin menu
 
-The **Admin** tab of the hub (key **P**) lets server owners change settings without editing toml files or typing
+The **Admin** page of the hub (key **P**) lets server owners change settings without editing toml files or typing
 commands.
 
 **Who sees it.** Players with permission level 2 (operators) or the permission node `xaero.pac_admin_menu`, checked
 through the permission system OPAC is configured to use (`permissionSystem` in OPAC's server config, for example
-LuckPerms). Everybody else does not get the tab, and the server checks every admin request on its own, so a modified
+LuckPerms). Everybody else does not get the page, and the server checks every admin request on its own, so a modified
 client gets nothing: the request is ignored and logged (the first one of a player as a warning). `/teamclaims bonus`
 needs the same permission.
 
@@ -567,10 +706,10 @@ start with a fresh world, the last two on a copy of the world data of a 1.2.0 se
 
 | Run | FTB Teams | Tests | Log |
 | --- | --- | --- | --- |
-| `gradlew.bat :Fabric:runBootTest --console=plain` | not installed | 135 | `run-boottest/logs/latest.log` |
-| `gradlew.bat :NeoForge:runTeamClaimsGameTest --console=plain` | not installed | 135 | `NeoForge/runs/teamClaimsGameTest/logs/latest.log` |
-| `gradlew.bat :Fabric:runBootTestFtb --console=plain` | installed | 169 | `run-boottest-ftb/logs/latest.log` |
-| `gradlew.bat :NeoForge:runTeamClaimsGameTestFtb --console=plain` | installed | 169 | `NeoForge/runs/teamClaimsGameTestFtb/logs/latest.log` |
+| `gradlew.bat :Fabric:runBootTest --console=plain` | not installed | 156 | `run-boottest/logs/latest.log` |
+| `gradlew.bat :NeoForge:runTeamClaimsGameTest --console=plain` | not installed | 156 | `NeoForge/runs/teamClaimsGameTest/logs/latest.log` |
+| `gradlew.bat :Fabric:runBootTestFtb --console=plain` | installed | 190 | `run-boottest-ftb/logs/latest.log` |
+| `gradlew.bat :NeoForge:runTeamClaimsGameTestFtb --console=plain` | installed | 190 | `NeoForge/runs/teamClaimsGameTestFtb/logs/latest.log` |
 | `gradlew.bat :Fabric:runSaveCompatTest --console=plain` | not installed | 4 | `run-savecompat/logs/latest.log` |
 | `gradlew.bat :NeoForge:runSaveCompatGameTest --console=plain` | not installed | 4 | `NeoForge/runs/saveCompatGameTest/logs/latest.log` |
 
@@ -582,7 +721,7 @@ unclaim/forceload, event-driven claim transfer on leave (party hooks queue membe
 end of the tick), long and non-ASCII team names, hardening (quick join and leave, claim overhead after many changes,
 name validation, late joiners, corrupt team files, forceload tickets), the server config and the forceload grace
 period, territory messages, `info`/`list`, team roles, `convert`, the packets of the party screen (invitations and
-budget numbers), the hub logic, the admin menu (its permission, the config registry with live and restart-only
+budget numbers), the hub logic, the config screen grouping, the World Map claiming logic, the Claims map, the admin menu (its permission, the config registry with live and restart-only
 writes, the player and team bonus) with its packets, and team claims together with OPAC's claiming anchors (`anchorBasedClaiming` switched on for the length of
 the test). The runs with FTB Teams (FTB Teams 2101.1.11, FTB Library and Architectury as test-only runtime
 mods) run the same tests plus the FTB Teams sync tests: every operation in both directions, the rank stability rule, no
@@ -622,6 +761,28 @@ The headless self-check of the harness (no window, 6 gametests) is `gradlew.bat 
 All of it exists only with `-PtwoPlayerTest`; without the property there is no source set, run or task, and the jars are unchanged.
 
 ## Changelog
+
+### 1.5.0
+
+* **One menu:** the hub is the only OPAC menu. P, OPAC's own menu key (apostrophe) and the OPAC button of Xaero's World Map
+  open it, and the old main menu and config menu screens are replaced. The hub has a sidebar with the pages **Overview**
+  (party, claims and the current chunk, with the buttons of the old main menu), **Party**, **Claims**, **Team**,
+  **Settings** (all detailed config screens, plus the client options) and **Admin**. See "Hub (P)".
+* **Detailed config screens:** the options are in collapsible groups, a search box filters them, and a button next to
+  an option resets it to its default. The API of the screens is unchanged. See "Config screens".
+* **Claims page map:** it shows the terrain of the loaded chunks under the claim colours, with borders, three zoom steps
+  (buttons and mouse wheel) and a category and legend entry for claims of allied parties.
+* **Xaero's World Map (Fabric only, tested with 1.47.0):** right-click entries **Claim as Team** and **Claim as Private**
+  (one-shot claims), a switch for the claim mode and **Open claims menu**; a button on the map screen with the claim mode
+  and the claims used. Known limitation: when the server refuses the change of the claim mode because the player is over a
+  claim limit, a one-shot claim uses the old mode. World Map is not included and not needed. See "Xaero's World Map".
+* **New client config** `openpartiesandclaims-teamclaims-client.toml`: the World Map button on or off and its place, and
+  the zoom the Claims map starts with. Editable on the Settings page. See "Client config".
+* **Team page:** the convert radius button goes up to 16; the server option `convertMaxRadius` still limits it.
+* **No protocol, save data or server default changed.** Existing worlds and configs load as they are, and 1.4.0 can be
+  put back (tag `v1.4.0`). See "Updating from 1.4.0".
+* New gametests for the config screen grouping, the World Map logic and the Claims map, run on both
+  loaders.
 
 ### 1.4.0
 
