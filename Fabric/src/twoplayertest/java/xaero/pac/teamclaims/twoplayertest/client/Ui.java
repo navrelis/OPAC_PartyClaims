@@ -27,6 +27,8 @@ import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 
 import java.lang.reflect.Field;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Predicate;
@@ -174,6 +176,34 @@ public final class Ui {
 		} catch(IllegalAccessException e) {
 			throw new IllegalStateException("cannot read " + name + " of " + object.getClass().getName(), e);
 		}
+	}
+
+	public static void set(Object object, String name, Object value) {
+		try {
+			findField(object.getClass(), name).set(object, value);
+		} catch(IllegalAccessException e) {
+			throw new IllegalStateException("cannot write " + name + " of " + object.getClass().getName(), e);
+		}
+	}
+
+	/**
+	 * Calls a (possibly private) method of an object, declared by its class or a superclass.
+	 */
+	@SuppressWarnings("unchecked")
+	public static <T> T invoke(Object object, String name, Class<?>[] types, Object... args) {
+		for(Class<?> c = object.getClass(); c != null; c = c.getSuperclass()) {
+			try {
+				Method method = c.getDeclaredMethod(name, types);
+				method.setAccessible(true);
+				return (T) method.invoke(object, args);
+			} catch(NoSuchMethodException ignored) {
+			} catch(InvocationTargetException e) {
+				throw new IllegalStateException(name + " of " + object.getClass().getName() + " threw", e.getCause());
+			} catch(IllegalAccessException e) {
+				throw new IllegalStateException("cannot call " + name + " of " + object.getClass().getName(), e);
+			}
+		}
+		throw new IllegalStateException("no method " + name + " in " + object.getClass().getName());
 	}
 
 	public static int getInt(Object object, String name) {

@@ -19,7 +19,9 @@
 package xaero.pac.teamclaims.twoplayertest.client;
 
 import com.google.gson.JsonObject;
+import com.mojang.blaze3d.platform.InputConstants;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.components.events.GuiEventListener;
@@ -29,20 +31,29 @@ import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.gui.screens.TitleScreen;
 import net.minecraft.client.multiplayer.ServerData;
 import net.minecraft.client.multiplayer.resolver.ServerAddress;
+import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.contents.TranslatableContents;
 import net.minecraft.world.level.ChunkPos;
 import org.lwjgl.glfw.GLFW;
 import xaero.pac.OpenPartiesAndClaims;
+import xaero.pac.client.gui.ConfigOptionRowListElement;
 import xaero.pac.client.gui.MainMenu;
+import xaero.pac.client.gui.PlayerConfigScreen;
+import xaero.pac.client.gui.configview.ConfigViewLayout;
 import xaero.pac.client.gui.hub.AdminTabScreen;
 import xaero.pac.client.gui.hub.ChunkSelection;
 import xaero.pac.client.gui.hub.ClaimAsToggle;
 import xaero.pac.client.gui.hub.ClaimsTabScreen;
 import xaero.pac.client.gui.hub.HubGridFit;
+import xaero.pac.client.gui.hub.HubSidebar;
 import xaero.pac.client.gui.hub.HubTab;
 import xaero.pac.client.gui.hub.HubTabScreen;
 import xaero.pac.client.gui.hub.HubTabs;
+import xaero.pac.client.gui.hub.OverviewTabScreen;
+import xaero.pac.client.gui.hub.SettingsTabScreen;
 import xaero.pac.client.gui.hub.TeamHubLogic;
 import xaero.pac.client.gui.hub.TeamTabScreen;
+import xaero.pac.client.gui.hub.map.TerrainCache;
 import xaero.pac.client.gui.party.PartyEntryList;
 import xaero.pac.client.gui.party.PartyRow;
 import xaero.pac.client.gui.party.PartyScreen;
@@ -63,6 +74,11 @@ import xaero.pac.teamclaims.twoplayertest.Barrier;
 import xaero.pac.teamclaims.twoplayertest.ScenarioPlan;
 import xaero.pac.teamclaims.twoplayertest.Snap;
 import xaero.pac.teamclaims.twoplayertest.TwoPlayerTest;
+
+import xaero.map.controls.ControlsRegister;
+import xaero.map.gui.IRightClickableElement;
+import xaero.map.gui.MapTileSelection;
+import xaero.map.gui.dropdown.rightclick.RightClickOption;
 
 import java.io.PrintWriter;
 import java.io.StringWriter;
@@ -201,11 +217,21 @@ public final class Scenario implements Runnable {
 		stepRequiring(P1_PARTY_ROWS_STABLE, List.of(P1_PARTY_RANK_CLICK), this::rowsStable);
 		d.barrier.arrive("ranked");
 
+		step(P1_OVERVIEW_CLAIM, this::overviewClaim);
+		stepRequiring(P1_OVERVIEW_UNCLAIM, List.of(P1_OVERVIEW_CLAIM), this::overviewUnclaim);
+		step(P1_SETTINGS_GROUPS, this::configGroups);
+		step(P1_SETTINGS_SEARCH, this::configSearch);
+		stepRequiring(P1_SETTINGS_TOGGLE, List.of(P1_SETTINGS_SEARCH), this::configToggle);
+		stepRequiring(P1_SETTINGS_RESET_SHOWN, List.of(P1_SETTINGS_TOGGLE), this::configResetShown);
+		stepRequiring(P1_SETTINGS_RESET, List.of(P1_SETTINGS_TOGGLE), this::configReset);
+		d.run("close", () -> mc.setScreen(null));
+
 		step(P1_CLAIMS_CLAIM_PRIVATE, this::claimPrivate);
 		stepRequiring(P1_CLAIMS_UNCLAIM, List.of(P1_CLAIMS_CLAIM_PRIVATE), this::unclaim);
 		stepRequiring(P1_CLAIMS_TOGGLE_TEAM, List.of(P1_PARTY_CREATE), this::toggleTeam);
 		stepRequiring(P1_CLAIMS_CLAIM_TEAM, List.of(P1_CLAIMS_TOGGLE_TEAM), this::claimTeam);
 		step(P1_CLAIMS_OVERSIZE, this::oversize);
+		step(P1_CLAIMS_ZOOM, this::zoomShots);
 
 		stepRequiring(P1_TEAM_VISIBLE, List.of(P1_PARTY_CREATE), this::teamTabOwner);
 		stepRequiring(P1_TEAM_ROLE, List.of(P1_TEAM_VISIBLE), this::ownerChangesRole);
@@ -218,6 +244,14 @@ public final class Scenario implements Runnable {
 		stepRequiring(P1_ADMIN_PLAYER_BONUS, List.of(P1_ADMIN_VISIBLE), this::adminPlayerBonus);
 		stepRequiring(P1_ADMIN_SUGGESTION, List.of(P1_ADMIN_VISIBLE), this::adminSuggestion);
 		d.barrier.arrive("admin-done");
+
+		stepRequiring(P1_WM_BUTTON, List.of(P1_CLAIMS_TOGGLE_TEAM), this::mapButtonToggle);
+		stepRequiring(P1_WM_ENTRIES, List.of(P1_PARTY_CREATE), this::mapEntries);
+		stepRequiring(P1_WM_TEAM_ONCE, List.of(P1_WM_BUTTON, P1_WM_ENTRIES), this::mapClaimAsTeamOnce);
+		stepRequiring(P1_WM_PRIVATE, List.of(P1_WM_ENTRIES), this::mapClaimAsPrivate);
+		stepRequiring(P1_WM_TOGGLE_ENTRY, List.of(P1_WM_BUTTON, P1_WM_ENTRIES), this::mapToggleEntry);
+		stepRequiring(P1_WM_OPEN_MENU, List.of(P1_WM_ENTRIES), this::mapOpenMenu);
+		d.run("close", () -> mc.setScreen(null));
 
 		shots(SHOT_TABS_PLAYER1);
 		endSync();
@@ -244,6 +278,9 @@ public final class Scenario implements Runnable {
 
 		Barrier.Outcome adminDone = d.barrier.await(d.other, "admin-done", OTHER_PLAYER);
 		stepAfter(P2_ADMIN_CRAFTED, adminDone, "admin-done", List.of(), this::crafted);
+		step(P2_WM_BUTTON, this::mapButtonMember);
+		stepRequiring(P2_WM_TEAM_ONCE, List.of(P2_PARTY_ACCEPT, P2_WM_BUTTON), this::mapClaimAsTeamMember);
+		d.run("close", () -> mc.setScreen(null));
 
 		shots(SHOT_TABS_PLAYER2);
 		endSync();
@@ -333,11 +370,48 @@ public final class Scenario implements Runnable {
 	}
 
 	/**
-	 * Opens a tab with a click on its button in the tab bar of the open hub screen.
+	 * Gets the entry of a page in the sidebar of an open hub screen, null if there is none.
+	 */
+	private static Button sidebarEntry(Screen screen, HubTab tab) {
+		if(!isHub(screen))
+			return null;
+		HubSidebar sidebar = Ui.get(screen, "sidebar");
+		String label = tab.getLabel().getString();
+		for(Button entry : sidebar.getEntries())
+			if(label.equals(entry.getMessage().getString()))
+				return entry;
+		return null;
+	}
+
+	/**
+	 * Opens a page with a click on its entry in the sidebar of the open hub screen.
 	 */
 	private String clickTab(HubTab tab) {
-		String label = tab.getLabel().getString();
-		return d.clickWidget("the tab button \"" + label + "\"", () -> Ui.button(d.requireScreen(), label));
+		return d.clickWidget("the sidebar entry \"" + tab.getLabel().getString() + "\"", () -> sidebarEntry(d.requireScreen(), tab));
+	}
+
+	/**
+	 * Goes to a page of the hub the way a player does: opens the hub (at its last page) if it is not open, then clicks
+	 * the page in the sidebar.
+	 */
+	private void navigate(HubTab tab, Class<? extends Screen> page) {
+		if(!d.call("hub?", () -> isHub(mc.screen))) {
+			d.run("open the hub", () -> HubTabs.openLast(mc, null, null));
+			d.await("the hub", SHORT, () -> isHub(mc.screen));
+		}
+		if(!d.call(tab + " page?", () -> page.isInstance(mc.screen)))
+			clickTab(tab);
+		d.await("the " + tab + " page", MEDIUM, () -> page.isInstance(mc.screen));
+		d.waitFrames(3);
+	}
+
+	private void rememberOwnChunk() {
+		d.run("own chunk", () -> {
+			ChunkPos chunk = mc.player.chunkPosition();
+			chunkX = chunk.x;
+			chunkZ = chunk.z;
+			dimension = mc.level.dimension().location().toString();
+		});
 	}
 
 	private UUID myId() {
@@ -708,12 +782,7 @@ public final class Scenario implements Runnable {
 		d.await("the Claims tab, ready, with the team info", MEDIUM, () -> mc.screen instanceof ClaimsTabScreen screen && "READY".equals(Ui.enumName(screen, "state"))
 				&& TeamClaimsClientData.INSTANCE.getTeamInfo() != null);
 		d.waitFrames(3);
-		d.run("own chunk", () -> {
-			ChunkPos chunk = mc.player.chunkPosition();
-			chunkX = chunk.x;
-			chunkZ = chunk.z;
-			dimension = mc.level.dimension().location().toString();
-		});
+		rememberOwnChunk();
 	}
 
 	private Button actionButton(String text) {
@@ -877,7 +946,7 @@ public final class Scenario implements Runnable {
 	private Verdict teamTabOwner() {
 		if(!d.call("hub?", () -> isHub(mc.screen)))
 			openTab(HubTab.PARTY);
-		boolean listed = d.poll(MEDIUM, () -> mc.screen != null && Ui.button(mc.screen, HubTab.TEAM.getLabel().getString()) != null);
+		boolean listed = d.poll(MEDIUM, () -> sidebarEntry(mc.screen, HubTab.TEAM) != null);
 		if(!listed)
 			return verdict(false, "a Team button in the tab bar", "none on " + d.call("screen", d::screenName), d.screenshot("p1-team-tab-missing"));
 		String clicked = clickTab(HubTab.TEAM);
@@ -904,7 +973,7 @@ public final class Scenario implements Runnable {
 
 	private Verdict memberReadOnly() {
 		openTab(HubTab.PARTY);
-		boolean listed = d.poll(MEDIUM, () -> mc.screen != null && Ui.button(mc.screen, HubTab.TEAM.getLabel().getString()) != null);
+		boolean listed = d.poll(MEDIUM, () -> sidebarEntry(mc.screen, HubTab.TEAM) != null);
 		if(!listed)
 			return verdict(false, "a Team button in Player2's tab bar", "none on " + d.call("screen", d::screenName), d.screenshot("p2-team-tab-missing"));
 		clickTab(HubTab.TEAM);
@@ -973,8 +1042,7 @@ public final class Scenario implements Runnable {
 		boolean allowed = d.poll(SHORT, () -> TeamClaimsClientData.INSTANCE.isAdminMenuAllowed());
 		if(!d.call("hub?", () -> isHub(mc.screen)))
 			openTab(HubTab.PARTY);
-		String label = HubTab.ADMIN.getLabel().getString();
-		boolean listed = d.poll(SHORT, () -> mc.screen != null && Ui.button(mc.screen, label) != null);
+		boolean listed = d.poll(SHORT, () -> sidebarEntry(mc.screen, HubTab.ADMIN) != null);
 		if(!listed)
 			return verdict(false, "the server flag and an Admin button in the tab bar", "flag " + allowed + ", no Admin button on " + d.call("screen", d::screenName),
 					d.screenshot("p1-admin-tab-missing"));
@@ -1198,13 +1266,514 @@ public final class Scenario implements Runnable {
 						+ "; warning " + (warned ? "logged" : "NOT logged") + (warnedBefore ? " (it was already there before the requests)" : ""));
 	}
 
+	// ==================== overview ====================
+
+	private Button overviewClaimButton() {
+		if(!(mc.screen instanceof OverviewTabScreen screen))
+			throw new ClientDriver.DriverException("the Overview page is not open but " + d.screenName());
+		return Ui.get(screen, "claimButton");
+	}
+
+	private boolean overviewClaimShows(String text) {
+		return mc.screen instanceof OverviewTabScreen && text.equals(overviewClaimButton().getMessage().getString());
+	}
+
+	private Verdict overviewClaim() {
+		navigate(HubTab.OVERVIEW, OverviewTabScreen.class);
+		rememberOwnChunk();
+		String claimText = MainMenu.CLAIM.getString();
+		boolean label = d.poll(SHORT, () -> overviewClaimShows(claimText));
+		String shot = d.screenshot("p1-overview");
+		String clicked = d.clickWidget("the Claim button of the Overview page", this::overviewClaimButton);
+		JsonObject s = d.awaitServer("overview-claimed", Duration.ofSeconds(15), x -> Snap.claimAt(x, dimension, chunkX, chunkZ) != null);
+		JsonObject claim = Snap.claimAt(s, dimension, chunkX, chunkZ);
+		String screen = d.call("screen", d::screenName);
+		boolean pass = label && "no screen".equals(screen) && claim != null && myId().toString().equals(Snap.str(claim, "owner")) && Boolean.FALSE.equals(Snap.bool(claim, "teamClaim"));
+		return verdict(pass, "button \"" + claimText + "\"; after the click no screen and chunk " + chunkX + "," + chunkZ + " a private claim of Player1",
+				"button " + (label ? "showed it" : "did NOT show it") + "; clicked " + clicked + "; screen after: " + screen + "; " + Snap.describeClaim(claim), shot);
+	}
+
+	private Verdict overviewUnclaim() {
+		navigate(HubTab.OVERVIEW, OverviewTabScreen.class);
+		String unclaimText = MainMenu.UNCLAIM.getString();
+		boolean label = d.poll(SHORT, () -> overviewClaimShows(unclaimText));
+		String shot = d.screenshot("p1-overview-claimed");
+		String clicked = d.clickWidget("the Unclaim button of the Overview page", this::overviewClaimButton);
+		JsonObject s = d.awaitServer("overview-unclaimed", Duration.ofSeconds(15), x -> Snap.claimAt(x, dimension, chunkX, chunkZ) == null);
+		JsonObject claim = Snap.claimAt(s, dimension, chunkX, chunkZ);
+		String screen = d.call("screen", d::screenName);
+		return verdict(label && claim == null && "no screen".equals(screen), "button \"" + unclaimText + "\"; after the click no screen and chunk " + chunkX + "," + chunkZ + " unclaimed",
+				"button " + (label ? "showed it" : "did NOT show it") + "; clicked " + clicked + "; screen after: " + screen + "; " + Snap.describeClaim(claim), shot);
+	}
+
+	// ==================== settings: the player config screen ====================
+
+	private static final String SHARE_SEARCH = "shareLocationWithParty";
+	private static final String SHARE_ID = "parties.sharelocationwithparty";
+	private static final String SHARE_SNAPSHOT_KEY = "parties.shareLocationWithParty";
+	private static final String RESET_TEXT = "↺";
+
+	private PlayerConfigScreen configScreen() {
+		if(!(mc.screen instanceof PlayerConfigScreen screen))
+			throw new ClientDriver.DriverException("the player config screen is not open but " + d.screenName());
+		return screen;
+	}
+
+	private void openMyPlayerConfig() {
+		if(d.call("config screen?", () -> mc.screen instanceof PlayerConfigScreen screen && Ui.get(screen, "searchBox") != null))
+			return;
+		navigate(HubTab.SETTINGS, SettingsTabScreen.class);
+		d.clickWidget("the My player config button", () -> Ui.button(d.requireScreen(), Ui.text("gui.xaero_pac_ui_my_player_config")));
+		d.await("the player config screen with its options", MEDIUM, () -> mc.screen instanceof PlayerConfigScreen screen && Ui.get(screen, "searchBox") != null);
+		d.waitFrames(3);
+	}
+
+	private static boolean isGroupHeader(Button button) {
+		String text = button.getMessage().getString();
+		return text.startsWith("▾ ") || text.startsWith("▸ ");
+	}
+
+	private List<String> groupHeaders() {
+		List<String> headers = new ArrayList<>();
+		for(Button button : Ui.buttons(configScreen(), b -> b.visible && isGroupHeader(b)))
+			headers.add(button.getMessage().getString());
+		return headers;
+	}
+
+	private static String headerTitle(String header) {
+		String rest = header.substring(2);
+		int count = rest.lastIndexOf(" (");
+		return count < 0 ? rest : rest.substring(0, count);
+	}
+
+	private String clickGroupHeader(String title) {
+		return d.clickWidget("the group header \"" + title + "\"", () -> {
+			for(Button button : Ui.buttons(configScreen(), b -> b.visible && isGroupHeader(b)))
+				if(headerTitle(button.getMessage().getString()).equals(title))
+					return button;
+			return null;
+		});
+	}
+
+	private Verdict configGroups() {
+		openMyPlayerConfig();
+		List<String> before = d.call("group headers", this::groupHeaders);
+		String shot = d.screenshot("p1-config-grouped");
+		long expandedBefore = before.stream().filter(h -> h.startsWith("▾ ")).count();
+		if(before.isEmpty())
+			return verdict(false, "group headers on the first page", "none", shot);
+		String title = headerTitle(before.get(0));
+		clickGroupHeader(title);
+		d.waitFrames(3);
+		List<String> collapsed = d.call("group headers", this::groupHeaders);
+		String collapsedShot = d.screenshot("p1-config-groups-collapsed");
+		clickGroupHeader(title);
+		d.waitFrames(3);
+		List<String> after = d.call("group headers", this::groupHeaders);
+		boolean firstCollapsed = !collapsed.isEmpty() && collapsed.get(0).startsWith("▸ ") && collapsed.stream().noneMatch(h -> h.startsWith("▾ ")) && collapsed.size() > 1;
+		boolean pass = expandedBefore == 1 && before.get(0).startsWith("▾ ") && firstCollapsed && !after.isEmpty() && after.get(0).startsWith("▾ ");
+		return verdict(pass, "only the first group (\"" + title + "\") expanded; a click on its header collapses it (all groups listed, collapsed), another expands it again",
+				"headers " + before + " -> after a click " + collapsed + " -> after another " + after, shot, collapsedShot);
+	}
+
+	private List<?> shownOptionRows() {
+		PlayerConfigScreen screen = configScreen();
+		List<?> elements = Ui.get(screen, "elements");
+		List<Object> shown = new ArrayList<>();
+		for(Object row : Ui.<List<?>>get(screen, "optionRows"))
+			if(elements.contains(Ui.get(row, "element")))
+				shown.add(row);
+		return shown;
+	}
+
+	private static String optionId(Object row) {
+		ConfigViewLayout.Entry entry = Ui.get(row, "entry");
+		return entry.searchText().split("\n")[1];
+	}
+
+	private ConfigOptionRowListElement shareElement() {
+		for(Object row : Ui.<List<?>>get(configScreen(), "optionRows"))
+			if(SHARE_ID.equals(optionId(row)))
+				return Ui.get(row, "element");
+		throw new ClientDriver.DriverException("no option row " + SHARE_ID);
+	}
+
+	/**
+	 * Gets the value widget of the shared-location row: the widget at the row's position that is not its reset button.
+	 */
+	private AbstractWidget shareValueWidget() {
+		ConfigOptionRowListElement element = shareElement();
+		int x = Ui.getInt(element, "x");
+		int y = Ui.getInt(element, "y");
+		for(GuiEventListener listener : Ui.all(configScreen()))
+			if(listener instanceof AbstractWidget widget && widget.visible && widget.getX() == x && widget.getY() == y && !RESET_TEXT.equals(widget.getMessage().getString()))
+				return widget;
+		return null;
+	}
+
+	private Button shareResetButton() {
+		int y = Ui.getInt(shareElement(), "y");
+		for(Button button : Ui.buttonsWithText(configScreen(), RESET_TEXT))
+			if(button.getY() == y)
+				return button;
+		return null;
+	}
+
+	private Boolean shareOnServer(JsonObject snapshot) {
+		return Snap.bool(Snap.obj(Snap.playerData(snapshot, d.player), "options"), SHARE_SNAPSHOT_KEY);
+	}
+
+	private Verdict configSearch() {
+		openMyPlayerConfig();
+		d.replaceText("the config search box", () -> Ui.get(configScreen(), "searchBox"), SHARE_SEARCH);
+		d.waitFrames(3);
+		List<String> shown = d.call("shown options", () -> {
+			List<String> ids = new ArrayList<>();
+			for(Object row : shownOptionRows())
+				ids.add(optionId(row));
+			return ids;
+		});
+		String shot = d.screenshot("p1-config-search");
+		boolean onlyMatches = shown.stream().allMatch(id -> id.contains(SHARE_SEARCH.toLowerCase(Locale.ROOT)));
+		return verdict(shown.contains(SHARE_ID) && onlyMatches, "the option " + SHARE_ID + " shown, every shown option matches \"" + SHARE_SEARCH + "\"", "shown: " + shown, shot);
+	}
+
+	private Verdict configToggle() {
+		Boolean before = shareOnServer(d.snapshot("before-config-toggle"));
+		String clicked = d.clickWidget("the value of Share Position With Party", this::shareValueWidget);
+		JsonObject s = d.awaitServer("config-toggled", Duration.ofSeconds(15), x -> Boolean.FALSE.equals(shareOnServer(x)));
+		Boolean after = shareOnServer(s);
+		return verdict(Boolean.TRUE.equals(before) && Boolean.FALSE.equals(after), SHARE_SNAPSHOT_KEY + " true -> false on the server",
+				"clicked " + clicked + "; server " + before + " -> " + after);
+	}
+
+	private Verdict configResetShown() {
+		d.waitFrames(5);
+		boolean shown = d.call("reset button?", () -> shareResetButton() != null);
+		String shot = d.screenshot("p1-config-changed");
+		return verdict(shown, "the " + RESET_TEXT + " button next to the changed option right after the click",
+				shown ? "it is there" : "it is NOT there (it only appears after a relayout of the page)", shot);
+	}
+
+	private Verdict configReset() {
+		boolean relayout = !d.call("reset button?", () -> shareResetButton() != null);
+		if(relayout)// the search box retyped lays the page out again
+			d.replaceText("the config search box", () -> Ui.get(configScreen(), "searchBox"), SHARE_SEARCH);
+		String shot = d.screenshot("p1-config-reset-button");
+		String clicked = d.clickWidget("the reset button", this::shareResetButton);
+		JsonObject s = d.awaitServer("config-reset", Duration.ofSeconds(15), x -> Boolean.TRUE.equals(shareOnServer(x)));
+		Boolean after = shareOnServer(s);
+		boolean gone = d.poll(SHORT, () -> mc.screen instanceof PlayerConfigScreen && shareResetButton() == null);
+		d.replaceText("the config search box", () -> Ui.get(configScreen(), "searchBox"), "");
+		return verdict(Boolean.TRUE.equals(after) && gone, SHARE_SNAPSHOT_KEY + " back to true on the server and the reset button gone",
+				"clicked " + clicked + (relayout ? " (after a relayout, see " + P1_SETTINGS_RESET_SHOWN + ")" : "") + "; server " + after + "; reset button " + (gone ? "gone" : "still there"), shot);
+	}
+
+	// ==================== claims map zoom ====================
+
+	private int zoomStep() {
+		return Ui.invoke(claimsScreen(), "zoomStep", new Class<?>[0]);
+	}
+
+	/**
+	 * Whether every chunk of the grid that the client has loaded has its terrain picture.
+	 */
+	private boolean terrainFilled() {
+		ClaimsTabScreen screen = claimsScreen();
+		Grid grid = grid(screen);
+		TerrainCache terrain = Ui.get(screen, "terrain");
+		for(int x = grid.centerX() - grid.radius(); x <= grid.centerX() + grid.radius(); x++)
+			for(int z = grid.centerZ() - grid.radius(); z <= grid.centerZ() + grid.radius(); z++)
+				if(mc.level.getChunkSource().getChunkNow(x, z) != null && terrain.get(x, z) == null)
+					return false;
+		return true;
+	}
+
+	private Verdict zoomShots() {
+		openClaimsTab();
+		while(d.call("zoom", this::zoomStep) > 0)
+			d.clickWidget("the zoom-out button", () -> Ui.get(claimsScreen(), "zoomOutButton"));
+		List<String> seen = new ArrayList<>();
+		List<String> shots = new ArrayList<>();
+		int[] radii = new int[3];
+		boolean ok = true;
+		for(int step = 0; step <= 2; step++) {
+			if(step > 0)
+				d.clickWidget("the zoom-in button", () -> Ui.get(claimsScreen(), "zoomInButton"));
+			int zoom = d.call("zoom", this::zoomStep);
+			boolean filled = d.poll(MEDIUM, this::terrainFilled);
+			d.waitFrames(5);
+			Grid grid = d.call("grid", () -> grid(claimsScreen()));
+			radii[step] = grid.radius();
+			shots.add(d.screenshot("p1-claims-zoom-" + step));
+			seen.add("zoom " + zoom + ": radius " + grid.radius() + ", cell " + grid.cell() + (filled ? ", terrain drawn" : ", terrain NOT complete"));
+			ok &= zoom == step && filled;
+		}
+		d.clickWidget("the zoom-out button", () -> Ui.get(claimsScreen(), "zoomOutButton"));
+		int restored = d.call("zoom", this::zoomStep);
+		boolean pass = ok && radii[0] > radii[1] && radii[1] > radii[2] && restored == 1;
+		return new Verdict(pass, "zoom 0, 1, 2 with fewer chunks per step, the terrain of every loaded chunk drawn; back at zoom 1",
+				String.join("; ", seen) + "; back at zoom " + restored, shots);
+	}
+
+	// ==================== World Map ====================
+
+	private static final String GUI_MAP = "xaero.map.gui.GuiMap";
+	private static final String KEY_CLAIM_AS_TEAM = "gui.xaero_pac_wm_claim_as_team";
+	private static final String KEY_CLAIM_AS_PRIVATE = "gui.xaero_pac_wm_claim_as_private";
+	private static final String KEY_TOGGLE_MODE = "gui.xaero_pac_wm_toggle_mode";
+	private static final String KEY_OPEN_MENU = "gui.xaero_pac_wm_open_menu";
+	private static final String KEY_WORLD_MAP_CLAIM = "gui.xaero_pac_claim_chunks";
+
+	private static boolean isMap(Screen screen) {
+		return screen != null && GUI_MAP.equals(screen.getClass().getName());
+	}
+
+	/**
+	 * Opens World Map with its key (default M), as a player does.
+	 */
+	private void openMap() {
+		if(d.call("map?", () -> isMap(mc.screen)))
+			return;
+		d.run("close", () -> mc.setScreen(null));
+		d.waitTicks(5);
+		int key = d.call("map key", () -> InputConstants.getKey(ControlsRegister.keyOpenMap.saveString()).getValue());
+		d.pressKey(key);
+		d.await("the World Map screen", Duration.ofSeconds(30), () -> isMap(mc.screen));
+		d.waitTicks(40);
+	}
+
+	private static String modeLabel(boolean team) {
+		return Ui.text("gui.xaero_pac_wm_button", Ui.text(team ? "gui.xaero_pac_wm_mode_team" : "gui.xaero_pac_wm_mode_private"));
+	}
+
+	private Button mapButton() {
+		String prefix = Ui.text("gui.xaero_pac_wm_button", "");
+		List<Button> found = Ui.buttons(d.requireScreen(), b -> b.visible && b.getMessage().getString().startsWith(prefix));
+		return found.size() == 1 ? found.get(0) : null;
+	}
+
+	private String mapButtonText() {
+		Button button = mapButton();
+		return button == null ? "(no button)" : button.getMessage().getString();
+	}
+
+	private String teamSubOnServer(JsonObject snapshot) {
+		JsonObject party = Snap.partyOwnedBy(snapshot, TwoPlayerTest.PLAYER1);
+		return Snap.str(Snap.team(party), "subConfigId");
+	}
+
+	private boolean usesTeamSub(JsonObject snapshot) {
+		String teamSub = teamSubOnServer(snapshot);
+		return teamSub != null && teamSub.equals(Snap.str(Snap.playerData(snapshot, d.player), "usedSub"));
+	}
+
+	private static String optionKey(RightClickOption option) {
+		Component name = option.getDisplayName();
+		return name.getContents() instanceof TranslatableContents contents ? contents.getKey() : name.getString();
+	}
+
+	/**
+	 * Selects chunks on the open World Map and opens its right-click menu on them, exactly as GuiMap does on a right
+	 * click (handleRightClick with the map as the target).
+	 *
+	 * @return the keys and states of the menu's entries, in order
+	 */
+	private List<String> rightClickMenu(int x0, int z0, int x1, int z1) {
+		List<String> entries = d.call("the right-click menu on " + x0 + "," + z0 + " .. " + x1 + "," + z1, () -> {
+			Screen map = d.requireScreen();
+			if(!isMap(map))
+				throw new ClientDriver.DriverException("the World Map is not open but " + d.screenName());
+			// closing a menu clears the selection, so close the last one before selecting (handleRightClick would after)
+			if(Ui.get(map, "rightClickMenu") != null) {
+				Ui.invoke(map, "closeRightClick", new Class<?>[0]);
+				Ui.set(map, "rightClickMenu", null);
+			}
+			MapTileSelection selection = new MapTileSelection(x0, z0);
+			selection.setEnd(x1, z1);
+			Ui.set(map, "mapTileSelection", selection);
+			Ui.set(map, "rightClickDim", mc.level.dimension());
+			Ui.set(map, "rightClickX", x0 * 16 + 8);
+			Ui.set(map, "rightClickY", mc.player.getBlockY());
+			Ui.set(map, "rightClickZ", z0 * 16 + 8);
+			Ui.set(map, "rightClickCoordinateScale", 1.0);
+			Ui.invoke(map, "handleRightClick", new Class<?>[]{IRightClickableElement.class, int.class, int.class}, map, map.width / 2, map.height / 2);
+			Object menu = Ui.get(map, "rightClickMenu");
+			if(menu == null)
+				throw new ClientDriver.DriverException("no right-click menu opened");
+			List<String> list = new ArrayList<>();
+			for(RightClickOption option : Ui.<List<RightClickOption>>get(menu, "actionOptions"))
+				list.add(optionKey(option) + (option.isActive() ? "" : " (inactive)"));
+			return list;
+		});
+		d.waitFrames(3);
+		return entries;
+	}
+
+	/**
+	 * Runs an entry of the open right-click menu the way a click on it does (GuiRightClickMenu.selectId).
+	 */
+	private void selectEntry(String key) {
+		d.run("select the right-click entry " + key, () -> {
+			Object menu = Ui.get(d.requireScreen(), "rightClickMenu");
+			List<RightClickOption> options = Ui.get(menu, "actionOptions");
+			for(int i = 0; i < options.size(); i++)
+				if(key.equals(optionKey(options.get(i)))) {
+					Ui.invoke(menu, "selectId", new Class<?>[]{int.class, boolean.class}, i, true);
+					return;
+				}
+			throw new ClientDriver.DriverException("no entry " + key + " in the right-click menu");
+		});
+	}
+
+	private List<JsonObject> claimsIn(JsonObject snapshot, int x0, int z0, int x1, int z1) {
+		List<JsonObject> claims = new ArrayList<>();
+		for(int x = x0; x <= x1; x++)
+			for(int z = z0; z <= z1; z++) {
+				JsonObject claim = Snap.claimAt(snapshot, dimension, x, z);
+				if(claim != null)
+					claims.add(claim);
+			}
+		return claims;
+	}
+
+	private String describeClaims(List<JsonObject> claims) {
+		List<String> list = new ArrayList<>();
+		for(JsonObject claim : claims)
+			list.add(Snap.describeClaim(claim));
+		return claims.size() + " claim(s) " + list;
+	}
+
+	private Verdict mapButtonToggle() {
+		rememberOwnChunk();
+		openMap();
+		String before = d.call("button", this::mapButtonText);
+		String shot = d.screenshot("p1-worldmap");
+		String clicked = d.clickWidget("the Claiming button of the map", this::mapButton);
+		boolean shown = d.poll(SHORT, () -> mapButtonText().startsWith(modeLabel(false)) && !ClaimAsToggle.isTeamSelected());
+		JsonObject s = d.awaitServer("map-private", SHORT, x -> !usesTeamSub(x));
+		String after = d.call("button", this::mapButtonText);
+		String shotAfter = d.screenshot("p1-worldmap-private");
+		boolean pass = before.startsWith(modeLabel(true)) && shown && !usesTeamSub(s);
+		return verdict(pass, "button \"" + modeLabel(true) + "...\", after a click \"" + modeLabel(false) + "...\" and the server's usedSub no longer the team sub-config",
+				"button \"" + before + "\" -> \"" + after + "\" (clicked " + clicked + "); server usedSub " + Snap.str(Snap.playerData(s, d.player), "usedSub"), shot, shotAfter);
+	}
+
+	private Verdict mapEntries() {
+		rememberOwnChunk();
+		openMap();
+		List<String> entries = rightClickMenu(chunkX + 2, chunkZ + 2, chunkX + 3, chunkZ + 3);
+		String shot = d.screenshot("p1-worldmap-right-click");
+		int worldMap = -1;
+		for(int i = 0; i < entries.size() && worldMap < 0; i++)
+			if(entries.get(i).startsWith(KEY_WORLD_MAP_CLAIM))
+				worldMap = i;
+		List<String> ours = List.of(KEY_CLAIM_AS_TEAM, KEY_CLAIM_AS_PRIVATE, KEY_TOGGLE_MODE, KEY_OPEN_MENU);
+		int first = entries.indexOf(KEY_CLAIM_AS_TEAM);
+		boolean pass = worldMap >= 0 && first > worldMap && first + ours.size() <= entries.size() && entries.subList(first, first + ours.size()).equals(ours);
+		return verdict(pass, "World Map's " + KEY_WORLD_MAP_CLAIM + ", after it our 4 entries in order, all active: " + ours, "entries " + entries, shot);
+	}
+
+	private Verdict mapClaimAsTeamOnce() {
+		openMap();
+		int x0 = chunkX + 2, z0 = chunkZ + 2, x1 = chunkX + 3, z1 = chunkZ + 3;
+		rightClickMenu(x0, z0, x1, z1);
+		selectEntry(KEY_CLAIM_AS_TEAM);
+		JsonObject s = d.awaitServer("map-team-claims", Duration.ofSeconds(15), x -> claimsIn(x, x0, z0, x1, z1).size() == 4 && !usesTeamSub(x));
+		List<JsonObject> claims = claimsIn(s, x0, z0, x1, z1);
+		boolean team = claims.size() == 4 && claims.stream().allMatch(c -> Boolean.TRUE.equals(Snap.bool(c, "teamClaim")));
+		boolean privateAgain = d.poll(SHORT, () -> !ClaimAsToggle.isTeamSelected() && mapButtonText().startsWith(modeLabel(false)));
+		d.waitTicks(20);
+		String shot = d.screenshot("p1-worldmap-team-claimed");
+		return verdict(team && !usesTeamSub(s) && privateAgain, "chunks " + x0 + "," + z0 + " .. " + x1 + "," + z1 + ": 4 team claims; mode back to Private (server usedSub, button)",
+				describeClaims(claims) + "; server usedSub " + Snap.str(Snap.playerData(s, d.player), "usedSub") + "; button \"" + d.call("button", this::mapButtonText) + "\"", shot);
+	}
+
+	private Verdict mapClaimAsPrivate() {
+		openMap();
+		int x0 = chunkX - 3, z0 = chunkZ + 2, x1 = chunkX - 2, z1 = chunkZ + 3;
+		rightClickMenu(x0, z0, x1, z1);
+		selectEntry(KEY_CLAIM_AS_PRIVATE);
+		JsonObject s = d.awaitServer("map-private-claims", Duration.ofSeconds(15), x -> claimsIn(x, x0, z0, x1, z1).size() == 4);
+		List<JsonObject> claims = claimsIn(s, x0, z0, x1, z1);
+		String me = myId().toString();
+		boolean pass = claims.size() == 4 && claims.stream().allMatch(c -> Boolean.FALSE.equals(Snap.bool(c, "teamClaim")) && me.equals(Snap.str(c, "owner")));
+		d.waitTicks(20);
+		String shot = d.screenshot("p1-worldmap-private-claimed");
+		return verdict(pass, "chunks " + x0 + "," + z0 + " .. " + x1 + "," + z1 + ": 4 private claims of Player1", describeClaims(claims), shot);
+	}
+
+	private Verdict mapToggleEntry() {
+		openMap();
+		rightClickMenu(chunkX - 3, chunkZ - 1, chunkX - 2, chunkZ);// unclaimed: World Map offers our entries only next to its Claim Selected
+		selectEntry(KEY_TOGGLE_MODE);
+		JsonObject s = d.awaitServer("map-team-mode", SHORT, this::usesTeamSub);
+		boolean shown = d.poll(SHORT, () -> ClaimAsToggle.isTeamSelected() && mapButtonText().startsWith(modeLabel(true)));
+		String shot = d.screenshot("p1-worldmap-team-mode");
+		return verdict(usesTeamSub(s) && shown, "server usedSub = the team sub-config and button \"" + modeLabel(true) + "...\"",
+				"server usedSub " + Snap.str(Snap.playerData(s, d.player), "usedSub") + "; button \"" + d.call("button", this::mapButtonText) + "\"", shot);
+	}
+
+	private Verdict mapOpenMenu() {
+		openMap();
+		Screen map = d.call("map", () -> mc.screen);
+		rightClickMenu(chunkX - 3, chunkZ - 1, chunkX - 2, chunkZ);
+		selectEntry(KEY_OPEN_MENU);
+		boolean open = d.poll(SHORT, () -> isHub(mc.screen));
+		d.waitTicks(10);
+		Object[] state = d.call("hub", () -> new Object[]{d.screenName(), isHub(mc.screen) ? Ui.get(mc.screen, "parent") : null});
+		String shot = d.screenshot("p1-worldmap-open-menu");
+		return verdict(open && state[1] == map, "a hub page opens with the World Map as its parent",
+				"screen " + state[0] + ", parent " + (state[1] == null ? "none" : state[1].getClass().getSimpleName() + (state[1] == map ? " (the map)" : " (another screen)")), shot);
+	}
+
+	private Verdict mapButtonMember() {
+		rememberOwnChunk();
+		openMap();
+		boolean team = d.call("mode", ClaimAsToggle::isTeamSelected);
+		String text = d.call("button", this::mapButtonText);
+		String shot = d.screenshot("p2-worldmap");
+		return verdict(text.startsWith(modeLabel(team)), "a Claiming button with the mode \"" + modeLabel(team) + "...\"", "button \"" + text + "\"", shot);
+	}
+
+	private Verdict mapClaimAsTeamMember() {
+		openMap();
+		JsonObject s0 = d.snapshot("before-member-map-claim");
+		JsonObject party = Snap.partyOwnedBy(s0, TwoPlayerTest.PLAYER1);
+		String rank = Snap.rank(party, d.player);
+		String claimRole = Snap.role(party, TeamAction.CLAIM.id());
+		String usedBefore = Snap.str(Snap.playerData(s0, d.player), "usedSub");
+		boolean allowed = TeamRole.valueOf(rank).isAtLeast(TeamRole.valueOf(claimRole));
+		int x0 = chunkX + 2, z0 = chunkZ - 3, x1 = chunkX + 3, z1 = chunkZ - 2;
+		List<String> entries = rightClickMenu(x0, z0, x1, z1);
+		String menuShot = d.screenshot("p2-worldmap-right-click");
+		selectEntry(KEY_CLAIM_AS_TEAM);
+		JsonObject s;
+		if(allowed)
+			s = d.awaitServer("member-map-claims", Duration.ofSeconds(15), x -> claimsIn(x, x0, z0, x1, z1).size() == 4);
+		else {
+			d.waitTicks(60);
+			s = d.snapshot("member-map-claims");
+		}
+		List<JsonObject> claims = claimsIn(s, x0, z0, x1, z1);
+		String usedAfter = Snap.str(Snap.playerData(s, d.player), "usedSub");
+		boolean claimsOk = allowed ? claims.size() == 4 && claims.stream().allMatch(c -> Boolean.TRUE.equals(Snap.bool(c, "teamClaim"))) : claims.isEmpty();
+		d.waitTicks(20);
+		String shot = d.screenshot("p2-worldmap-team-claim");
+		return verdict(claimsOk && Objects.equals(usedBefore, usedAfter) && entries.contains(KEY_CLAIM_AS_TEAM),
+				"rank " + rank + " vs claim role " + claimRole + " -> " + (allowed ? "4 team claims" : "no claims") + " at " + x0 + "," + z0 + " .. " + x1 + "," + z1 + "; usedSub stays " + usedBefore,
+				"entries " + entries + "; " + describeClaims(claims) + "; usedSub " + usedBefore + " -> " + usedAfter, menuShot, shot);
+	}
+
 	// ==================== screenshots ====================
 
 	private static Class<? extends Screen> screenClassOf(String tab) {
 		return switch(tab) {
+			case "overview" -> OverviewTabScreen.class;
 			case "party" -> PartyScreen.class;
 			case "claims" -> ClaimsTabScreen.class;
 			case "team" -> TeamTabScreen.class;
+			case "settings" -> SettingsTabScreen.class;
 			case "admin" -> AdminTabScreen.class;
 			default -> throw new IllegalArgumentException(tab);
 		};

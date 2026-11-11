@@ -51,11 +51,19 @@ public final class ScenarioPlan {
 	public static final String P1_PARTY_INVITE = p1("p1.party.invite", "Invite box + Invite button invite Player2 (server)");
 	public static final String P1_PARTY_RANK_CLICK = p1("p1.party.rank-click-changes-clicked-member", "A click on the rank button of Player2's row changes Player2's rank (server) and nobody else's");
 	public static final String P1_PARTY_ROWS_STABLE = p1("p1.party.rows-stay-in-place", "After the rank change the rows keep their order and the row under the clicked point is still Player2");
+	public static final String P1_OVERVIEW_CLAIM = p1("p1.overview.claim", "Overview page: the Claim button claims the own chunk (private claim of Player1 on the server) and closes the hub");
+	public static final String P1_OVERVIEW_UNCLAIM = p1("p1.overview.unclaim", "Overview page, reopened: the button now says Unclaim and unclaims the own chunk (server)");
+	public static final String P1_SETTINGS_GROUPS = p1("p1.settings.config-groups", "Settings page, My player config: options grouped, only the first group expanded; a click on a collapsed group header expands it");
+	public static final String P1_SETTINGS_SEARCH = p1("p1.settings.config-search", "Player config: the search \"shareLocationWithParty\" shows the option parties.shareLocationWithParty (and only options that match)");
+	public static final String P1_SETTINGS_TOGGLE = p1("p1.settings.config-toggle", "Player config: a click on the value of Share Position With Party sets it to false (server player config)");
+	public static final String P1_SETTINGS_RESET_SHOWN = p1("p1.settings.config-reset-shown-at-once", "Player config: the reset button of the changed option appears right after the value change (no relayout)");
+	public static final String P1_SETTINGS_RESET = p1("p1.settings.config-reset", "Player config: the reset button sets the option back to its default true (server player config)");
 	public static final String P1_CLAIMS_CLAIM_PRIVATE = p1("p1.claims.claim-private", "Claims tab: select the own chunk, Claim as Private, Claim button: server has a private claim of Player1 there");
 	public static final String P1_CLAIMS_UNCLAIM = p1("p1.claims.unclaim", "Claims tab: Unclaim button: server has no claim there any more");
 	public static final String P1_CLAIMS_TOGGLE_TEAM = p1("p1.claims.toggle-team", "Claims tab: the Private/Team toggle switches to Team (button text and the player config on the client)");
 	public static final String P1_CLAIMS_CLAIM_TEAM = p1("p1.claims.claim-team", "Claims tab: Claim with Team selected: server has a team claim (team flag) there");
 	public static final String P1_CLAIMS_OVERSIZE = p1("p1.claims.oversize-disables-actions", "Claims tab: a 3x3 selection (9 > 4 chunks) disables Claim/Unclaim/Forceload/Unforceload; a 2x1 selection enables them");
+	public static final String P1_CLAIMS_ZOOM = p1("p1.claims.zoom-shots", "Claims tab: the -/+ buttons step the zoom 0, 1, 2 (fewer chunks per step), terrain of the loaded chunks drawn; a screenshot per step");
 	public static final String P1_TEAM_VISIBLE = p1("p1.team.tab-visible", "Team tab is in the tab bar of the team owner and opens");
 	public static final String P1_TEAM_ROLE = p1("p1.team.owner-changes-role", "Team tab: the owner's click on the Claim role button changes the team's claim role (server)");
 	public static final String P1_ADMIN_VISIBLE = p1("p1.admin.tab-visible", "Admin tab is in the tab bar of Player1 (op) and opens");
@@ -64,6 +72,12 @@ public final class ScenarioPlan {
 	public static final String P1_ADMIN_TEAM_BONUS = p1("p1.admin.team-bonus", "Admin tab, Teams: bonus team claims 50 raise the team claim limit by 50 (server)");
 	public static final String P1_ADMIN_PLAYER_BONUS = p1("p1.admin.player-bonus-lookup", "Admin tab, Players: look up Player2, bonus claims 25 (server player config)");
 	public static final String P1_ADMIN_SUGGESTION = p1("p1.admin.players-suggestion-click", "Admin tab, Players: a click on an online-player suggestion (it rebuilds the buttons during its own click) does not crash and looks the player up");
+	public static final String P1_WM_BUTTON = p1("p1.worldmap.button-toggle", "World Map (key M): the \"Claiming: Team\" button is there; a click switches to Private (button text, server usedSub)");
+	public static final String P1_WM_ENTRIES = p1("p1.worldmap.menu-entries", "World Map right-click on a selection: Claim as Team, Claim as Private, mode switch and Open claims menu follow World Map's Claim Selected, all active");
+	public static final String P1_WM_TEAM_ONCE = p1("p1.worldmap.claim-as-team-once", "World Map: Claim as Team on a 2x2 selection in Private mode makes 4 team claims and switches back to Private (server usedSub)");
+	public static final String P1_WM_PRIVATE = p1("p1.worldmap.claim-as-private", "World Map: Claim as Private on another 2x2 selection makes 4 private claims of Player1");
+	public static final String P1_WM_TOGGLE_ENTRY = p1("p1.worldmap.mode-switch-entry", "World Map: the mode switch entry of the right-click menu switches Private -> Team (server usedSub, button text)");
+	public static final String P1_WM_OPEN_MENU = p1("p1.worldmap.open-claims-menu", "World Map: Open claims menu opens the hub with the map as the screen to go back to");
 
 	// ---- Player2 (not op, party member) ----
 	public static final String P2_JOIN = p2("p2.join", "Player2 joins the dedicated server and the server has OPAC (handshake)");
@@ -76,8 +90,11 @@ public final class ScenarioPlan {
 	public static final String P2_ADMIN_HIDDEN = p2("p2.admin.tab-hidden", "No Admin tab for Player2 (not op): the server flag is off and the tab bar has no Admin button");
 	public static final String P2_ADMIN_CRAFTED = p2("p2.admin.crafted-request-rejected", "Admin packets sent directly by Player2 change nothing, get no config data, and the server logs the rejection warning");
 
-	public static final List<String> SHOT_TABS_PLAYER1 = List.of("party", "claims", "team", "admin");
-	public static final List<String> SHOT_TABS_PLAYER2 = List.of("party", "claims", "team");
+	public static final String P2_WM_BUTTON = p2("p2.worldmap.button", "World Map (key M) of the member: the Claiming button is there with its mode text");
+	public static final String P2_WM_TEAM_ONCE = p2("p2.worldmap.claim-as-team", "World Map: the member's Claim as Team on a 2x2 selection makes 4 team claims iff the member's rank reaches the team's claim role, else none; the mode stays");
+
+	public static final List<String> SHOT_TABS_PLAYER1 = List.of("overview", "party", "claims", "team", "settings", "admin");
+	public static final List<String> SHOT_TABS_PLAYER2 = List.of("overview", "party", "claims", "team", "settings");
 
 	static {
 		for(String tab : SHOT_TABS_PLAYER1)
