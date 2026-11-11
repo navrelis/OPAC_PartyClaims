@@ -20,10 +20,16 @@ package xaero.pac.client.gui.hub;
 
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
+import net.minecraft.client.gui.components.CycleButton;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
+import net.neoforged.neoforge.common.ModConfigSpec;
 import org.lwjgl.glfw.GLFW;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Locale;
+import java.util.stream.IntStream;
 import xaero.pac.OpenPartiesAndClaims;
 import xaero.pac.client.claims.IClientClaimsManager;
 import xaero.pac.client.gui.MainMenu;
@@ -34,19 +40,23 @@ import xaero.pac.client.player.config.IPlayerConfigStringableOptionClientStorage
 import xaero.pac.client.world.capability.ClientWorldMainCapability;
 import xaero.pac.client.world.capability.api.ClientWorldCapabilityTypes;
 import xaero.pac.common.packet.config.ServerboundOtherPlayerConfigPacket;
+import xaero.pac.teamclaims.config.TeamClaimsClientConfig;
+import xaero.pac.teamclaims.config.TeamClaimsClientConfig.ButtonPosition;
 
 /**
  * The Settings page of the hub: everything that OPAC's old config menu offered, in two sections. "My settings" holds the
  * player config and the config of the party claims, "Server" the configs of the server (default player config, server
  * claims, expired claims, wilderness) and the config of another player. The screens they open come back to this page.
  * <p>
- * The left column has room below "My settings" for a section of the client options.
+ * The left column holds, below "My settings", the client options of Team Claims: the zoom the map of the Claims tab starts
+ * with and, with Xaero's World Map, whether its claiming button is shown and where. A change is saved at once.
  */
 public class SettingsTabScreen extends HubTabScreen {
 
 	private static final Component TITLE = HubTab.SETTINGS.getLabel();
 	private static final Component MY_SETTINGS = Component.translatable("gui.xaero_pac_hub_settings_my");
 	private static final Component SERVER = Component.translatable("gui.xaero_pac_hub_settings_server");
+	private static final Component CLIENT_OPTIONS = Component.translatable("gui.xaero_pac_hub_settings_client");
 	private static final Component ANOTHER_PLAYER_TITLE = Component.translatable("gui.xaero_pac_ui_other_player_config_name_title");
 
 	private static final int COLUMN_GAP = 12;
@@ -57,6 +67,8 @@ public class SettingsTabScreen extends HubTabScreen {
 	private static final int SECTION_BODY = HubSidebar.HEADER_HEIGHT + 2;
 	private static final int HEADER_COLOR = 0xFFFFFFFF;
 
+	private static final String[] ZOOM_KEYS = {"gui.xaero_pac_hub_settings_zoom_small", "gui.xaero_pac_hub_settings_zoom_medium", "gui.xaero_pac_hub_settings_zoom_large"};
+
 	private static String otherPlayerNameString = "";
 
 	private boolean serverHasMod;
@@ -64,6 +76,7 @@ public class SettingsTabScreen extends HubTabScreen {
 	private int rightColumn;
 	private int columnWidth;
 	private int otherPlayerLabelY;
+	private int clientOptionsY = -1;
 	private Button myPlayerConfigButton;
 	private Button partyClaimsConfigButton;
 	private Button defaultConfigButton;
@@ -107,6 +120,7 @@ public class SettingsTabScreen extends HubTabScreen {
 
 		int backWidth = Math.min(BACK_WIDTH, contentWidth());
 		addRenderableWidget(Button.builder(BACK, b -> goBack()).bounds(contentCenterX() - backWidth / 2, contentBottom() - BUTTON_HEIGHT, backWidth, BUTTON_HEIGHT).build());
+		addClientOptions(y + 2 * rowStep + 6, rowStep, contentBottom() - BUTTON_HEIGHT - BUTTON_GAP);
 
 		IClientClaimsManager<?, ?, ?> claimsManager = OpenPartiesAndClaims.INSTANCE.getClientDataInternal().getClaimsManager();
 		IPlayerConfigClientStorageManager<IPlayerConfigClientStorage<IPlayerConfigStringableOptionClientStorage<?>>> configStorage = OpenPartiesAndClaims.INSTANCE.getClientDataInternal().getPlayerConfigStorageManager();
@@ -124,6 +138,38 @@ public class SettingsTabScreen extends HubTabScreen {
 		defaultConfigButton.active = serverHasMod && configStorage.getDefaultPlayerConfig().getPermissions().canView();
 		partyClaimsConfigButton.active = serverHasMod && claimsManager.usingPartyOwnedClaims() && claimsManager.isInParty()
 				&& configStorage.getPartyClaimsConfig().getPermissions().canView();
+	}
+
+	/**
+	 * Adds the client options below "My settings", as many as fit above the Back button.
+	 */
+	private void addClientOptions(int headerY, int rowStep, int limit) {
+		TeamClaimsClientConfig config = TeamClaimsClientConfig.CONFIG;
+		List<CycleButton<?>> options = new ArrayList<>();
+		if(TeamClaimsClientConfig.worldMapIntegration) {
+			options.add(CycleButton.onOffBuilder(config.worldMapButton.get())
+					.create(leftColumn, 0, columnWidth, BUTTON_HEIGHT, Component.translatable("gui.xaero_pac_hub_settings_worldmap_button"), (b, on) -> saveClientOption(config.worldMapButton, on)));
+			options.add(CycleButton.<ButtonPosition>builder(p -> Component.translatable("gui.xaero_pac_hub_settings_position_" + p.name().toLowerCase(Locale.ROOT)))
+					.withValues(ButtonPosition.values()).withInitialValue(config.worldMapButtonPosition.get())
+					.create(leftColumn, 0, columnWidth, BUTTON_HEIGHT, Component.translatable("gui.xaero_pac_hub_settings_worldmap_position"), (b, p) -> saveClientOption(config.worldMapButtonPosition, p)));
+		}
+		options.add(CycleButton.<Integer>builder(zoom -> Component.translatable(ZOOM_KEYS[zoom]))
+				.withValues(IntStream.range(0, HubGridFit.ZOOM_STEPS).boxed().toList()).withInitialValue(HubGridFit.clampZoom(config.claimsMapZoom.get()))
+				.create(leftColumn, 0, columnWidth, BUTTON_HEIGHT, Component.translatable("gui.xaero_pac_hub_settings_map_zoom"), (b, zoom) -> saveClientOption(config.claimsMapZoom, zoom)));
+		int y = headerY + SECTION_BODY;
+		for(CycleButton<?> option : options) {
+			if(y + BUTTON_HEIGHT > limit)
+				break;
+			clientOptionsY = headerY;
+			option.setY(y);
+			addRenderableWidget(option);
+			y += rowStep;
+		}
+	}
+
+	private static <T> void saveClientOption(ModConfigSpec.ConfigValue<T> value, T newValue) {
+		value.set(newValue);
+		TeamClaimsClientConfig.SPEC.save();
 	}
 
 	private IPlayerConfigClientStorageManager<?> getConfigs() {
@@ -160,6 +206,8 @@ public class SettingsTabScreen extends HubTabScreen {
 		int top = contentTop();
 		HubSidebar.renderHeader(guiGraphics, font, MY_SETTINGS, leftColumn, top, leftColumn + columnWidth, HEADER_COLOR);
 		HubSidebar.renderHeader(guiGraphics, font, SERVER, rightColumn, top, rightColumn + columnWidth, HEADER_COLOR);
+		if(clientOptionsY >= 0)
+			HubSidebar.renderHeader(guiGraphics, font, CLIENT_OPTIONS, leftColumn, clientOptionsY, leftColumn + columnWidth, HEADER_COLOR);
 		guiGraphics.drawString(font, font.plainSubstrByWidth(ANOTHER_PLAYER_TITLE.getString(), columnWidth), rightColumn, otherPlayerLabelY, -1);
 		if(!serverHasMod)
 			guiGraphics.drawCenteredString(font, MainMenu.NO_HANDSHAKE, contentCenterX(), contentBottom() - BUTTON_HEIGHT - 12, 0xFFFF5555);

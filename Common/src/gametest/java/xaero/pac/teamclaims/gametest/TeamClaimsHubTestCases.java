@@ -13,6 +13,7 @@ import xaero.pac.client.gui.hub.TeamHubLogic;
 import xaero.pac.common.packet.parties.PartyBudgetData;
 import xaero.pac.common.packet.teamclaims.TeamInfoData;
 import xaero.pac.teamclaims.config.TeamAction;
+import xaero.pac.teamclaims.config.TeamClaimsClientConfig;
 import xaero.pac.teamclaims.config.TeamRole;
 
 import java.util.HashSet;
@@ -139,6 +140,12 @@ public final class TeamClaimsHubTestCases {
         helper.assertTrue(tight.radius() == 3 && tight.cell() == 12, "expected 7 x 7 chunks of 12 pixels for 90 pixels, got " + tight);
         HubGridFit.Fit huge = HubGridFit.fit(10_000, 0);
         helper.assertTrue(huge.radius() == HubGridFit.MAX_RADIUS && huge.cell() == HubGridFit.MIN_CELL, "expected the biggest grid for plenty of space, got " + huge);
+        // the zoom step the Claims tab starts with: the one picked in the session wins over the config, none picked uses the config
+        helper.assertTrue(HubGridFit.startZoom(-1, 0) == 0 && HubGridFit.startZoom(-1, 1) == 1 && HubGridFit.startZoom(-1, 2) == 2, "expected the configured step when none was picked");
+        helper.assertTrue(HubGridFit.startZoom(2, 0) == 2 && HubGridFit.startZoom(0, 2) == 0, "expected the step picked in the session to win over the config");
+        helper.assertTrue(HubGridFit.startZoom(-1, 9) == HubGridFit.ZOOM_STEPS - 1 && HubGridFit.startZoom(7, 1) == HubGridFit.ZOOM_STEPS - 1, "expected an out-of-range step to be clamped");
+        helper.assertTrue(HubGridFit.DEFAULT_ZOOM == 1 && HubGridFit.cellForZoom(0) == 6 && HubGridFit.cellForZoom(1) == 12 && HubGridFit.cellForZoom(2) == 24, "expected the 3 steps to draw chunks 6, 12 and 24 pixels wide, 1 being the default");
+        helper.assertTrue(TeamClaimsClientConfig.ButtonPosition.values().length == 5, "expected 5 positions of the World Map button");
         helper.succeed();
     }
 
@@ -264,9 +271,9 @@ public final class TeamClaimsHubTestCases {
             helper.assertTrue(role == start && seen.size() == TeamRole.values().length, "expected five clicks from " + start + " to visit every role and come back, got " + role);
         }
 
-        int max = TeamHubLogic.DEFAULT_MAX_CONVERT_RADIUS;
-        helper.assertTrue(max == 4, "expected the default maximum radius to be the server default 4");
-        helper.assertTrue(TeamHubLogic.nextRadius(0, max) == 1 && TeamHubLogic.nextRadius(3, max) == 4, "expected the radius to grow by one");
+        int max = TeamHubLogic.ABSOLUTE_MAX_CONVERT_RADIUS;
+        helper.assertTrue(max == 16, "expected the selector to go up to the largest radius the server option can have, 16");
+        helper.assertTrue(TeamHubLogic.nextRadius(0, max) == 1 && TeamHubLogic.nextRadius(15, max) == 16, "expected the radius to grow by one");
         helper.assertTrue(TeamHubLogic.nextRadius(max, max) == 0, "expected the radius to wrap to 0 after the maximum");
         helper.assertTrue(TeamHubLogic.nextRadius(-3, max) == 0 && TeamHubLogic.nextRadius(99, max) == 0, "expected an out-of-range radius to go back to 0");
         helper.assertTrue(TeamHubLogic.nextRadius(5, 1000) == 6 && TeamHubLogic.nextRadius(TeamHubLogic.ABSOLUTE_MAX_CONVERT_RADIUS, 1000) == 0,

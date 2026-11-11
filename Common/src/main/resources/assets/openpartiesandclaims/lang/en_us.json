@@ -1040,5 +1040,17 @@
 	"gui.xaero_pac_hub_overview_open_party" : "Open Party page",
 	"gui.xaero_pac_hub_overview_chunk" : "This chunk",
 	"gui.xaero_pac_hub_settings_my" : "My settings",
-	"gui.xaero_pac_hub_settings_server" : "Server"
+	"gui.xaero_pac_hub_settings_server" : "Server",
+	"gui.xaero_pac_hub_settings_client" : "Client options",
+	"gui.xaero_pac_hub_settings_worldmap_button" : "World Map button",
+	"gui.xaero_pac_hub_settings_worldmap_position" : "Button position",
+	"gui.xaero_pac_hub_settings_map_zoom" : "Map zoom",
+	"gui.xaero_pac_hub_settings_position_top_left" : "Top left",
+	"gui.xaero_pac_hub_settings_position_top_center" : "Top centre",
+	"gui.xaero_pac_hub_settings_position_top_right" : "Top right",
+	"gui.xaero_pac_hub_settings_position_bottom_left" : "Bottom left",
+	"gui.xaero_pac_hub_settings_position_bottom_right" : "Bottom right",
+	"gui.xaero_pac_hub_settings_zoom_small" : "Small",
+	"gui.xaero_pac_hub_settings_zoom_medium" : "Medium",
+	"gui.xaero_pac_hub_settings_zoom_large" : "Large"
 }

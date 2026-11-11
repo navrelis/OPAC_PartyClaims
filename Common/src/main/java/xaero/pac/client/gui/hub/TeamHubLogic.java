@@ -41,12 +41,9 @@ public final class TeamHubLogic {
 	 */
 	public static final String COMMAND_PREFIX = "teamclaims";
 	/**
-	 * The default of the server option {@code convertMaxRadius}. The client is not told the real value, so the radius
-	 * selector goes up to this and the server answers when a bigger radius would be allowed or not.
-	 */
-	public static final int DEFAULT_MAX_CONVERT_RADIUS = 4;
-	/**
-	 * The largest value the server option {@code convertMaxRadius} can have, which no command is built beyond.
+	 * The largest value the server option {@code convertMaxRadius} can have, which no command is built beyond. The client
+	 * is not told the real value, so the radius selector goes up to this and the server refuses a radius above its
+	 * option with a message.
 	 */
 	public static final int ABSOLUTE_MAX_CONVERT_RADIUS = 16;
 

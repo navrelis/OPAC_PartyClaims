@@ -19,3 +19,14 @@ Commands / results
 Open points
 - Known limitation (no code): if the server refuses the `usedSub` change (player over a claim limit and not OP), a one-shot "Claim as ..." runs with the old choice.
 - The first `runClient` printed a WARN for the empty source set's missing classes folder; fixed by not adding its own output to the classpath.
+
+## Task 2 (T5) - map zoom config, client options on Settings, convert radius 16 (state: DONE)
+Merged claude/opac-1.5-unified-menu first (clean).
+- `Fabric/src/gametest/resources/fabric.mod.json`: added TeamClaimsMapTest -> Fabric runs 156 like NeoForge.
+- `TeamClaimsClientConfig`: `claimsMapZoom` (int 0..2, default `HubGridFit.DEFAULT_ZOOM` = 1, comment 6/12/24 px) in section `claimsMap`; static `worldMapIntegration` flag, set by `TeamClaimsClientFabric` when World Map is loaded.
+- `HubGridFit.startZoom(session, configured)`; `ClaimsTabScreen` session `zoom` now starts at -1 (= none picked) and `zoomStep()` falls back to the config. Zooming in the screen never writes the config.
+- `SettingsTabScreen`: "Client options" section in the left column below "My settings" (`HubSidebar.renderHeader`): CycleButtons World Map button on/off, button position (5), map zoom (small/medium/large). The two World Map ones only when `worldMapIntegration`. Each change: `ConfigValue.set` + `TeamClaimsClientConfig.SPEC.save()`. Options that do not fit above Back are left out (header only drawn if one fits). Lang keys (12) appended at the end of en_us/de_de.
+- Convert radius: `TeamTabScreen` cycles up to `TeamHubLogic.ABSOLUTE_MAX_CONVERT_RADIUS` (16); the now unused `DEFAULT_MAX_CONVERT_RADIUS` is removed, javadoc and the `roleAndRadiusButtonsCycleAndWrap` test updated.
+- Tests: no new test methods; the pure logic checks (startZoom, 3 zoom steps 6/12/24, 5 positions) are in the existing grid-fit test, so the count stays 156 on both.
+- `gradlew.bat :Fabric:build :NeoForge:build :Fabric:runBootTest :NeoForge:runTeamClaimsGameTest`: BUILD SUCCESSFUL; Fabric "All 156 required tests passed", NeoForge "All 156 required tests passed".
+Open points: the Settings screen was not opened in a running client (layout/overlap with Back on small windows untested; it drops options that do not fit). SPEC.save() needs the config loaded (it is on both loaders once the client runs).

@@ -84,6 +84,17 @@ public final class HubGridFit {
 	}
 
 	/**
+	 * Gets the zoom step that the Claims tab starts with: the one picked in this game session, if any, else the one of the
+	 * client config.
+	 *
+	 * @param sessionZoom  the step picked in this session, negative if none was picked yet
+	 * @param configuredZoom  the step of the client config
+	 */
+	public static int startZoom(int sessionZoom, int configuredZoom) {
+		return clampZoom(sessionZoom >= 0 ? sessionZoom : configuredZoom);
+	}
+
+	/**
 	 * Gets the size in pixels of one chunk at a zoom step.
 	 */
 	public static int cellForZoom(int zoom) {

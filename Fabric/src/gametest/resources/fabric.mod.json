@@ -22,7 +22,8 @@
             "xaero.pac.teamclaims.gametest.TeamClaimsHubTest",
             "xaero.pac.teamclaims.gametest.TeamClaimsAdminTest",
             "xaero.pac.teamclaims.gametest.TeamClaimsAdminUiTest",
-            "xaero.pac.teamclaims.gametest.TeamClaimsWorldMapTest"
+            "xaero.pac.teamclaims.gametest.TeamClaimsWorldMapTest",
+            "xaero.pac.teamclaims.gametest.TeamClaimsMapTest"
         ]
     },
     "mixins": [

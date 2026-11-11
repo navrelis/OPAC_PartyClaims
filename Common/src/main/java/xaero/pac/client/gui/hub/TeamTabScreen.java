@@ -364,7 +364,7 @@ public class TeamTabScreen extends HubTabScreen {
 	}
 
 	private void onRadiusButton() {
-		convertRadius = TeamHubLogic.nextRadius(convertRadius, TeamHubLogic.DEFAULT_MAX_CONVERT_RADIUS);
+		convertRadius = TeamHubLogic.nextRadius(convertRadius, TeamHubLogic.ABSOLUTE_MAX_CONVERT_RADIUS);
 		updateWidgets();
 	}
 
