@@ -36,7 +36,6 @@ public abstract class WidgetListScreen extends XPACScreen {
 	private final static int PER_PAGE = 12;
 	
 	private int page;
-	private final int pageCount;
 	protected final List<WidgetListElement<?>> elements;
 	private final List<EditBox> tickableBoxes;
 	private Component displayedTitle;
@@ -48,12 +47,23 @@ public abstract class WidgetListScreen extends XPACScreen {
 		super(escape, parent, p_96550_);
 		this.elements = elements;
 		this.tickableBoxes = tickableBoxes;
-		this.pageCount = (elements.size() + PER_PAGE - 1) / PER_PAGE;
 	}
-	
+
+	//[Team Claims] the element list can change after the screen is created (collapsed groups, search)
+	private int getPageCount() {
+		return (elements.size() + PER_PAGE - 1) / PER_PAGE;
+	}
+
+	//[Team Claims]
+	protected void setPage(int page) {
+		this.page = page;
+	}
+
 	@Override
 	protected void init() {
 		super.init();
+		int pageCount = getPageCount();
+		page = Math.max(0, Math.min(page, pageCount - 1));
 		int xAnchor = width / 2;
 		int yAnchor = height / 7;
 		int startIndex = getStartIndex();
@@ -77,7 +87,7 @@ public abstract class WidgetListScreen extends XPACScreen {
 		}
 		displayedTitle = Component.literal("");
 		displayedTitle.getSiblings().add(title);
-		displayedTitle.getSiblings().add(Component.literal(" (" + (page + 1) + "/" + pageCount + ")"));
+		displayedTitle.getSiblings().add(Component.literal(" (" + (page + 1) + "/" + Math.max(1, pageCount) + ")"));
 	}
 	
 	private int getStartIndex() {
@@ -105,6 +115,8 @@ public abstract class WidgetListScreen extends XPACScreen {
 
 	public void renderBackground(GuiGraphics guiGraphics, int mouseX, int mouseY, float partial) {
 		super.renderBackground(guiGraphics, mouseX, mouseY, partial);
+		for (int index = getStartIndex(); index < getEndIndex(); index++)
+			elements.get(index).renderRowBackground(guiGraphics);//[Team Claims]
 		guiGraphics.drawCenteredString(font, displayedTitle, width / 2, 16, -1);
 	}
 

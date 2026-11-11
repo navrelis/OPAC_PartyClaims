@@ -19,6 +19,7 @@
 package xaero.pac.client.gui;
 
 import com.google.common.collect.Lists;
+import net.minecraft.ChatFormatting;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.AbstractWidget;
@@ -33,6 +34,10 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.util.FormattedCharSequence;
 import xaero.pac.OpenPartiesAndClaims;
+import xaero.pac.client.gui.configview.ConfigOptionGrouping;
+import xaero.pac.client.gui.configview.ConfigResetRule;
+import xaero.pac.client.gui.configview.ConfigViewLayout;
+import xaero.pac.client.gui.configview.ConfigViewState;
 import xaero.pac.client.gui.group.PlayerGroupsScreen;
 import xaero.pac.client.gui.widget.value.BooleanValueHolder;
 import xaero.pac.client.player.config.IPlayerConfigClientStorageManager;
@@ -49,6 +54,7 @@ import xaero.pac.common.server.player.config.api.v2.IPlayerConfigOptionSpecAPI;
 import xaero.pac.common.server.player.config.api.v2.PlayerConfigOptions;
 
 import javax.annotation.Nonnull;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.function.*;
@@ -73,9 +79,22 @@ public final class PlayerConfigScreen extends WidgetListScreen {
 	private final boolean beingDeletedStateOnOpen;
 	private final Component mainTitle;
 	private final String otherPlayerName;
+	//[Team Claims] the option rows are grouped, collapsed and filtered into the displayed elements
+	private final List<WidgetListElement<?>> pinnedElements;
+	private final List<OptionRow> optionRows;
+	private final List<ConfigViewLayout.Entry> optionEntries;
+	private final ConfigViewState viewState;
+	private String searchQuery = "";
+	private boolean noSearchResults;
+	private EditBox searchBox;
+
+	private record OptionRow(ConfigViewLayout.Entry entry, ConfigOptionRowListElement element) {
+	}
 
 	private PlayerConfigScreen(
 			List<WidgetListElement<?>> elements,
+			List<OptionRow> optionRows,
+			ConfigViewState viewState,
 			List<EditBox> tickableBoxes,
 			BiConsumer<PlayerConfigScreen, Button> refreshHandler,
 			Screen escape,
@@ -96,8 +115,85 @@ public final class PlayerConfigScreen extends WidgetListScreen {
 		this.beingDeletedStateOnOpen = beingDeletedStateOnOpen;
 		this.mainTitle = mainTitle;
 		this.otherPlayerName = otherPlayerName;
+		this.pinnedElements = new ArrayList<>(elements);
+		this.optionRows = optionRows;
+		this.optionEntries = new ArrayList<>();
+		for(OptionRow row : optionRows)
+			optionEntries.add(row.entry());
+		this.viewState = viewState;
+		rebuildElements();
 	}
-	
+
+	//[Team Claims] the displayed elements: the sub-config controls, then the headers and the options that are shown
+	private void rebuildElements(){
+		elements.clear();
+		elements.addAll(pinnedElements);
+		List<ConfigViewLayout.Row> rows = ConfigViewLayout.compute(optionEntries, viewState, searchQuery, pinnedElements.size());
+		boolean searching = !ConfigViewLayout.searchTerms(searchQuery).isEmpty();
+		noSearchResults = searching && rows.isEmpty();
+		int indexInGroup = 0;
+		for(ConfigViewLayout.Row row : rows) {
+			switch(row.kind()) {
+				case HEADER -> {
+					indexInGroup = 0;
+					elements.add(createGroupHeader(row, searching));
+				}
+				case OPTION -> {
+					ConfigOptionRowListElement element = optionRows.get(row.entryIndex()).element();
+					element.setOdd(indexInGroup++ % 2 == 1);
+					elements.add(element);
+				}
+				case FILLER -> elements.add(createFiller());
+			}
+		}
+	}
+
+	private WidgetListElement<?> createGroupHeader(ConfigViewLayout.Row row, boolean searching){
+		String groupKey = row.groupKey();
+		String translationKey = "gui.xaero_pac_config_group_" + groupKey;
+		Component title = I18n.exists(translationKey) ? Component.translatable(translationKey) : Component.literal(ConfigOptionGrouping.fallbackTitle(groupKey));
+		Component text = Component.literal(row.expanded() ? "▾ " : "▸ ").append(title).append(" (" + row.shown() + ")").withStyle(ChatFormatting.GOLD);
+		return SimpleWidgetListElement.Builder.begin()
+				.setW(ConfigOptionRowListElement.WIDTH)
+				.setH(20)
+				.setMutable(!searching)//while searching, the matching groups are open
+				.setWidgetSupplier((el, xy) -> Button.builder(text, b -> {
+					viewState.toggle(groupKey);
+					relayout();
+				}).bounds(xy.getX(), xy.getY(), ConfigOptionRowListElement.WIDTH, 20).build())
+				.build();
+	}
+
+	//keeps a header from being the last row of a column
+	private WidgetListElement<?> createFiller(){
+		return SimpleWidgetListElement.Builder.begin()
+				.setW(ConfigOptionRowListElement.WIDTH)
+				.setH(20)
+				.setMutable(false)
+				.setWidgetSupplier((el, xy) -> {
+					Button filler = Button.builder(Component.empty(), b -> {}).bounds(xy.getX(), xy.getY(), 1, 1).build();
+					filler.visible = false;
+					return filler;
+				})
+				.build();
+	}
+
+	private void relayout(){
+		rebuildElements();
+		init(minecraft, width, height);
+	}
+
+	private void onSearchChanged(String value){
+		if(value.equals(searchQuery))
+			return;
+		boolean refocus = searchBox.isFocused();
+		searchQuery = value;
+		setPage(0);
+		relayout();
+		if(refocus)
+			setFocused(searchBox);
+	}
+
 	@Override
 	protected void init() {
 		super.init();
@@ -108,6 +204,19 @@ public final class PlayerConfigScreen extends WidgetListScreen {
 						b -> refreshHandler.accept(this, b)
 				).bounds(xAnchor - 205, 5, topButtonsWidth, 20).build()
 		);
+		if(!optionRows.isEmpty()) {
+			//[Team Claims] below the list between the page buttons; it is only focused by a click
+			if(searchBox == null) {
+				searchBox = new EditBox(font, 0, 0, ConfigOptionRowListElement.WIDTH, 20, Component.translatable("gui.xaero_pac_config_search"));
+				searchBox.setHint(Component.translatable("gui.xaero_pac_config_search_hint"));
+				searchBox.setMaxLength(64);
+				searchBox.setResponder(this::onSearchChanged);
+			}
+			searchBox.setX(xAnchor - ConfigOptionRowListElement.WIDTH / 2);
+			searchBox.setY(height / 7 + 6 * ROW_HEIGHT);
+			searchBox.setTextColor(noSearchResults ? 0xFFFF5555 : 14737632);
+			addRenderableWidget(searchBox);
+		}
 		if(data.isSyncInProgress())
 			return;
 		addRenderableWidget(playerGroupsButton = Button.builder(
@@ -461,6 +570,44 @@ public final class PlayerConfigScreen extends WidgetListScreen {
 			elements.add(createSubConfigWidget);
 		}
 
+		// [Team Claims] a row with the reset button; reset sets the value the same way a change of the value does
+		private <T> OptionRow createRow(PlayerConfigStringableOptionClientStorage<T> option, WidgetListElement<?> valueElement, PlayerConfigClientStorage source, boolean mutable, Consumer<T> reset){
+			boolean subConfig = source instanceof PlayerSubConfigClientStorage;
+			T serverDefault = null;
+			if(!subConfig && defaultPlayerConfigData != null && (source.getType() == PlayerConfigType.PLAYER || source.getType() == PlayerConfigType.PARTY_CLAIMS))
+				serverDefault = defaultPlayerConfigData.getOption(option.getOption()).getValue();
+			T target = ConfigResetRule.target(subConfig, serverDefault, option.getOption().getDefaultValue());
+			ConfigOptionRowListElement row = new ConfigOptionRowListElement(
+					valueElement.h,
+					valueElement,
+					() -> ConfigResetRule.isVisible(mutable, option.getValue(), target),
+					() -> reset.accept(target)
+			);
+			String name = Component.translatable(option.getTranslation(), option.getTranslationArgs()).getString();
+			String shortenedId = option.getOption().getShortenedId();
+			ConfigViewLayout.Entry entry = ConfigViewLayout.Entry.of(
+					ConfigOptionGrouping.groupKey(shortenedId, option.getOption().getCategory().name()),
+					name, shortenedId, getUICommentForOption(option.getOption()).getString()
+			);
+			return new OptionRow(entry, row);
+		}
+
+		private <T> OptionRow createValueRow(PlayerConfigStringableOptionClientStorage<T> option, SimpleValueWidgetListElement<T, ?> element, PlayerConfigClientStorage source, boolean mutable){
+			return createRow(option, element, source, mutable, target -> {
+				element.setDraftValue(target);
+				option.setCastValue(target);
+				OpenPartiesAndClaims.INSTANCE.getClientDataInternal().getPlayerConfigClientSynchronizer().syncToServer(source, option);
+			});
+		}
+
+		private <T> OptionRow createIterationRow(PlayerConfigStringableOptionClientStorage<T> option, int elementWidth, int elementHeight, Component optionTitle, List<FormattedCharSequence> tooltip, PlayerConfigClientStorage source, boolean mutable){
+			return createValueRow(option, createIterationWidgetListElement(option, elementWidth, elementHeight, optionTitle, tooltip, source), source, mutable);
+		}
+
+		private <T> OptionRow createTextRow(PlayerConfigStringableOptionClientStorage<T> option, TextWidgetListElement element, PlayerConfigClientStorage source, boolean mutable){
+			return createRow(option, element, source, mutable, target -> element.setValueAndConfirm(target == null ? "" : option.getStringWriterCast().apply(target)));
+		}
+
 		private boolean isMutable(PlayerConfigClientStorage data, PlayerConfigStringableOptionClientStorage<?> option){
 			// [Team Claims] team claims always grant the whole party full access, so the exception
 			// group is locked on a team sub-config (the server rejects changing it as well)
@@ -515,6 +662,8 @@ public final class PlayerConfigScreen extends WidgetListScreen {
 			List<WidgetListElement<?>> elements = listFactory.get();
 			int elementWidth = 200;
 			int elementHeight = 20;
+			int optionWidth = elementWidth - ConfigOptionRowListElement.RESET_SLOT;//[Team Claims] the reset button is at the end of the row
+			List<OptionRow> optionRows = new ArrayList<>();
 			BiConsumer<PlayerConfigScreen, Button> refreshHandler;
 			if(anotherPlayer)
 				refreshHandler = (s,b) -> s.minecraft.setScreen(new OtherPlayerConfigWaitScreen(s.escape, s.parent, otherPlayerName));
@@ -572,9 +721,9 @@ public final class PlayerConfigScreen extends WidgetListScreen {
 				if(type == Boolean.class) {
 					@SuppressWarnings("unchecked")
 					PlayerConfigStringableOptionClientStorage<Boolean> booleanOption = (PlayerConfigStringableOptionClientStorage<Boolean>) optionStorage;
-					elements.add(createOnOffWidgetListElement(booleanOption, elementWidth,elementHeight, optionTitle, tooltip, optionValueSourceData));
+					optionRows.add(createValueRow(booleanOption, createOnOffWidgetListElement(booleanOption, optionWidth,elementHeight, optionTitle, tooltip, optionValueSourceData), optionValueSourceData, mutable));
 				} else if(optionStorage.getOption() instanceof PlayerConfigListIterationOptionSpec) {
-					elements.add(createIterationWidgetListElement(optionStorage, elementWidth, elementHeight, optionTitle, tooltip, optionValueSourceData));
+					optionRows.add(createIterationRow(optionStorage, optionWidth, elementHeight, optionTitle, tooltip, optionValueSourceData, mutable));
 				} else {
 					Object value = getOptionValue(optionStorage);
 
@@ -589,7 +738,7 @@ public final class PlayerConfigScreen extends WidgetListScreen {
 						filter = s -> s != null && s.matches("^[-\\.0-9]*$");
 					
 					TextWidgetListElement.Builder elementBuilder = TextWidgetListElement.Builder.begin()
-							.setW(elementWidth)
+							.setW(optionWidth)
 							.setH(elementHeight)
 							.setTitle(optionTitle)
 							.setTooltip(tooltip)
@@ -613,11 +762,11 @@ public final class PlayerConfigScreen extends WidgetListScreen {
 						elementBuilder.setMaxLength(((PlayerConfigStringOptionSpec) optionStorage.getOption()).getMaxLength());
 					else if(optionStorage.getOption() instanceof PlayerConfigHexOptionSpec)
 						elementBuilder.setMaxLength(8);
-					elements.add(elementBuilder.build());
+					optionRows.add(createTextRow(optionStorage, elementBuilder.build(), optionValueSourceData, mutable));
 				}
 			});
-			
-			return new PlayerConfigScreen(elements, listFactory.get(), refreshHandler, escape, parent, title, data, optionValueSourceData, syncInProgress, optionValueSourceData.isBeingDeleted(), mainTitle, otherPlayerName);
+
+			return new PlayerConfigScreen(elements, optionRows, ConfigViewState.forType(data.getType().name()), listFactory.get(), refreshHandler, escape, parent, title, data, optionValueSourceData, syncInProgress, optionValueSourceData.isBeingDeleted(), mainTitle, otherPlayerName);
 		}
 
 		public static Builder begin(ListFactory listFactory) {
