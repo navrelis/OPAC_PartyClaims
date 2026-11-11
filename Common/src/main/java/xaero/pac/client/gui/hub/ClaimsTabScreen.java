@@ -28,24 +28,32 @@ import net.minecraft.util.FormattedCharSequence;
 import net.minecraft.world.level.ChunkPos;
 import org.lwjgl.glfw.GLFW;
 import xaero.pac.OpenPartiesAndClaims;
+import xaero.pac.client.claims.IClientClaimsManager;
 import xaero.pac.client.claims.api.IClientClaimsManagerAPI;
 import xaero.pac.client.claims.player.api.IClientPlayerClaimInfoAPI;
+import xaero.pac.client.claims.player.mode.ClaimingModeClientHandlers;
+import xaero.pac.client.claims.player.mode.ClientClaimingModeHandler;
+import xaero.pac.client.command.util.CommandUtil;
 import xaero.pac.client.gui.MainMenu;
-import xaero.pac.client.gui.party.PartyScreen;
+import xaero.pac.client.gui.widget.dropdown.DropDownWidget;
 import xaero.pac.client.parties.party.IClientPartyStorage;
 import xaero.pac.client.teamclaims.TeamClaimsClientData;
 import xaero.pac.client.player.config.IPlayerConfigClientStorage;
+import xaero.pac.client.player.config.IPlayerConfigClientStorageManager;
 import xaero.pac.client.world.capability.ClientWorldMainCapability;
 import xaero.pac.client.world.capability.api.ClientWorldCapabilityTypes;
 import xaero.pac.common.claims.api.SpecialClaimOwners;
 import xaero.pac.common.claims.player.api.IPlayerChunkClaimAPI;
+import xaero.pac.common.claims.player.mode.ClaimingMode;
 import xaero.pac.common.claims.player.mode.api.ClaimingModes;
 import xaero.pac.common.claims.player.mode.api.IClaimingModeAPI;
-import xaero.pac.common.packet.parties.PartyBudgetData;
 import xaero.pac.common.packet.teamclaims.TeamInfoData;
+import xaero.pac.common.server.claims.command.ClaimingModeCommand;
+import xaero.pac.common.server.claims.command.ClaimsCommandRegister;
 
 import javax.annotation.Nullable;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.UUID;
 
@@ -54,7 +62,8 @@ import java.util.UUID;
  * player selects chunks by clicking and dragging and then claims, unclaims, forceloads or unforceloads them with the
  * area requests of the client claims API, in the claiming mode they are in. Next to the map are the toggle between
  * private and team claims (the player config option {@code claims.usedSub}, which also decides what the World Map's
- * "Claim Selected" claims), the budgets, and a legend.
+ * "Claim Selected" claims), the budgets, and a legend. Players who may claim in more than one claiming mode (as the
+ * party, or ops as the server) get the dropdown of the claiming mode from OPAC's old main menu above them.
  * <p>
  * The answers to the requests are OPAC's normal claim result messages. The map reads the claims the client has synced,
  * so it follows by itself when the server sends a change.
@@ -76,8 +85,6 @@ public class ClaimsTabScreen extends HubTabScreen {
 	private static final Component CLEAR_SELECTION = Component.translatable("gui.xaero_pac_hub_clear_selection");
 	private static final Component CENTRE = Component.translatable("gui.xaero_pac_hub_centre");
 
-	private static final int MARGIN = 8;
-	private static final int BOTTOM_MARGIN = 6;
 	private static final int PANEL_GAP = 8;
 	private static final int MIN_PANEL_WIDTH = 128;
 	private static final int MAX_PANEL_WIDTH = 190;
@@ -91,6 +98,7 @@ public class ClaimsTabScreen extends HubTabScreen {
 	private static final int REFRESH_AFTER_ACTION_TICKS = 25;
 	private static final int SWATCH_SIZE = 8;
 	private static final int TWO_COLUMN_LEGEND_WIDTH = 150;
+	private static final long CLAIMING_MODE_ANSWER_MILLIS = 1000;
 
 	private static final int GRID_BORDER_COLOR = 0xFF000000;
 	private static final int UNCLAIMED_COLOR_A = 0xFF262626;
@@ -172,6 +180,13 @@ public class ClaimsTabScreen extends HubTabScreen {
 	private Button unforceloadButton;
 	private Button clearButton;
 	private Button centreButton;
+	@Nullable
+	private DropDownWidget claimingModeMenu;
+	private List<ClaimingMode> claimModeOptions = List.of();
+	@Nullable
+	private IClaimingModeAPI selectedClaimingMode;
+	private IClaimingModeAPI selectedEffectiveClaimingMode;
+	private long lastClaimingModeChangeTime;
 
 	@Nullable
 	private String teamSubId;
@@ -314,13 +329,15 @@ public class ClaimsTabScreen extends HubTabScreen {
 		unforceloadButton = null;
 		clearButton = null;
 		centreButton = null;
+		claimingModeMenu = null;
 		buttonHeight = height >= TALL_SCREEN_HEIGHT ? 20 : 16;
-		backTop = height - BOTTOM_MARGIN - buttonHeight;
+		backTop = contentBottom() - buttonHeight;
 		if(state == State.READY)
 			initReady();
 		else
 			initMessageOnly();
-		addRenderableWidget(Button.builder(BACK, b -> goBack()).bounds(state == State.READY ? panelLeft : width / 2 - 100, backTop, state == State.READY ? panelWidth : 200, buttonHeight).build());
+		int backWidth = Math.min(200, contentWidth());
+		addRenderableWidget(Button.builder(BACK, b -> goBack()).bounds(state == State.READY ? panelLeft : contentCenterX() - backWidth / 2, backTop, state == State.READY ? panelWidth : backWidth, buttonHeight).build());
 		if(minecraft.player != null && state != State.NO_MOD) {
 			updateSubConfigKnowledge();
 			requestTeamInfo();
@@ -334,19 +351,23 @@ public class ClaimsTabScreen extends HubTabScreen {
 	}
 
 	private void initReady() {
-		int top = HubTabBar.CONTENT_TOP;
-		int totalWidth = width - 2 * MARGIN;
-		int availableHeight = height - top - BOTTOM_MARGIN;
+		int top = contentTop();
+		int totalWidth = contentWidth();
+		int availableHeight = contentBottom() - top;
 		int side = Math.max(MIN_GRID_SIDE, Math.min(availableHeight, totalWidth - PANEL_GAP - MIN_PANEL_WIDTH));
 		fit = HubGridFit.fit(side);
 		int gridSize = fit.size();
 		panelWidth = Math.max(60, Math.min(MAX_PANEL_WIDTH, totalWidth - gridSize - PANEL_GAP));
-		int contentWidth = gridSize + PANEL_GAP + panelWidth;
-		gridLeft = Math.max(0, (width - contentWidth) / 2);
+		int usedWidth = gridSize + PANEL_GAP + panelWidth;
+		gridLeft = contentLeft() + Math.max(0, (totalWidth - usedWidth) / 2);
 		gridTop = top;
 		panelLeft = gridLeft + gridSize + PANEL_GAP;
 
 		int y = top;
+		if(ClaimsHubLogic.isClaimingModeChoiceShown(getUsableClaimingModes().size())) {
+			claimingModeMenu = addRenderableWidget(createClaimingModeDropdown(y));
+			y += DropDownWidget.LINE_HEIGHT + BUTTON_GAP + 1;
+		}
 		claimAsButton = addRenderableWidget(Button.builder(Component.empty(), b -> onClaimAsButton()).bounds(panelLeft, y, panelWidth, buttonHeight).build());
 		y += buttonHeight + BUTTON_GAP;
 		int halfWidth = (panelWidth - BUTTON_GAP) / 2;
@@ -378,6 +399,85 @@ public class ClaimsTabScreen extends HubTabScreen {
 		ClaimAsToggle.toggle(teamSubId);
 		refreshSchedule.afterAction();
 		updateWidgets();
+	}
+
+	/**
+	 * Gets the claiming modes that the player may use, sorted by their IDs, by the rule of OPAC's main menu.
+	 */
+	private List<ClaimingMode> getUsableClaimingModes() {
+		IClientClaimsManager<?, ?, ?> claimsManager = OpenPartiesAndClaims.INSTANCE.getClientDataInternal().getClaimsManager();
+		IPlayerConfigClientStorageManager<?> configs = OpenPartiesAndClaims.INSTANCE.getClientDataInternal().getPlayerConfigStorageManager();
+		List<ClaimingMode> modes = new ArrayList<>();
+		for(IClaimingModeAPI claimingMode : ClaimingModes.ALL_IMMUTABLE.values()) {
+			ClientClaimingModeHandler claimingModeHandler = ClaimingModeClientHandlers.get(claimingMode);
+			if(claimingModeHandler.getVisibilityGetter() != null && !claimingModeHandler.getVisibilityGetter().test(claimsManager, configs))
+				continue;
+			modes.add((ClaimingMode) claimingMode);
+		}
+		modes.sort(Comparator.comparing(IClaimingModeAPI::getId));
+		return modes;
+	}
+
+	/**
+	 * Creates the dropdown of the claiming mode at the top of the panel, as OPAC's main menu had it: the default mode
+	 * first, then the modes the player may use.
+	 */
+	private DropDownWidget createClaimingModeDropdown(int y) {
+		IClientClaimsManager<?, ?, ?> claimsManager = OpenPartiesAndClaims.INSTANCE.getClientDataInternal().getClaimsManager();
+		claimModeOptions = new ArrayList<>(getUsableClaimingModes());
+		claimModeOptions.add(0, null);//default mode
+		selectedClaimingMode = claimsManager.getRawClaimingMode();
+		selectedEffectiveClaimingMode = claimsManager.getEffectiveClaimingMode(selectedClaimingMode);
+		ClaimingMode effectiveDefaultMode = (ClaimingMode) claimsManager.getEffectiveClaimingMode(null);
+		int selectedClaimMode = selectedClaimingMode == null ? 0 : claimModeOptions.indexOf(selectedClaimingMode);
+		return DropDownWidget.Builder.begin()
+				.setCallback(this::onClaimingMode)
+				.setContainer(this)
+				.setX(panelLeft)
+				.setY(y)
+				.setW(panelWidth)
+				.setOptions(
+						claimModeOptions.stream()
+								.map(mode -> mode == null ?
+										Component.translatable(
+												"gui.xaero_pac_claiming_as_default", effectiveDefaultMode.getActiveLabel()
+										) : mode.getActiveLabel()
+								)
+								.map(Component::getString)
+								.toList()
+								.toArray(new String[0])
+				)
+				.setSelected(selectedClaimMode)
+				.setNarrationTitle(Component.translatable("gui.xaero_pac_claiming_as_narration"))
+				.build();
+	}
+
+	/**
+	 * Switches the claiming mode with OPAC's claiming mode command, as the main menu did.
+	 */
+	private boolean onClaimingMode(DropDownWidget dropDownWidget, int index) {
+		IClientClaimsManager<?, ?, ?> claimsManager = OpenPartiesAndClaims.INSTANCE.getClientDataInternal().getClaimsManager();
+		claimsManager.setClaimingMode(selectedClaimingMode = claimModeOptions.get(index));
+		selectedEffectiveClaimingMode = claimsManager.getEffectiveClaimingMode(selectedClaimingMode);
+		String modePrefix = selectedClaimingMode == null ? ClaimingModeCommand.DEFAULT_MODE_PREFIX : selectedClaimingMode.getId();
+		CommandUtil.sendCommand(minecraft, ClaimsCommandRegister.COMMAND_PREFIX + " " + modePrefix + "-claim-mode");
+		lastClaimingModeChangeTime = System.currentTimeMillis();
+		refreshSchedule.afterAction();
+		updateWidgets();
+		return true;
+	}
+
+	/**
+	 * Shows the claiming mode of the server in the dropdown when it changed some other way, but not right after the player
+	 * picked one, before the server has answered.
+	 */
+	private void updateClaimingModeDropdown() {
+		if(claimingModeMenu == null || System.currentTimeMillis() - lastClaimingModeChangeTime < CLAIMING_MODE_ANSWER_MILLIS)
+			return;
+		IClientClaimsManager<?, ?, ?> claimsManager = OpenPartiesAndClaims.INSTANCE.getClientDataInternal().getClaimsManager();
+		if(claimsManager.getClaimingMode() == selectedEffectiveClaimingMode && claimsManager.getRawClaimingMode() == selectedClaimingMode)
+			return;
+		replaceRenderableWidget(claimingModeMenu, claimingModeMenu = createClaimingModeDropdown(claimingModeMenu.getY()));
 	}
 
 	/**
@@ -424,6 +524,11 @@ public class ClaimsTabScreen extends HubTabScreen {
 		setActionButton(forceloadButton, hasSelection, tooLarge, FORCELOAD_TOOLTIP);
 		setActionButton(unforceloadButton, hasSelection, tooLarge, UNFORCELOAD_TOOLTIP);
 		clearButton.active = hasSelection;
+		if(openDropdown != null) {
+			// the open dropdown of the claiming mode covers these buttons
+			for(Button button : List.of(claimAsButton, claimButton, unclaimButton, forceloadButton, unforceloadButton))
+				button.setTooltip(null);
+		}
 	}
 
 	private void setActionButton(Button button, boolean hasSelection, boolean tooLarge, Tooltip tooltip) {
@@ -456,6 +561,11 @@ public class ClaimsTabScreen extends HubTabScreen {
 		}
 		if(state == State.NO_MOD)
 			return;
+		if(state == State.READY && (claimingModeMenu != null) != ClaimsHubLogic.isClaimingModeChoiceShown(getUsableClaimingModes().size())) {
+			rebuildWidgets();
+			return;
+		}
+		updateClaimingModeDropdown();
 		updateSubConfigKnowledge();
 		if(refreshSchedule.tick())
 			requestTeamInfo();
@@ -547,9 +657,9 @@ public class ClaimsTabScreen extends HubTabScreen {
 	protected void renderPreDropdown(GuiGraphics guiGraphics, int mouseX, int mouseY, float partial) {
 		super.renderPreDropdown(guiGraphics, mouseX, mouseY, partial);
 		switch(state) {
-			case NO_MOD -> guiGraphics.drawCenteredString(font, MainMenu.NO_HANDSHAKE, width / 2, HubTabBar.CONTENT_TOP + 20, WARNING_COLOR);
-			case NO_CLAIMS -> guiGraphics.drawCenteredString(font, MainMenu.NO_CLAIMS, width / 2, HubTabBar.CONTENT_TOP + 20, VALUE_COLOR);
-			case SYNCING -> guiGraphics.drawCenteredString(font, MainMenu.CLAIMS_SYNCING, width / 2, HubTabBar.CONTENT_TOP + 20, -1);
+			case NO_MOD -> guiGraphics.drawCenteredString(font, MainMenu.NO_HANDSHAKE, contentCenterX(), contentTop() + 20, WARNING_COLOR);
+			case NO_CLAIMS -> guiGraphics.drawCenteredString(font, MainMenu.NO_CLAIMS, contentCenterX(), contentTop() + 20, VALUE_COLOR);
+			case SYNCING -> guiGraphics.drawCenteredString(font, MainMenu.CLAIMS_SYNCING, contentCenterX(), contentTop() + 20, -1);
 			case READY -> {
 				renderGrid(guiGraphics, mouseX, mouseY);
 				renderPanelText(guiGraphics);
@@ -675,7 +785,7 @@ public class ClaimsTabScreen extends HubTabScreen {
 		}
 		y += SECTION_GAP - 2;
 		// budgets
-		for(BudgetLine line : computeBudgetLines()) {
+		for(HubBudgetLines.Line line : HubBudgetLines.allLines()) {
 			for(FormattedCharSequence part : font.split(line.text(), panelWidth)) {
 				if(y + font.lineHeight > bottom)
 					return;
@@ -711,36 +821,6 @@ public class ClaimsTabScreen extends HubTabScreen {
 			renderOutline(guiGraphics, x + 1, y + 1, x + SWATCH_SIZE - 1, y + SWATCH_SIZE - 1, entry.badgeColor());
 		else if(entry.badgeColor() != 0)
 			guiGraphics.fill(x + 2, y + 2, x + 5, y + 5, entry.badgeColor());
-	}
-
-	private record BudgetLine(Component text, int color) {
-	}
-
-	/**
-	 * Gets the lines about the claim and forceload budgets from what the server reported to the client, with the
-	 * running over-limit deadlines counted down locally, as in the party screen. If the server reports no budgets, the
-	 * counts of the claiming mode are shown.
-	 */
-	private List<BudgetLine> computeBudgetLines() {
-		List<BudgetLine> lines = new ArrayList<>();
-		IClientPartyStorage<?, ?, ?> partyStorage = getPartyStorage();
-		PartyBudgetData budget = partyStorage.getBudget();
-		if(budget != null && budget.available()) {
-			long elapsed = Math.max(0, System.currentTimeMillis() - partyStorage.getBudgetReceivedTime());
-			lines.add(new BudgetLine(Component.translatable("gui.xaero_pac_party_screen_budget_private",
-					PartyScreen.formatBudget(budget.privateClaims(), budget.privateClaimLimit()),
-					PartyScreen.formatBudget(budget.privateForceloads(), budget.privateForceloadLimit())), TEXT_COLOR));
-			for(HubBudgetLines.Line line : HubBudgetLines.teamLines(budget, elapsed, TeamClaimsClientData.INSTANCE.getTeamInfo()))
-				lines.add(new BudgetLine(line.text(), line.color()));
-			return lines;
-		}
-		IClientClaimsManagerAPI claimsManager = getClaimsManager();
-		IClaimingModeAPI mode = claimsManager.getClaimingMode();
-		lines.add(new BudgetLine(Component.translatable("gui.xaero_pac_ui_claim_count",
-				PartyScreen.formatBudget(claimsManager.getClaimCount(mode), claimsManager.getClaimLimit(mode))), TEXT_COLOR));
-		lines.add(new BudgetLine(Component.translatable("gui.xaero_pac_ui_forceload_count",
-				PartyScreen.formatBudget(claimsManager.getForceloadCount(mode), claimsManager.getForceloadLimit(mode))), TEXT_COLOR));
-		return lines;
 	}
 
 	private String getOwnerName(IPlayerChunkClaimAPI claim, ClaimCategory category) {

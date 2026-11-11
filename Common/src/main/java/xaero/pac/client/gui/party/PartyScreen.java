@@ -34,7 +34,7 @@ import xaero.pac.OpenPartiesAndClaims;
 import xaero.pac.client.gui.MainMenu;
 import xaero.pac.client.gui.XPACScreen;
 import xaero.pac.client.gui.hub.HubTab;
-import xaero.pac.client.gui.hub.HubTabBar;
+import xaero.pac.client.gui.hub.HubSidebar;
 import xaero.pac.client.gui.hub.HubTabs;
 import xaero.pac.client.gui.hub.TeamInfoRefresh;
 import xaero.pac.common.parties.party.ReceivedPartyInvite;
@@ -90,7 +90,7 @@ public class PartyScreen extends XPACScreen implements PartyEntryList.Actions {
 	private static final int HEADER_GAP = 2;
 	private static final int MAX_LINES_PER_ENTRY = 2;
 	private static final int TOOLTIP_WIDTH = 200;
-	private static final int CONTENT_TOP = HubTabBar.CONTENT_TOP;//[Team Claims] below the tab bar of the hub
+	private static final int CONTENT_TOP = HubSidebar.CONTENT_TOP;//[Team Claims] below the title of the hub page
 	private static final int NO_PARTY_HEADER_TOP = CONTENT_TOP + 2;
 	private static final int NO_PARTY_MAX_HEADER_LINES = 2;
 	private static final long MILLIS_PER_MINUTE = 60_000;
@@ -131,6 +131,7 @@ public class PartyScreen extends XPACScreen implements PartyEntryList.Actions {
 	private record HeaderLine(FormattedCharSequence text, int color, @Nullable Component tooltip) {
 	}
 
+	private HubSidebar sidebar;//[Team Claims]
 	private State state = State.NO_MOD;
 	private LayoutKey layoutKey;
 	private int contentWidth;
@@ -305,11 +306,12 @@ public class PartyScreen extends XPACScreen implements PartyEntryList.Actions {
 	@Override
 	protected void init() {
 		super.init();
-		for(Button tabButton : HubTabBar.create(minecraft, width, HubTab.PARTY, escape, parent))//[Team Claims] the party screen is the Party tab of the hub
-			addRenderableWidget(tabButton);
+		sidebar = HubSidebar.create(minecraft, width, height, HubTab.PARTY, escape, parent);//[Team Claims] the party screen is the Party page of the hub
+		for(Button entry : sidebar.getEntries())
+			addRenderableWidget(entry);
 		state = computeState();
-		contentWidth = Math.min(width - 16, MAX_CONTENT_WIDTH);
-		contentLeft = (width - contentWidth) / 2;
+		contentWidth = Math.min(contentWidth(), MAX_CONTENT_WIDTH);
+		contentLeft = contentLeft() + (contentWidth() - contentWidth) / 2;
 		headerLines = computeHeaderLines(state);
 		layoutKey = computeLayoutKey(state, headerLines);
 		list = null;
@@ -337,7 +339,7 @@ public class PartyScreen extends XPACScreen implements PartyEntryList.Actions {
 
 	private void initMessageOnly() {
 		messageY = CONTENT_TOP + 26;
-		addBackButton(width / 2 - 100, height - 26, 200);
+		addCentredBackButton();
 	}
 
 	private void initNoParty() {
@@ -358,8 +360,9 @@ public class PartyScreen extends XPACScreen implements PartyEntryList.Actions {
 		invitesLabelY = createBox.getY() + BUTTON_HEIGHT + 9;
 		int listTop = invitesLabelY + font.lineHeight + 4;
 		int listBottom = height - 32;
-		list = addRenderableWidget(new PartyEntryList(minecraft, width, Math.max(PartyEntryList.ITEM_HEIGHT, listBottom - listTop), listTop, getListRowWidth(), this));
-		addBackButton(width / 2 - 100, height - 26, 200);
+		list = addRenderableWidget(new PartyEntryList(minecraft, contentWidth(), Math.max(PartyEntryList.ITEM_HEIGHT, listBottom - listTop), listTop, getListRowWidth(), this));
+		list.setX(contentLeft());
+		addCentredBackButton();
 	}
 
 	private int getListRowWidth() {
@@ -411,7 +414,8 @@ public class PartyScreen extends XPACScreen implements PartyEntryList.Actions {
 		}
 		int listTop = headerBottom + 1;
 		int listHeight = Math.max(PartyEntryList.ITEM_HEIGHT, getInPartyListBottom(canInvite) - listTop);
-		list = addRenderableWidget(new PartyEntryList(minecraft, width, listHeight, listTop, getListRowWidth(), this));
+		list = addRenderableWidget(new PartyEntryList(minecraft, contentWidth(), listHeight, listTop, getListRowWidth(), this));
+		list.setX(contentLeft());
 		int halfWidth = (contentWidth - ROW_GAP) / 2;
 		boolean isOwner = local != null && local.isOwner();
 		leaveOrDisbandButton = addRenderableWidget(Button.builder(isOwner ? DISBAND : LEAVE, b -> onLeaveOrDisbandButton())
@@ -429,6 +433,50 @@ public class PartyScreen extends XPACScreen implements PartyEntryList.Actions {
 
 	private void addBackButton(int x, int y, int buttonWidth) {
 		addRenderableWidget(Button.builder(BACK, b -> goBack()).bounds(x, y, buttonWidth, BUTTON_HEIGHT).build());
+	}
+
+	private void addCentredBackButton() {
+		int buttonWidth = Math.min(200, contentWidth());
+		addBackButton(getCentreX() - buttonWidth / 2, height - 26, buttonWidth);
+	}
+
+	/**
+	 * [Team Claims] Gets the X where the content area of the hub page starts, right of the sidebar. The widgets of the
+	 * screen are in a column of at most {@value #MAX_CONTENT_WIDTH} in the middle of it.
+	 */
+	protected int contentLeft() {
+		return sidebar.contentLeft();
+	}
+
+	/**
+	 * [Team Claims] Gets the width of the content area of the hub page.
+	 */
+	protected int contentWidth() {
+		return sidebar.contentWidth();
+	}
+
+	/**
+	 * [Team Claims] Gets the Y where the content area of the hub page starts, below its title.
+	 */
+	protected int contentTop() {
+		return sidebar.contentTop();
+	}
+
+	/**
+	 * [Team Claims] Gets the Y where the content area of the hub page ends.
+	 */
+	protected int contentBottom() {
+		return sidebar.contentBottom();
+	}
+
+	private int getCentreX() {
+		return contentLeft() + contentWidth() / 2;
+	}
+
+	@Override
+	public void renderBackground(GuiGraphics guiGraphics, int mouseX, int mouseY, float partial) {
+		super.renderBackground(guiGraphics, mouseX, mouseY, partial);
+		sidebar.renderPanel(guiGraphics, minecraft, HubTab.PARTY.getLabel());//[Team Claims]
 	}
 
 	// ---- actions ----
@@ -721,9 +769,9 @@ public class PartyScreen extends XPACScreen implements PartyEntryList.Actions {
 	protected void renderPreDropdown(GuiGraphics guiGraphics, int mouseX, int mouseY, float partial) {
 		super.renderPreDropdown(guiGraphics, mouseX, mouseY, partial);
 		switch(state) {
-			case NO_MOD -> guiGraphics.drawCenteredString(font, MainMenu.NO_HANDSHAKE, width / 2, messageY, 0xFFFF5555);
-			case NO_PARTIES -> guiGraphics.drawCenteredString(font, MainMenu.NO_PARTIES, width / 2, messageY, 0xFFAAAAAA);
-			case SYNCING -> guiGraphics.drawCenteredString(font, MainMenu.PARTY_SYNCING, width / 2, messageY, -1);
+			case NO_MOD -> guiGraphics.drawCenteredString(font, MainMenu.NO_HANDSHAKE, getCentreX(), messageY, 0xFFFF5555);
+			case NO_PARTIES -> guiGraphics.drawCenteredString(font, MainMenu.NO_PARTIES, getCentreX(), messageY, 0xFFAAAAAA);
+			case SYNCING -> guiGraphics.drawCenteredString(font, MainMenu.PARTY_SYNCING, getCentreX(), messageY, -1);
 			case NO_PARTY -> {
 				guiGraphics.drawString(font, CREATE_TITLE, contentLeft, createLabelY, -1);
 				guiGraphics.drawString(font, INVITES_TITLE, contentLeft, invitesLabelY, -1);
@@ -740,7 +788,7 @@ public class PartyScreen extends XPACScreen implements PartyEntryList.Actions {
 		if(renameBox == null) {
 			String partyName = font.plainSubstrByWidth(getCurrentPartyName(), Math.max(0, contentWidth - 60));
 			Component nameComponent = Component.translatable("gui.xaero_pac_ui_party_name", Component.literal(partyName).withStyle(s -> s.withColor(VALUE_COLOR)));
-			guiGraphics.drawCenteredString(font, nameComponent, width / 2, messageY, -1);
+			guiGraphics.drawCenteredString(font, nameComponent, getCentreX(), messageY, -1);
 		}
 	}
 
@@ -748,8 +796,8 @@ public class PartyScreen extends XPACScreen implements PartyEntryList.Actions {
 		Component hoveredTooltip = null;
 		int lineY = headerTop;
 		for(HeaderLine line : headerLines) {
-			guiGraphics.drawCenteredString(font, line.text(), width / 2, lineY, line.color());
-			if(line.tooltip() != null && mouseY >= lineY && mouseY < lineY + font.lineHeight && Math.abs(mouseX - width / 2) <= font.width(line.text()) / 2)
+			guiGraphics.drawCenteredString(font, line.text(), getCentreX(), lineY, line.color());
+			if(line.tooltip() != null && mouseY >= lineY && mouseY < lineY + font.lineHeight && Math.abs(mouseX - getCentreX()) <= font.width(line.text()) / 2)
 				hoveredTooltip = line.tooltip();
 			lineY += HEADER_LINE_STEP;
 		}
@@ -763,7 +811,7 @@ public class PartyScreen extends XPACScreen implements PartyEntryList.Actions {
 
 	@Override
 	public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
-		if(!isTextFieldFocused() && HubTabs.isHubKey(keyCode)) {
+		if(!isTextFieldFocused() && HubTabs.isCloseKey(keyCode)) {
 			onClose();
 			return true;
 		}
@@ -772,7 +820,7 @@ public class PartyScreen extends XPACScreen implements PartyEntryList.Actions {
 
 	@Override
 	public boolean mouseClicked(double mouseX, double mouseY, int button) {
-		if(!isTextFieldFocused() && HubTabs.isHubMouseButton(button)) {
+		if(!isTextFieldFocused() && HubTabs.isCloseMouseButton(button)) {
 			onClose();
 			return true;
 		}
