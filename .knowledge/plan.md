@@ -13,7 +13,7 @@ Status: open / in progress / in review / done. Size S/L, difficulty E/H. One Gra
 | 5 | Settings page: client options section (World Map button on/off + position, map default zoom), convert radius cycles up to 16 (server enforces convertMaxRadius, no protocol change); register TeamClaimsMapTest in Fabric gametests; server defaults unchanged (decisions) | S/E | Sonnet (reuse worldmap-fix) | 1, 2, 3 | done (156/156 per loader, merged) | builds; tests green |
 | 6 | Two-player test: new pages + World Map entries + map button, screenshots | L/H | Opus (twoplayer-15 investigation; twoplayer-2, local_0f8c3742, implementation) | 1–5 | in progress: twoplayer-15 plan (handover-T6.md) merged; twoplayer-2 implements it; Settings reset assertion needs 6b merged first | runner green twice, screenshots checked by lead |
 | 6b | Config reset button follows the value without relayout (PlayerConfigScreen, configview) | S/E | Sonnet (reset-15, local_fb052f19) | 3 | in progress | button shows right after change, hides after reset; builds; gametests green both loaders |
-| 7 | Docs: version 1.5.0, README, changelog, CURSEFORGE.md, de lang complete | S/E | Sonnet (docs-15, local_3cbb40de) | 1–5 | in progress | docs match behaviour |
+| 7 | Docs: version 1.5.0, README, changelog, CURSEFORGE.md, de lang complete | S/E | Sonnet (docs-15, local_3cbb40de) | 1–5 | done (merged; build green, worker ran all 6 gametest runs 156/156/190/190/4/4; README two-player paragraph + runner title "1.4.0" left to T6) | docs match behaviour |
 | 8 | Acceptance + release (instance, CurseForge, push, report) | – | lead | 1–7 | open | report.md in session folder |
 
 Parallel now: 6, 6b, 7 (disjoint files). Usage tally (long = 2, short = 1): Opus T1a (2), T6 investigation (2),
