@@ -36,6 +36,30 @@ repositories{
     }
 }
 
+// [Team Claims] Raw (unremapped) World Map jar, only used to extract the nested xaerolib for the dev runtime.
+configurations {
+    xaeroWorldMapRaw {
+        canBeConsumed = false
+        canBeResolved = true
+        transitive = false
+    }
+}
+dependencies {
+    xaeroWorldMapRaw "maven.modrinth:xaeros-world-map:XIR7GzC3"
+}
+// Loom checksums the files of the mod configurations while the project is configured, before any task runs, so a
+// task-produced jar cannot be used there: extract it at configuration time (only when that file is missing; its
+// name carries the xaerolib version, so a World Map update that bumps xaerolib extracts the new one).
+def xaerolibJar = new java.util.zip.ZipFile(configurations.xaeroWorldMapRaw.singleFile).withCloseable { zip ->
+    def entry = zip.entries().find { it.name ==~ /META-INF\/jars\/xaerolib-.*\.jar/ }
+    def target = layout.buildDirectory.file("xaerolib/${new File(entry.name).name}").get().asFile
+    if (!target.exists()) {
+        target.parentFile.mkdirs()
+        zip.getInputStream(entry).withCloseable { target.bytes = it.bytes }
+    }
+    target
+}
+
 dependencies {
     minecraft "com.mojang:minecraft:${minecraft_version}"
     mappings loom.officialMojangMappings()
@@ -62,7 +86,10 @@ dependencies {
     // [Team Claims] Xaero's World Map 1.47.0 for Fabric 1.21.1 (bundles xaerolib): the map screen integration of
     // xaero.pac.teamclaims.fabric.worldmap. Version id XIR7GzC3 = fabric-1.21.1-1.47.0. Not include()'d, not in the jar.
     modCompileOnly "maven.modrinth:xaeros-world-map:XIR7GzC3"
-    modLocalRuntime "maven.modrinth:xaeros-world-map:XIR7GzC3"
+    // World Map depends on xaerolib, which only exists nested in the World Map jar (META-INF/jars) and which Fabric
+    // Loader does not load from there in a dev environment: it is extracted above and added on its own. Both are on the
+    // runtime classpath of the client runs only (see the "clientWorldMap" source set).
+    modCompileOnly files(xaerolibJar)
 
     modCompileOnly "curse.maven:ftbranks-472659:6431745"//home: https://www.curseforge.com/minecraft/mc-mods/ftb-ranks-fabric
     modCompileOnly("dev.architectury:architectury-fabric:${architectury_version}") { transitive = false }//source: https://github.com/architectury/architectury-api
@@ -116,17 +143,29 @@ sourceSets {
         compileClasspath += sourceSets.gametest.compileClasspath + sourceSets.gametest.output
         runtimeClasspath += sourceSets.main.runtimeClasspath + sourceSets.main.output + sourceSets.gametest.output.classesDirs
     }
+    // [Team Claims] No code of its own: the runtime classpath of the two client runs, main's plus Xaero's World Map and
+    // xaerolib (below). Not for the server and gametest runs: xaerolib's server hooks fail on a vanilla GameTestServer
+    // ("Registry is not frozen yet"), and those runs are the proof that the mod works without World Map.
+    clientWorldMap {
+        compileClasspath += sourceSets.main.compileClasspath
+        // not "+=": the source set's own output has no classes, and its missing folder would be warned about
+        runtimeClasspath = configurations.clientWorldMapRuntimeClasspath + sourceSets.main.runtimeClasspath + sourceSets.main.output
+    }
 }
 
 // [Team Claims] Remapped (intermediary -> named) mod dependencies of the "gametestFtb" source set only: the real
 // FTB Teams, FTB Library and Architectury for ":Fabric:runBootTestFtb". Never include()'d, not part of main's
 // runtime classpath, so not in the default boot test and not in the jar.
 loom.createRemapConfigurations(sourceSets.gametestFtb)
+loom.createRemapConfigurations(sourceSets.clientWorldMap)
 
 dependencies {
     modGametestFtbRuntimeOnly("dev.architectury:architectury-fabric:${architectury_version}") { transitive = false }
     modGametestFtbRuntimeOnly("dev.ftb.mods:ftb-library-fabric:${ftb_library_version}") { transitive = false }
     modGametestFtbRuntimeOnly("dev.ftb.mods:ftb-teams-fabric:${ftb_teams_version}") { transitive = false }
+
+    modClientWorldMapRuntimeOnly "maven.modrinth:xaeros-world-map:XIR7GzC3"
+    modClientWorldMapRuntimeOnly files(xaerolibJar)
 }
 
 loom {
@@ -177,6 +216,7 @@ loom {
             setConfigName("Fabric Client 1")
             ideConfigGenerated(true)
             runDir("../run-client1")
+            source(sourceSets.clientWorldMap)
             programArgs("--username", "Player1")
         }
         client2 {
@@ -184,6 +224,7 @@ loom {
             setConfigName("Fabric Client 2")
             ideConfigGenerated(true)
             runDir("../run-client2")
+            source(sourceSets.clientWorldMap)
             programArgs("--username", "Player2")
         }
         server {
