@@ -17,7 +17,7 @@
 
 <#
 .SYNOPSIS
-    [Team Claims] The automated two-player test of the 1.4 hub: one dedicated Fabric server and two Fabric dev clients
+    [Team Claims] The automated two-player test of the 1.5 hub and its World Map integration: one dedicated Fabric server and two Fabric dev clients
     (Player1 = op and party owner, Player2 = plain member), driven by scripts, with a report.
 
 .DESCRIPTION
@@ -259,7 +259,7 @@ function Merge-Results([string]$Folder, [object[]]$ScriptEntries, [string[]]$Man
     $report | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath (Join-Path $Folder 'results.json') -Encoding utf8
 
     $md = [System.Text.StringBuilder]::new()
-    [void]$md.AppendLine('# OPAC Team Claims 1.4.0: two-player test' + ($IsDryRun ? ' (DRY RUN, nothing started)' : ''))
+    [void]$md.AppendLine('# OPAC Team Claims 1.5.0: two-player test' + ($IsDryRun ? ' (DRY RUN, nothing started)' : ''))
     [void]$md.AppendLine('')
     [void]$md.AppendLine("**Overall: $overall**  ")
     [void]$md.AppendLine("PASS $($counts.PASS), FAIL $($counts.FAIL), SKIPPED $($counts.SKIPPED). Started $($Start.ToString('yyyy-MM-dd HH:mm:ss')), finished $((Get-Date).ToString('HH:mm:ss')).  ")

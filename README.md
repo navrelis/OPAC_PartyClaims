@@ -742,12 +742,16 @@ the one of 1.2.0 with World Map 1.47.0 is found without starting the game:
 `java tools/linkcheck/LinkCheck.java --provider <our jar> --consumer <other mod's jar>`. Its own self-test is
 `java tools/linkcheck/LinkCheckSelfTest.java`; see `tools/linkcheck/README.md`.
 
-**Automated two-player test (Fabric, dev only).** One command starts a dedicated Fabric server and two Fabric dev clients,
-Player1 (op) and Player2, and drives them with a script: the P key with the default key bindings, party create, invite and
-accept, a click on a rank button, in the Claims tab claim, unclaim, the Private / Team switch and an oversize selection,
-the roles of the Team tab, a live and a restart-only option of the Admin tab, the team and the player bonus, a crafted
-admin request of the non-admin that must be rejected, and screenshots of every tab at GUI scale 2 and 4. Every assertion
-is checked against a snapshot of the server state, not only against what the screen shows. The command is
+**Automated two-player test (Fabric, dev only).** One command starts a dedicated Fabric server and two Fabric dev clients
+with Xaero's World Map, Player1 (op) and Player2, and drives them with a script: the P key with the default key bindings,
+party create, invite and accept, a click on a rank button, Claim and Unclaim on the Overview page, the grouped player
+config (collapse a group, search, change a value, reset it), in the Claims page claim, unclaim, the Private / Team switch,
+an oversize selection and the three zoom steps, the roles of the Team page, a live and a restart-only option of the Admin
+page, the team and the player bonus, a crafted admin request of the non-admin that must be rejected, on the World Map the
+Claiming button and the right-click entries (Claim as Team once, Claim as Private, the mode switch, Open claims menu; for
+Player2 Claim as Team against the team's claim role), and screenshots of every page at GUI scale 2 and 4. Each of the 73
+scripted assertions is checked against a snapshot of the server state, not only against what the screen shows; the report
+adds the runner's own checks (79 in all). The command is
 `pwsh -File tools/twoplayertest/Run-TwoPlayerTest.ps1`; options: `-DryRun` (prerequisites, world preparation, build and a check of
 the run tasks and of the result merge, without starting the server or a client), `-SkipBuild`, `-OutDir <folder>`.
 Exit code 0: every assertion passed; 1: one failed or a wait timed out; 2: none failed, but one was skipped; 3: the run

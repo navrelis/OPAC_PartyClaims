@@ -390,7 +390,7 @@ publishing {
     }
 }
 
-// [Team Claims] ---- The automated two-player test of the 1.4 hub (dev only) ----
+// [Team Claims] ---- The automated two-player test of the 1.5 hub (dev only) ----
 //
 //   pwsh tools/twoplayertest/Run-TwoPlayerTest.ps1 [-DryRun]          the one command: server + two clients + report
 //   gradlew :Fabric:runTwoPlayerTestSelfCheck -PtwoPlayerTest         headless self-check of the harness (no window)
