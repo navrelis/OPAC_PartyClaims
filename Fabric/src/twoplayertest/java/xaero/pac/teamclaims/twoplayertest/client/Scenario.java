@@ -1311,7 +1311,11 @@ public final class Scenario implements Runnable {
 	private static final String SHARE_SEARCH = "shareLocationWithParty";
 	private static final String SHARE_ID = "parties.sharelocationwithparty";
 	private static final String SHARE_SNAPSHOT_KEY = "parties.shareLocationWithParty";
-	private static final String RESET_TEXT = "↺";
+	private static final String RESET_KEY = "gui.xaero_pac_config_reset_tooltip";//the reset button draws an icon, its message is this key
+
+	private static boolean isResetButton(AbstractWidget widget) {
+		return widget instanceof Button && widget.getMessage().getContents() instanceof TranslatableContents contents && RESET_KEY.equals(contents.getKey());
+	}
 
 	private PlayerConfigScreen configScreen() {
 		if(!(mc.screen instanceof PlayerConfigScreen screen))
@@ -1406,14 +1410,14 @@ public final class Scenario implements Runnable {
 		int x = Ui.getInt(element, "x");
 		int y = Ui.getInt(element, "y");
 		for(GuiEventListener listener : Ui.all(configScreen()))
-			if(listener instanceof AbstractWidget widget && widget.visible && widget.getX() == x && widget.getY() == y && !RESET_TEXT.equals(widget.getMessage().getString()))
+			if(listener instanceof AbstractWidget widget && widget.visible && widget.getX() == x && widget.getY() == y && !isResetButton(widget))
 				return widget;
 		return null;
 	}
 
 	private Button shareResetButton() {
 		int y = Ui.getInt(shareElement(), "y");
-		for(Button button : Ui.buttonsWithText(configScreen(), RESET_TEXT))
+		for(Button button : Ui.buttons(configScreen(), b -> b.visible && isResetButton(b)))
 			if(button.getY() == y)
 				return button;
 		return null;
@@ -1451,7 +1455,7 @@ public final class Scenario implements Runnable {
 		d.waitFrames(5);
 		boolean shown = d.call("reset button?", () -> shareResetButton() != null);
 		String shot = d.screenshot("p1-config-changed");
-		return verdict(shown, "the " + RESET_TEXT + " button next to the changed option right after the click",
+		return verdict(shown, "the reset button (arrow icon) next to the changed option right after the click",
 				shown ? "it is there" : "it is NOT there (it only appears after a relayout of the page)", shot);
 	}
 
