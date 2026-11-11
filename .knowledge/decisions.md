@@ -49,3 +49,11 @@
 - 2026-10-17 v1.4: shared-key check compares bound key + key modifier via IKeyBindingHelper, not KeyMapping.same() (NeoForge's same() treats P and Ctrl+P as conflicting).
 - 2026-10-17 v1.4: instance start check uses the pack's perf harness (py perf_client.py run startup --profile owner); py (Python 3.14) is available, the earlier 'Python not installed' note only meant 'python' on PATH.
 - 2026-10-18 v1.4: Graphify rebuilt code-only (AST) in this worktree's graphify-out, untracked like before; the main-checkout graph came from another repo path and the fabric-port code, so an incremental update could not match it.
+- 2026-11-11 v1.5: before any change, 1.4.0 tagged `v1.4.0` and pushed; new work on `claude/opac-1.5-unified-menu` (owner: "push first so we can go back").
+- 2026-11-11 v1.5: World Map integration = Fabric-only mixin into World Map's public `SupportOpenPartiesAndClaims.addRightClickOptions` (TAIL) behind a mixin plugin that checks `isModLoaded("xaeroworldmap")`, plus a button added through Fabric `ScreenEvents.AFTER_INIT`; overrides the 1.4 non-goal "no World Map menu entries" (owner asked). If a World Map update changes the method, the entries are missing, nothing crashes.
+- 2026-11-11 v1.5: World Map comes from the Modrinth maven (`maven.modrinth:xaeros-world-map:XIR7GzC3` = 1.47.0) as modCompileOnly + modLocalRuntime; never shipped, no local jar path in the build.
+- 2026-11-11 v1.5: "Claim as Team/Private" is one-shot (set `claims.usedSub`, send area claim, restore the previous value); the persistent switch is a separate entry and the map button.
+- 2026-11-11 v1.5: the hub replaces OPAC's main menu at every entry point; upstream `MainMenu`/`ConfigMenu` sources stay in the tree (unreferenced) to keep upstream merges clean.
+- 2026-11-11 v1.5: the detailed config screen is improved in place (`PlayerConfigScreen`, grouped/searchable) instead of a second copy, so World Map's "player config" path and the hub get the same screen; public signatures unchanged (linkcheck).
+- 2026-11-11 v1.5: new fork client toml `openpartiesandclaims-teamclaims-client.toml` for client options (upstream has no client config registered).
+- 2026-11-11 v1.5: workers run through start_session worktrees cut from the working branch (the 1.4 manual-worktree rule was for the Agent tool's isolation); lead checks each branch base on review.

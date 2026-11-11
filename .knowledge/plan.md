@@ -1,20 +1,19 @@
-# Plan — v1.4.0: claims hub and admin menu
+# Plan — v1.5.0: one menu + Xaero's World Map integration
 
 Status: open / in progress / in review / done. Size S/L, difficulty E/H. One Gradle invocation per checkout at a time.
-(v1.3.0 plan: git history of this file.) Design: `design-1.4.md`.
+(v1.4.0 plan: git history of this file.) Working branch `claude/opac-1.5-unified-menu`.
 
 | # | Task | Size/Diff | Model | Depends | Status | Definition of done |
 |---|------|-----------|-------|---------|--------|--------------------|
-| 0 | Mapping, design, owner question round | – | lead | – | done | design-1.4.md, requirements.md |
-| 1 | Rank-button bug: stable member order (owner, name, uuid) + gametest | S/E | Sonnet | 0 | done (102 / 136 per loader) | test fails with old order, passes with new; both loaders green |
-| 2 | Server backend: admin permission (op 2 or node), config registry of both specs (scalar options, ranges, restart flag, pending values), get/set packets, per-team bonus (JSON, budget, command), player bonus read/write, team info packet for the Team tab, network version bump, gametests | L/H | Opus (own worktree) | 0 | done (113 / 147 per loader, save-compat 4) | all new packets with codec + handler tests; non-admin rejected; restart-only values pending; old team JSON loads; both loaders green |
-| 3 | Hub frame + Claims tab: P key, tab bar, Party tab = party screen, chunk grid, selection + area requests, Private/Team toggle, budget bars | L/E | Sonnet | 1 | done (110 per loader; screens not yet seen in game) | builds both loaders; screen works in dev client |
-| 4a | Team tab + Claims tab uses team info (sub index, max action size) | L/E | Sonnet (this checkout) | 2, 3 | done (128 per loader) | builds; Team tab edits go through existing commands and option packets |
-| 4b | Admin tab (configs, players, teams) | L/E | Sonnet (worktree ../opac-t4-admin) | 2, 3 | done (135 / 169 per loader, merged 9ca8a7a6) | builds; every admin action goes through task 2's packets |
-| 5 | Docs/release prep: version 1.4.0+opac.0.32.7, README, changelog, CURSEFORGE.md, lang en + de complete | S/E | Sonnet | 4 | done (rechecked after 4b) | docs match behaviour |
-| 8 | Hub key P vs vanilla Social Interactions (P): with both on P vanilla wins (one mapping per key); route the conflicting social click to the hub | S/E | Sonnet (this checkout) | 4b | done (135 / 135 both loaders; in-game proof via T9) | P opens the hub with default keys; build + tests green |
-| 9 | Automated two-player client test (owner: no computer-use): dev-only scripted client driver for runServer + runClient + runClient2, opens hub/Claims/Team/Admin, clicks rank buttons, screenshots, asserts client and server state, report file | L/H | Opus (worktree ../opac-clienttest) | 4b | done (55 / 55 PASS, 2 real runs, no harness change; runner script added 60606a99) | one command runs server + 2 clients unattended, writes screenshots + pass/fail per assertion, exits; committed |
-| 6 | Acceptance: all test runs, dedicated server with two players, linkcheck vs World Map/Minimap | – | lead | 1–5, 8, 9 | done | checklist in report.md |
-| 7 | Release: jars to ExportedJars/v1.4.0, dev instance mods/, push, CurseForge upload both loaders, report | – | lead | 6 | done | file ids in report.md |
+| 0 | Push 1.4.0 state (tag `v1.4.0`), questions, plan | – | lead | – | done | tag + branch pushed |
+| 1 | Hub frame: sidebar navigation, pages Overview + Settings, all tabs laid out in the content area, OPAC key + `openMainMenu` API open the hub, old main-menu features (claim/forceload/anchor here, claiming mode for ops) moved in | L/H | Opus (hub-frame) | 0 | open | builds both loaders, all gametests green, old menu unreachable, harness compiles |
+| 2 | World Map (Fabric): compile-only + dev runtime dep, conditional mixin adding right-click entries (claim as team / private, mode switch, open menu), map button with mode + budget, client config toml (button on/off, position) | L/E | Sonnet (worldmap) | 0 | open | Fabric + NeoForge build; gametests green both loaders; logic tests; dev client starts with World Map |
+| 3 | Detailed settings screen (PlayerConfigScreen) grouped by category, collapsible, search box, reset to default; public API unchanged | L/E | Sonnet (settings-view) | 0 | open | builds; gametests green; linkcheck vs World Map clean |
+| 4 | Claims map: terrain from loaded chunks, zoom, legend, default zoom client option | L/E | Sonnet | 1, 2 | open | builds; tests green; screenshot in two-player test |
+| 5 | Settings page: client options section; default changes (lead list) | S/E | Sonnet | 1, 2, 3 | open | builds; tests green |
+| 6 | Two-player test: new pages + World Map entries + map button, screenshots | L/H | Sonnet or Opus | 1–5 | open | runner green, screenshots checked by lead |
+| 7 | Docs: version 1.5.0, README, changelog, CURSEFORGE.md, de lang complete | S/E | Sonnet | 1–5 | open | docs match behaviour |
+| 8 | Acceptance + release (instance, CurseForge, push, report) | – | lead | 1–7 | open | report.md in session folder |
 
-Usage tally (long = 2, short = 1): Opus T2 (2) + T9 (2) = 4; Sonnet T1 (1), T3 (2), T4a (2), T5 (1), T4b (2), docs recheck (1), T8 (1), README test section (1) = 11. Opus ≈ 27 %. No precision overrides.
+Parallel now: 1, 2, 3 (disjoint files; lang keys at fixed anchors). Usage tally (long = 2, short = 1): Opus T1 (2);
+Sonnet T2 (2), T3 (2).

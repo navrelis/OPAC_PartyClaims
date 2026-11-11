@@ -1,25 +1,30 @@
-# Requirements (session 2026-10-17, v1.4.0)
+# Requirements (session 2026-11-11, v1.5.0 "one menu + World Map")
 
-Earlier state: `1.3.0+opac.0.32.7` on `v1.3-dev` (`197a2225`), shipped in Nytheria as `opac-team-claims-fabric-1.21.1-v1.3.0.jar`.
-Requirements of v1.3.0 and older: git history of this file. Design and owner decisions: `design-1.4.md`.
+Earlier state: 1.4.0 (`2a6e34d7`, tag `v1.4.0`, branch `claude/opac-admin-rework-d73a06`). Requirements of 1.4.0 and
+older: git history of this file.
 
-## Goals (owner, via the Nytheria lead session)
-1. Easier in-game UI for party/claim settings and for claiming and unclaiming.
-2. Same for team claims: configurable in a GUI, limits can be raised.
-3. Admin menu: every server/admin setting that /opac exposes (claim, forceload, team claim limits and config, per-player
-   and per-party overrides), editable in a GUI, permission-gated.
-4. Bug: party screen rank button changes a different row. Fix first, own commit, proven by test or in game.
+## Goals (owner, 2026-11-11)
+1. Xaero's World Map integration (Fabric 1.21.1, newest World Map = 1.47.0 from the Nytheria instance): right-click
+   entries "Claim as Team", "Claim as Private", a switch for the claim mode, "Open claims menu"; a button on the map
+   showing mode + budget ("Claiming: Team 34/120"), click switches.
+2. One menu: the hub (P) is the default menu and replaces OPAC's old main menu (OPAC key and API open the hub too).
+   Pages Overview, Party, Claims, Team, Settings, Admin; Settings holds all of OPAC's detailed config screens.
+3. Overhaul: more appealing, easier to navigate (sidebar with icons, sections, grouped + searchable detailed settings
+   with reset to default), vanilla-style widgets, no new library.
+4. Claims map in the menu: terrain from loaded chunks behind the claim colours, zoom, legend.
+5. Defaults and options: lead reviews Team Claims + client defaults (OPAC server defaults unchanged), adds client options
+   (World Map button on/off + position, map default zoom). Every change documented.
+6. Everything documented; owner can go back to 1.4.0 (tag `v1.4.0`, pushed before any change).
 
 ## Done means
-- Features work on a dedicated server with two players in game; tests green (both loaders, with and without FTB Teams).
-- Version 1.4.0; Fabric jar into the Nytheria dev instance `mods/` replacing 1.3.0 (do not commit there, list changed
-  pack files in the report); pushed to `claude/opac-admin-rework-d73a06` (never main, never force).
-- CurseForge upload (project 1704256, both loaders) after build, tests and in-game check pass.
-- `.knowledge/report.md` with a manual in-game checklist.
+- Version 1.5.0, both loaders build; World Map features Fabric only (NeoForge builds and works without them).
+- All gametests green (both loaders, with/without FTB Teams, save compat); two-player test extended and green with
+  World Map in the dev client; linkcheck vs World Map 1.47.0 + Minimap 26.6.0 clean.
+- Fabric jar into the Nytheria dev instance (old to mods_backup), CurseForge Release both loaders, pushed to
+  `claude/opac-1.5-unified-menu` (never main, never force); report with manual checklist.
 
 ## Standing constraints
-- As in 1.3.0 (git history of this file) plus: commit as Navrelis <111079703+navrelis@users.noreply.github.com>, no
-  Co-Authored-By, no real name or local paths in commits. Never kill javaw; game lock `F:\Coding\.knowledge\game.lock`.
-- Never overwrite an existing handoff file; own handoff = `.knowledge/handoff-opac-admin-rework-2026-10-17.md`.
-- 2026-10-17 owner: CurseForge 1.4.0 release type = Release (both loaders); relation-slug check override OK for this upload.
-- 2026-10-17 lead local_14a71120 (23:28): game.lock free, OPAC last workstream; take the lock when T9 headless passes; old instance jar goes to F:\Coding\NytheriaDevelopment\mods_backup\ (not deleted); short instance client start with all jars, check OPAC WARN/ERROR; then release lock, CF upload, push.
+- As in 1.4.0 (`project.md` conventions): no new shipped dependencies (World Map compile-only + dev runtime only),
+  upstream delta minimal and marked `[Team Claims]`, existing world data and configs keep loading.
+- Owner said: "do whatever you think is good", no further questions needed.
+- Owner's own `unified-xaero-worldmap` 2.0.4 only mixes into World Map's MapProcessor/MapSaveLoad (no conflict).
