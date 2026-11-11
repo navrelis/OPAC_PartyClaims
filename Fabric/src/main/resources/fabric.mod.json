@@ -21,7 +21,8 @@
     "environment": "*",
     "entrypoints": {
       "client": [
-        "xaero.pac.OpenPartiesAndClaimsFabric"
+        "xaero.pac.OpenPartiesAndClaimsFabric",
+        "xaero.pac.teamclaims.fabric.worldmap.TeamClaimsClientFabric"
       ],
       "server": [
         "xaero.pac.OpenPartiesAndClaimsFabric"
@@ -29,7 +30,8 @@
     },
     "mixins": [
       "${mod_id}.mixins.json",
-      "${mod_id}.fabric.mixins.json"
+      "${mod_id}.fabric.mixins.json",
+      "${mod_id}.worldmap.mixins.json"
     ],
   
     "depends": {

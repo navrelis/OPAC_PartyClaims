@@ -1,10 +1,12 @@
 package xaero.pac.teamclaims.neoforge;
 
 import net.minecraft.server.level.ServerPlayer;
+import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.EventPriority;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.fml.ModLoadingContext;
 import net.neoforged.fml.config.ModConfig;
+import net.neoforged.fml.loading.FMLLoader;
 import net.neoforged.neoforge.common.NeoForge;
 import net.neoforged.neoforge.event.RegisterCommandsEvent;
 import net.neoforged.neoforge.event.entity.player.PlayerEvent;
@@ -13,6 +15,7 @@ import net.neoforged.neoforge.event.server.ServerStoppingEvent;
 import net.neoforged.neoforge.event.tick.ServerTickEvent;
 import xaero.pac.common.event.api.v2.OPACServerAddonRegisterEvent;
 import xaero.pac.teamclaims.TeamClaimsCommon;
+import xaero.pac.teamclaims.config.TeamClaimsClientConfig;
 import xaero.pac.teamclaims.config.TeamClaimsServerConfig;
 
 /**
@@ -56,6 +59,12 @@ public final class TeamClaimsNeoForge {
         // which OPAC fires its addon register event). The active container is OPAC's own, as this runs in its constructor.
         ModLoadingContext.get().getActiveContainer().registerConfig(ModConfig.Type.SERVER,
                 TeamClaimsServerConfig.SPEC, TeamClaimsServerConfig.FILE_NAME);
+
+        // Its own CLIENT config file; the World Map button that uses it is Fabric only, but the file is the same on both.
+        if (FMLLoader.getDist() == Dist.CLIENT) {
+            ModLoadingContext.get().getActiveContainer().registerConfig(ModConfig.Type.CLIENT,
+                    TeamClaimsClientConfig.SPEC, TeamClaimsClientConfig.FILE_NAME);
+        }
 
         IEventBus bus = NeoForge.EVENT_BUS;
         bus.addListener(EventPriority.NORMAL, OPACServerAddonRegisterEvent.class,
