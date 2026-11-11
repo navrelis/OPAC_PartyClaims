@@ -1705,7 +1705,7 @@ public final class Scenario implements Runnable {
 
 	private Verdict mapToggleEntry() {
 		openMap();
-		rightClickMenu(chunkX + 2, chunkZ + 2, chunkX + 3, chunkZ + 3);
+		rightClickMenu(chunkX - 3, chunkZ - 1, chunkX - 2, chunkZ);// unclaimed: World Map offers our entries only next to its Claim Selected
 		selectEntry(KEY_TOGGLE_MODE);
 		JsonObject s = d.awaitServer("map-team-mode", SHORT, this::usesTeamSub);
 		boolean shown = d.poll(SHORT, () -> ClaimAsToggle.isTeamSelected() && mapButtonText().startsWith(modeLabel(true)));
@@ -1717,7 +1717,7 @@ public final class Scenario implements Runnable {
 	private Verdict mapOpenMenu() {
 		openMap();
 		Screen map = d.call("map", () -> mc.screen);
-		rightClickMenu(chunkX + 2, chunkZ + 2, chunkX + 3, chunkZ + 3);
+		rightClickMenu(chunkX - 3, chunkZ - 1, chunkX - 2, chunkZ);
 		selectEntry(KEY_OPEN_MENU);
 		boolean open = d.poll(SHORT, () -> isHub(mc.screen));
 		d.waitTicks(10);
