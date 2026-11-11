@@ -93,6 +93,12 @@ public final class TextWidgetListElement extends SimpleValueWidgetListElement<St
 		}
 	}
 
+	//[Team Claims] the reset button of the config screen: puts the text in the box and confirms it like the confirm button
+	public void setValueAndConfirm(String text){
+		editBox.setValue(text);
+		onConfirmButton(confirmButton);
+	}
+
 	public void clearBox(){
 		editBox.setValue("");
 	}

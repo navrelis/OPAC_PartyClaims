@@ -72,6 +72,10 @@ public abstract class WidgetListElement<E extends WidgetListElement<E>> {
 	
 	public void render(GuiGraphics guiGraphics) {
 	}
+
+	//[Team Claims] drawn before the widgets, for a background behind the row
+	public void renderRowBackground(GuiGraphics guiGraphics) {
+	}
 	
 	public static abstract class Builder<E extends WidgetListElement<E>, B extends Builder<E, B>> {
 		
