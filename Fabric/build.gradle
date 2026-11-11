@@ -22,6 +22,18 @@ repositories{
     maven {
         url = "https://maven.jamieswhiteshirt.com/libs-release"
     } // Reach Entity Attributes
+    // [Team Claims] Xaero's World Map (Modrinth maven): compile-only and dev-run-only, never shipped (see the dependencies)
+    exclusiveContent {
+        forRepository {
+            maven {
+                name = "ModrinthExclusive"
+                url = "https://api.modrinth.com/maven"
+            }
+        }
+        filter {
+            includeGroup "maven.modrinth"
+        }
+    }
 }
 
 dependencies {
@@ -46,6 +58,11 @@ dependencies {
     // Still dev-only: never include()'d, so it never ends up in the shipped mod jar, and it is
     // not declared in the production fabric.mod.json's "depends".
     modImplementation "net.fabricmc.fabric-api:fabric-gametest-api-v1:2.0.5+6fc22b9919"
+
+    // [Team Claims] Xaero's World Map 1.47.0 for Fabric 1.21.1 (bundles xaerolib): the map screen integration of
+    // xaero.pac.teamclaims.fabric.worldmap. Version id XIR7GzC3 = fabric-1.21.1-1.47.0. Not include()'d, not in the jar.
+    modCompileOnly "maven.modrinth:xaeros-world-map:XIR7GzC3"
+    modLocalRuntime "maven.modrinth:xaeros-world-map:XIR7GzC3"
 
     modCompileOnly "curse.maven:ftbranks-472659:6431745"//home: https://www.curseforge.com/minecraft/mc-mods/ftb-ranks-fabric
     modCompileOnly("dev.architectury:architectury-fabric:${architectury_version}") { transitive = false }//source: https://github.com/architectury/architectury-api
