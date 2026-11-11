@@ -62,10 +62,9 @@ public final class TeamClaimsWorldMapTestCases {
                 "expected only the private mode name while the counts are unknown, got " + unknown);
 
         TranslatableContents toggle = translatable(WorldMapClaimingLogic.toggleLabel(false), helper);
-        helper.assertTrue(WorldMapClaimingLogic.KEY_TOGGLE_MODE.equals(toggle.getKey()) && toggle.getArgs().length == 2
-                        && WorldMapClaimingLogic.KEY_MODE_PRIVATE.equals(translatable((Component) toggle.getArgs()[0], helper).getKey())
-                        && WorldMapClaimingLogic.KEY_MODE_TEAM.equals(translatable((Component) toggle.getArgs()[1], helper).getKey()),
-                "expected the toggle label to name the current mode (private) first and the other (team) second");
+        helper.assertTrue(WorldMapClaimingLogic.KEY_TOGGLE_MODE.equals(toggle.getKey()) && toggle.getArgs().length == 1
+                        && WorldMapClaimingLogic.KEY_MODE_TEAM.equals(translatable((Component) toggle.getArgs()[0], helper).getKey()),
+                "expected the toggle label to name only the mode it switches to (team) while the current one is private");
         helper.succeed();
     }
 

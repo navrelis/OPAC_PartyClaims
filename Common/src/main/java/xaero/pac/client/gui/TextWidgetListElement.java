@@ -24,10 +24,14 @@ import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.core.Vec3i;
+import net.minecraft.client.gui.Font;
+import net.minecraft.locale.Language;
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.FormattedText;
 import net.minecraft.util.FormattedCharSequence;
 import xaero.pac.client.gui.widget.TextWidgetEditBox;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.function.BiConsumer;
@@ -37,6 +41,7 @@ import java.util.function.Predicate;
 public final class TextWidgetListElement extends SimpleValueWidgetListElement<String, TextWidgetListElement> {
 
 	private final Component title;
+	private final int boxWidth;
 	private EditBox editBox;
 	private Button confirmButton;
 	private Button cancelButton;
@@ -44,10 +49,11 @@ public final class TextWidgetListElement extends SimpleValueWidgetListElement<St
 	private final BiConsumer<TextWidgetListElement, String> valueConfirmResponder;
 	private final Predicate<String> validator;
 	
-	private TextWidgetListElement(int w, int h, boolean mutable, Component title, BiFunction<TextWidgetListElement, Vec3i, AbstractWidget> widgetSupplier, List<FormattedCharSequence> tooltip, BiConsumer<TextWidgetListElement, String> valueConfirmResponder, Predicate<String> validator, String startValue) {
+	private TextWidgetListElement(int w, int h, boolean mutable, Component title, BiFunction<TextWidgetListElement, Vec3i, AbstractWidget> widgetSupplier, List<FormattedCharSequence> tooltip, BiConsumer<TextWidgetListElement, String> valueConfirmResponder, Predicate<String> validator, String startValue, int boxWidth) {
 		super(startValue, w, h, mutable, widgetSupplier, tooltip);
 		this.confirmedText = startValue;
 		this.title = title;
+		this.boxWidth = boxWidth;
 		this.valueConfirmResponder = valueConfirmResponder;
 		this.validator = validator;
 	}
@@ -110,10 +116,36 @@ public final class TextWidgetListElement extends SimpleValueWidgetListElement<St
 		updateBoxColor();
 	}
 	
+	//[Team Claims] the label has the space before the edit box
+	private int getLabelSpace() {
+		return w - boxWidth - 42 - 6;
+	}
+
+	private boolean isLabelTrimmed() {
+		return Minecraft.getInstance().font.width(title) > getLabelSpace();
+	}
+
+	//[Team Claims] a label that does not fit is cut with "...", the tooltip then starts with the full label
+	@Override
+	public List<FormattedCharSequence> getTooltip() {
+		List<FormattedCharSequence> tooltip = super.getTooltip();
+		if(!isLabelTrimmed())
+			return tooltip;
+		List<FormattedCharSequence> result = new ArrayList<>();
+		result.add(title.getVisualOrderText());
+		if(tooltip != null)
+			result.addAll(tooltip);
+		return result;
+	}
+
 	@Override
 	public final void render(GuiGraphics guiGraphics) {
 		super.render(guiGraphics);
-		guiGraphics.drawString(Minecraft.getInstance().font, title, x + 2, y + 6, mutable ? -1 : 14737632/*copied from editbox class*/);
+		Font font = Minecraft.getInstance().font;
+		FormattedCharSequence label = title.getVisualOrderText();
+		if(isLabelTrimmed())
+			label = Language.getInstance().getVisualOrder(FormattedText.composite(font.substrByWidth(title, getLabelSpace() - font.width("...")), FormattedText.of("...")));
+		guiGraphics.drawString(font, label, x + 2, y + 6, mutable ? -1 : 14737632/*copied from editbox class*/);
 	}
 	
 	public static final class Builder extends SimpleValueWidgetListElement.Builder<String, TextWidgetListElement, Builder> {
@@ -183,7 +215,7 @@ public final class TextWidgetListElement extends SimpleValueWidgetListElement<St
 				box.setFilter(filter);
 				return box;
 			};
-			return new TextWidgetListElement(w, h, mutable, title, widgetSupplier, tooltip, responder, validator, startValue);
+			return new TextWidgetListElement(w, h, mutable, title, widgetSupplier, tooltip, responder, validator, startValue, boxWidth);
 		}
 		
 		public static Builder begin() {

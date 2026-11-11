@@ -75,10 +75,10 @@ public final class WorldMapClaimingLogic {
 	}
 
 	/**
-	 * Gets the label of the right-click entry that switches the claim mode: the current choice and the other one.
+	 * Gets the label of the right-click entry that switches the claim mode: the mode it switches to, the other one.
 	 */
 	public static Component toggleLabel(boolean team) {
-		return Component.translatable(KEY_TOGGLE_MODE, modeName(team), modeName(!team));
+		return Component.translatable(KEY_TOGGLE_MODE, modeName(!team));
 	}
 
 	/**

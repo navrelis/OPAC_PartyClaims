@@ -25,7 +25,9 @@ import java.util.function.Consumer;
 
 /**
  * The Team Claims entries of the right-click menu of the map screen of Xaero's World Map: claim the selection once as team or
- * as private, switch the claim mode, and open the claims menu.
+ * as private, switch the claim mode, and open the claims menu. The switch and the menu entry follow the "Claim Selected" and
+ * the "Unclaim Selected" entries of World Map (a selection that World Map shows as claimed offers "Unclaim Selected" instead
+ * of "Claim Selected"); the one-shot claims only follow "Claim Selected".
  * <p>
  * The one-shot claims follow the "Claim Selected" entry of World Map ({@code SupportOpenPartiesAndClaims$2}): the same area,
  * clamped to the claim distance unless in admin mode, the same message for a large area and the same
@@ -36,6 +38,7 @@ import java.util.function.Consumer;
 public final class WorldMapRightClickEntries {
 
 	private static final String WORLD_MAP_CLAIM_KEY = "gui.xaero_pac_claim_chunks";
+	private static final String WORLD_MAP_UNCLAIM_KEY = "gui.xaero_pac_unclaim_chunks";
 	private static final String LARGE_CLAIM_MESSAGE_KEY = "gui.xaero_pac_requested_large_claim";
 	private static final String INTERRUPT_KEY = "gui.xaero_pac_interrupt_claiming";
 	/** The area (in chunks) from which World Map says that a large area is being claimed. */
@@ -62,26 +65,32 @@ public final class WorldMapRightClickEntries {
 	}
 
 	/**
-	 * Adds the entries after those of World Map, if World Map offers the "Claim Selected" entry (so the server has the mod and
-	 * there is a selection that can be claimed).
+	 * Adds the entries after those of World Map, if World Map offers the "Claim Selected" or the "Unclaim Selected" entry (so
+	 * the server has the mod and there is a selection that can be claimed or unclaimed). The one-shot claims are only added
+	 * next to "Claim Selected".
 	 */
 	public static void add(IRightClickableElement screen, ArrayList<RightClickOption> options, ResourceKey<Level> dimension, MapTileSelection selection, MapProcessor mapProcessor) {
-		if(selection == null || !hasWorldMapClaimEntry(options))
+		if(selection == null)
+			return;
+		boolean claimEntry = hasWorldMapEntry(options, WORLD_MAP_CLAIM_KEY);
+		if(!claimEntry && !hasWorldMapEntry(options, WORLD_MAP_UNCLAIM_KEY))
 			return;
 		boolean team = ClaimAsToggle.isTeamSelected();
-		options.add(new ActionOption("gui.xaero_pac_wm_claim_as_team", options.size(), screen, TeamClaimsWorldMapState.isUsable(true),
-				s -> claimOnce(true, dimension.location(), selection, mapProcessor)));
-		options.add(new ActionOption("gui.xaero_pac_wm_claim_as_private", options.size(), screen, TeamClaimsWorldMapState.isUsable(false),
-				s -> claimOnce(false, dimension.location(), selection, mapProcessor)));
+		if(claimEntry) {
+			options.add(new ActionOption("gui.xaero_pac_wm_claim_as_team", options.size(), screen, TeamClaimsWorldMapState.isUsable(true),
+					s -> claimOnce(true, dimension.location(), selection, mapProcessor)));
+			options.add(new ActionOption("gui.xaero_pac_wm_claim_as_private", options.size(), screen, TeamClaimsWorldMapState.isUsable(false),
+					s -> claimOnce(false, dimension.location(), selection, mapProcessor)));
+		}
 		options.add(new ActionOption(WorldMapClaimingLogic.KEY_TOGGLE_MODE, options.size(), screen, TeamClaimsWorldMapState.isUsable(true),
-				s -> ClaimAsToggle.toggle(TeamClaimsWorldMapState.teamSubId())).setNameFormatArgs(WorldMapClaimingLogic.modeName(team), WorldMapClaimingLogic.modeName(!team)));
+				s -> ClaimAsToggle.toggle(TeamClaimsWorldMapState.teamSubId())).setNameFormatArgs(WorldMapClaimingLogic.modeName(!team)));
 		options.add(new ActionOption("gui.xaero_pac_wm_open_menu", options.size(), screen, true,
 				s -> HubTabs.openLast(Minecraft.getInstance(), null, s)));
 	}
 
-	private static boolean hasWorldMapClaimEntry(ArrayList<RightClickOption> options) {
+	private static boolean hasWorldMapEntry(ArrayList<RightClickOption> options, String key) {
 		for(RightClickOption option : options)
-			if(option.getDisplayName().getContents() instanceof TranslatableContents contents && WORLD_MAP_CLAIM_KEY.equals(contents.getKey()))
+			if(option.getDisplayName().getContents() instanceof TranslatableContents contents && key.equals(contents.getKey()))
 				return true;
 		return false;
 	}

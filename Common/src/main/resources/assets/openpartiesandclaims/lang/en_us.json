@@ -873,7 +873,7 @@
 	"gui.xaero_pac_hub_claim_as_other_mode_tooltip" : "This only applies while you claim as a player. Change the claiming mode in the Open Parties and Claims menu.",
 	"gui.xaero_pac_wm_claim_as_team" : "Claim as Team",
 	"gui.xaero_pac_wm_claim_as_private" : "Claim as Private",
-	"gui.xaero_pac_wm_toggle_mode" : "Claim mode: %1$s (switch to %2$s)",
+	"gui.xaero_pac_wm_toggle_mode" : "Switch to %1$s claiming",
 	"gui.xaero_pac_wm_open_menu" : "Open claims menu",
 	"gui.xaero_pac_wm_button" : "Claiming: %1$s",
 	"gui.xaero_pac_wm_mode_team" : "Team",

@@ -384,18 +384,21 @@ entries to the map screen. World Map is not needed and not included: without it 
 the map screen is unchanged (use the Claim as button of the hub to switch between private and team claims there).
 
 **Right-click menu.** Select an area on the map as usual and right-click. Next to World Map's own entries (they are
-only added where World Map offers **Claim Selected**, so on a server with the mod and with a selection) you get:
+only added where World Map offers **Claim Selected** or **Unclaim Selected**, so on a server with the mod and with a
+selection) you get:
 
-* **Claim as Team** and **Claim as Private**: claim the selection once, as the team or as yourself, whatever the
+* **Claim as Team** and **Claim as Private** (only next to **Claim Selected**, not on a selection that World Map shows
+  as claimed and offers **Unclaim Selected** for): claim the selection once, as the team or as yourself, whatever the
   claim mode is. This is a *one-shot*: the claim mode (`claims.usedSub`, the same switch as **Claim as** in the hub) is
   set to your choice, the claim request goes out, and the mode is put back to what it was. Nothing is changed if the
   choice is the mode you are in. The request is the one **Claim Selected** sends (the same area, limited to the claim
   distance unless you are in admin mode, and the same message for a large area), so every OPAC rule applies. They are
   disabled while the claiming mode is not "player" (party or server claiming), and Claim as Team also while you have
   no team.
-* **Claim mode: Private (switch to Team)** (it names the current and the other mode): switches the claim mode for good,
+* **Switch to Team claiming** or **Switch to Private claiming** (it names the other mode, so it reads the opposite of
+  the mode you are in; it is also there on a selection with **Unclaim Selected**): switches the claim mode for good,
   exactly like the **Claim as** button of the hub; it decides what **Claim Selected** claims from then on.
-* **Open claims menu**: opens the hub on the page you used last. Back returns to the map.
+* **Open claims menu** (also on a selection with **Unclaim Selected**): opens the hub on the page you used last. Back returns to the map.
 
 **Button on the map.** A button on the map screen shows the claim mode and what is used of its pool, for example
 **Claiming: Team 34/120** or **Claiming: Private 12/50**, and a click switches the mode like the entry above. The
