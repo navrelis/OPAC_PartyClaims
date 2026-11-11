@@ -21,7 +21,6 @@ package xaero.pac.client;
 import net.minecraft.client.Minecraft;
 import xaero.pac.OpenPartiesAndClaims;
 import xaero.pac.client.event.api.OPACClientAddonRegisterEventContext;
-import xaero.pac.client.gui.MainMenu;
 import xaero.pac.client.gui.hub.HubTabs;
 
 public class ClientTickHandler {
@@ -35,7 +34,7 @@ public class ClientTickHandler {
 			firstTickHandled = true;
 		}
 		if(clientData.getKeyBindings().openModMenu.consumeClick())
-			Minecraft.getInstance().setScreen(new MainMenu(null, null));
+			HubTabs.openLast(Minecraft.getInstance(), null, null);//[Team Claims] the OPAC menu is the hub
 		//[Team Claims] P is also vanilla's Social Interactions key and only one of the two gets the presses, so while they share a key the hub takes both
 		int hubClicks = 0;
 		while(clientData.getKeyBindings().openHubMenu.consumeClick())

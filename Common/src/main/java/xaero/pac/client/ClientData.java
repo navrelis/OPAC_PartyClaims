@@ -23,7 +23,7 @@ import net.minecraft.client.gui.screens.Screen;
 import xaero.pac.client.claims.ClientClaimsManager;
 import xaero.pac.client.claims.sync.ClientClaimsSyncHandler;
 import xaero.pac.client.controls.XPACKeyBindings;
-import xaero.pac.client.gui.MainMenu;
+import xaero.pac.client.gui.hub.HubTabs;
 import xaero.pac.client.parties.party.ClientPartyStorage;
 import xaero.pac.client.player.config.PlayerConfigClientStorageManager;
 import xaero.pac.client.player.config.PlayerConfigClientSynchronizer;
@@ -185,7 +185,7 @@ public final class ClientData implements IClientData<PlayerConfigClientStorageMa
 
 	@Override
 	public void openMainMenuScreen(@Nullable Screen escape, @Nullable Screen parent) {
-		Minecraft.getInstance().setScreen(new MainMenu(escape, parent));
+		HubTabs.openLast(Minecraft.getInstance(), escape, parent);//[Team Claims] the OPAC menu is the hub
 	}
 	
 }
