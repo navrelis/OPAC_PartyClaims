@@ -18,6 +18,9 @@
 
 package xaero.pac.client.gui.hub;
 
+import javax.annotation.Nullable;
+import java.util.Collection;
+
 /**
  * The kinds of chunk that the grid of the Claims tab tells apart, besides the colour that each claim has from its owner.
  * <p>
@@ -33,6 +36,8 @@ public enum ClaimCategory {
 	OWN_TEAM,
 	/** A claim of another member of the party of the local player, or a claim owned by that party. */
 	PARTY,
+	/** A claim of a member of an allied party. */
+	ALLY,
 	/** A claim of any other player. */
 	OTHER,
 	/** A server claim. */
@@ -43,7 +48,7 @@ public enum ClaimCategory {
 	/**
 	 * Decides the category of a claimed chunk. The server and expired owners come first, then the claims owned by a party
 	 * (which are the party's, whoever is the owner), then the claims of the local player, and then the other members of
-	 * the party.
+	 * the party, then the allies of that party.
 	 *
 	 * @param serverOwner  whether the owner is the server
 	 * @param expiredOwner  whether the claim is an expired one
@@ -51,17 +56,37 @@ public enum ClaimCategory {
 	 * @param partyMember  whether the owner is a member of the party of the local player
 	 * @param partyOwned  whether the claim is owned by a party, as with the server option {@code partyOwnedClaims}
 	 * @param team  whether the claim, if it is the local player's, uses the team sub-config
+	 * @param ally  whether the owner (or the party that owns the claim) is an ally of the party of the local player
 	 */
-	public static ClaimCategory classify(boolean serverOwner, boolean expiredOwner, boolean self, boolean partyMember, boolean partyOwned, boolean team) {
+	public static ClaimCategory classify(boolean serverOwner, boolean expiredOwner, boolean self, boolean partyMember, boolean partyOwned, boolean team, boolean ally) {
 		if(serverOwner)
 			return SERVER;
 		if(expiredOwner)
 			return EXPIRED;
 		if(partyOwned)
-			return self || partyMember ? PARTY : OTHER;
+			return self || partyMember ? PARTY : ally ? ALLY : OTHER;
 		if(self)
 			return team ? OWN_TEAM : OWN_PRIVATE;
-		return partyMember ? PARTY : OTHER;
+		if(partyMember)
+			return PARTY;
+		return ally ? ALLY : OTHER;
+	}
+
+	/**
+	 * Tells whether the owner of a claim belongs to an allied party. The client is told the ID, the name and the default
+	 * name of each ally, but not which players belong to it, so the owner is matched by name: a claim owned by a party
+	 * carries the name of the party, and the default name of a party is made from the name of its owner (the same as
+	 * {@code Party.getDefaultName}), which finds the owner of an ally whose claims are the owner's own.
+	 *
+	 * @param allyNames  the names of the allied parties
+	 * @param allyDefaultNames  the default names of the allied parties
+	 * @param ownerPartyName  the name of the party that owns the claim, null if no party owns it
+	 * @param ownerUsername  the name of the player that owns the claim, null if unknown
+	 */
+	public static boolean isAllyOwner(Collection<String> allyNames, Collection<String> allyDefaultNames, @Nullable String ownerPartyName, @Nullable String ownerUsername) {
+		if(ownerPartyName != null && allyNames.contains(ownerPartyName))
+			return true;
+		return ownerUsername != null && allyDefaultNames.contains(String.format("%s's Party", ownerUsername));
 	}
 
 }

@@ -91,37 +91,54 @@ public final class TeamClaimsHubTestCases {
 
     /**
      * Whatever space the screen leaves (every size from 0 to 600 pixels, which covers GUI scales 1 to 4 on small and big
-     * windows), the grid is an odd square that never overflows that space, never has chunks bigger or smaller than the
-     * limits, shows at least 17 x 17 chunks wherever that fits at the smallest chunk size, and gets smaller in steps
-     * instead of jumping.
+     * windows) and whatever the zoom step, the grid is an odd square that never overflows that space, draws the chunks at
+     * the size of the step (6, 12 or 24 pixels) as long as 3 x 3 of them fit, shows more chunks when zoomed out, and the
+     * zoom step stays in its range.
      */
-    public static void gridFitNeverOverflowsAndKeepsEightChunksWhenItCan(GameTestHelper helper) {
-        int previousRadius = -1;
-        int previousSize = -1;
-        for (int side = 0; side <= 600; side++) {
-            HubGridFit.Fit fit = HubGridFit.fit(side);
-            helper.assertTrue(fit.cells() % 2 == 1 && fit.cells() == fit.radius() * 2 + 1, "expected an odd number of cells for the side " + side + ", got " + fit);
-            helper.assertTrue(fit.radius() >= HubGridFit.MIN_RADIUS && fit.radius() <= HubGridFit.MAX_RADIUS, "expected the radius within its limits for the side " + side + ", got " + fit);
-            helper.assertTrue(fit.cell() >= 1 && fit.cell() <= HubGridFit.MAX_CELL, "expected the chunk size within its limits for the side " + side + ", got " + fit);
-            if (side >= 3) // below that not even 3 x 3 chunks of one pixel fit
-                helper.assertTrue(fit.size() <= side, "expected the grid not to overflow the side " + side + ", got " + fit + " = " + fit.size());
-            if (side >= (HubGridFit.PREFERRED_MIN_RADIUS * 2 + 1) * HubGridFit.MIN_CELL)
-                helper.assertTrue(fit.radius() >= HubGridFit.PREFERRED_MIN_RADIUS, "expected at least 8 chunks to each side for the side " + side + ", got " + fit);
-            else if (side >= 3 * HubGridFit.MIN_CELL)
-                helper.assertTrue(fit.cell() >= HubGridFit.MIN_CELL, "expected the grid to shrink its radius before the chunks below the minimum size for the side " + side + ", got " + fit);
-            if (side >= 20) // from here the grid only gets bigger with more space
-                helper.assertTrue(fit.size() >= previousSize - HubGridFit.MAX_CELL && fit.radius() >= Math.min(previousRadius, HubGridFit.PREFERRED_MIN_RADIUS) - 1,
-                        "expected the grid not to shrink a lot when the side grows to " + side + ", got " + fit + " after size " + previousSize + " and radius " + previousRadius);
-            previousRadius = fit.radius();
-            previousSize = fit.size();
+    public static void gridFitNeverOverflowsAndFollowsTheZoomStep(GameTestHelper helper) {
+        helper.assertTrue(HubGridFit.cellForZoom(0) == HubGridFit.MIN_CELL && HubGridFit.cellForZoom(1) == 12 && HubGridFit.cellForZoom(2) == HubGridFit.MIN_CELL * 4,
+                "expected the chunk sizes 6, 12 and 24");
+        helper.assertTrue(HubGridFit.ZOOM_STEPS == 3 && HubGridFit.DEFAULT_ZOOM >= 0 && HubGridFit.DEFAULT_ZOOM < HubGridFit.ZOOM_STEPS, "expected 3 steps with the default among them");
+        helper.assertTrue(HubGridFit.clampZoom(-5) == 0 && HubGridFit.clampZoom(7) == HubGridFit.ZOOM_STEPS - 1 && HubGridFit.clampZoom(1) == 1, "expected the zoom step to be clamped to its range");
+        helper.assertTrue(HubGridFit.cellForZoom(-1) == HubGridFit.cellForZoom(0) && HubGridFit.cellForZoom(9) == HubGridFit.cellForZoom(HubGridFit.ZOOM_STEPS - 1), "expected a step out of range to give the nearest size");
+        for (int zoom = 0; zoom < HubGridFit.ZOOM_STEPS; zoom++) {
+            int target = HubGridFit.cellForZoom(zoom);
+            int previousSize = -1;
+            for (int side = 0; side <= 600; side++) {
+                HubGridFit.Fit fit = HubGridFit.fit(side, zoom);
+                String what = "for the side " + side + " at the zoom step " + zoom + ", got " + fit;
+                helper.assertTrue(fit.cells() % 2 == 1 && fit.cells() == fit.radius() * 2 + 1, "expected an odd number of cells " + what);
+                helper.assertTrue(fit.radius() >= HubGridFit.MIN_RADIUS && fit.radius() <= HubGridFit.MAX_RADIUS, "expected the radius within its limits " + what);
+                helper.assertTrue(fit.cell() >= 1 && fit.cell() <= target, "expected the chunk size within its limits " + what);
+                if (side >= 3) // below that not even 3 x 3 chunks of one pixel fit
+                    helper.assertTrue(fit.size() <= side, "expected the grid not to overflow " + what + " = " + fit.size());
+                if (side >= 3 * target)
+                    helper.assertTrue(fit.cell() == target, "expected the chunks at the size of the step " + what);
+                else if (side >= 3)
+                    helper.assertTrue(fit.radius() == HubGridFit.MIN_RADIUS, "expected the smallest radius when the chunks do not fit " + what);
+                if (side >= 3 * target) // from here the grid only gets bigger with more space
+                    helper.assertTrue(fit.size() >= previousSize, "expected the grid not to shrink when the side grows " + what + " after size " + previousSize);
+                previousSize = fit.size();
+            }
         }
+        // zooming out shows at least as many chunks, and zooming in draws bigger ones
+        for (int side = 90; side <= 600; side += 10)
+            for (int zoom = 1; zoom < HubGridFit.ZOOM_STEPS; zoom++) {
+                HubGridFit.Fit out = HubGridFit.fit(side, zoom - 1);
+                HubGridFit.Fit in = HubGridFit.fit(side, zoom);
+                helper.assertTrue(out.radius() >= in.radius() && out.cell() <= in.cell(), "expected zooming out to show more, smaller chunks for the side " + side + ", got " + out + " and " + in);
+            }
         // examples: GUI scale 2 on a 1080p window leaves about 240 pixels, a GUI scale 4 window about 90
-        HubGridFit.Fit roomy = HubGridFit.fit(240);
-        helper.assertTrue(roomy.radius() == 8 && roomy.cell() == 14, "expected 17 x 17 chunks of 14 pixels for 240 pixels, got " + roomy);
-        HubGridFit.Fit tight = HubGridFit.fit(90);
-        helper.assertTrue(tight.radius() == 7 && tight.cell() == 6, "expected 15 x 15 chunks of 6 pixels for 90 pixels, got " + tight);
-        HubGridFit.Fit huge = HubGridFit.fit(10_000);
-        helper.assertTrue(huge.radius() == HubGridFit.MAX_RADIUS && huge.cell() == HubGridFit.MAX_CELL, "expected the biggest grid for plenty of space, got " + huge);
+        HubGridFit.Fit roomy = HubGridFit.fit(240, 1);
+        helper.assertTrue(roomy.radius() == 9 && roomy.cell() == 12, "expected 19 x 19 chunks of 12 pixels for 240 pixels, got " + roomy);
+        HubGridFit.Fit wide = HubGridFit.fit(240, 0);
+        helper.assertTrue(wide.radius() == 19 && wide.cell() == 6, "expected 39 x 39 chunks of 6 pixels for 240 pixels zoomed out, got " + wide);
+        HubGridFit.Fit close = HubGridFit.fit(240, 2);
+        helper.assertTrue(close.radius() == 4 && close.cell() == 24, "expected 9 x 9 chunks of 24 pixels for 240 pixels zoomed in, got " + close);
+        HubGridFit.Fit tight = HubGridFit.fit(90, 1);
+        helper.assertTrue(tight.radius() == 3 && tight.cell() == 12, "expected 7 x 7 chunks of 12 pixels for 90 pixels, got " + tight);
+        HubGridFit.Fit huge = HubGridFit.fit(10_000, 0);
+        helper.assertTrue(huge.radius() == HubGridFit.MAX_RADIUS && huge.cell() == HubGridFit.MIN_CELL, "expected the biggest grid for plenty of space, got " + huge);
         helper.succeed();
     }
 
@@ -145,18 +162,18 @@ public final class TeamClaimsHubTestCases {
      * told apart from other players.
      */
     public static void claimCategoryFollowsTheOwner(GameTestHelper helper) {
-        // classify(server, expired, self, partyMember, partyOwned, team)
-        helper.assertTrue(ClaimCategory.classify(true, false, false, false, false, false) == ClaimCategory.SERVER, "expected SERVER");
-        helper.assertTrue(ClaimCategory.classify(true, true, true, true, true, true) == ClaimCategory.SERVER, "expected SERVER to win over everything");
-        helper.assertTrue(ClaimCategory.classify(false, true, true, true, true, true) == ClaimCategory.EXPIRED, "expected EXPIRED to win over the player");
-        helper.assertTrue(ClaimCategory.classify(false, false, true, false, false, false) == ClaimCategory.OWN_PRIVATE, "expected OWN_PRIVATE");
-        helper.assertTrue(ClaimCategory.classify(false, false, true, false, false, true) == ClaimCategory.OWN_TEAM, "expected OWN_TEAM");
-        helper.assertTrue(ClaimCategory.classify(false, false, false, true, false, false) == ClaimCategory.PARTY, "expected PARTY for another party member");
-        helper.assertTrue(ClaimCategory.classify(false, false, false, true, false, true) == ClaimCategory.PARTY, "expected PARTY: the team flag only counts for the local player");
-        helper.assertTrue(ClaimCategory.classify(false, false, false, false, false, false) == ClaimCategory.OTHER, "expected OTHER");
-        helper.assertTrue(ClaimCategory.classify(false, false, false, false, true, false) == ClaimCategory.OTHER, "expected OTHER for the party claim of another party");
-        helper.assertTrue(ClaimCategory.classify(false, false, true, false, true, false) == ClaimCategory.PARTY, "expected PARTY for a party claim of the local player");
-        helper.assertTrue(ClaimCategory.classify(false, false, false, true, true, false) == ClaimCategory.PARTY, "expected PARTY for a party claim of a party member");
+        // classify(server, expired, self, partyMember, partyOwned, team, ally)
+        helper.assertTrue(ClaimCategory.classify(true, false, false, false, false, false, false) == ClaimCategory.SERVER, "expected SERVER");
+        helper.assertTrue(ClaimCategory.classify(true, true, true, true, true, true, false) == ClaimCategory.SERVER, "expected SERVER to win over everything");
+        helper.assertTrue(ClaimCategory.classify(false, true, true, true, true, true, false) == ClaimCategory.EXPIRED, "expected EXPIRED to win over the player");
+        helper.assertTrue(ClaimCategory.classify(false, false, true, false, false, false, false) == ClaimCategory.OWN_PRIVATE, "expected OWN_PRIVATE");
+        helper.assertTrue(ClaimCategory.classify(false, false, true, false, false, true, false) == ClaimCategory.OWN_TEAM, "expected OWN_TEAM");
+        helper.assertTrue(ClaimCategory.classify(false, false, false, true, false, false, false) == ClaimCategory.PARTY, "expected PARTY for another party member");
+        helper.assertTrue(ClaimCategory.classify(false, false, false, true, false, true, false) == ClaimCategory.PARTY, "expected PARTY: the team flag only counts for the local player");
+        helper.assertTrue(ClaimCategory.classify(false, false, false, false, false, false, false) == ClaimCategory.OTHER, "expected OTHER");
+        helper.assertTrue(ClaimCategory.classify(false, false, false, false, true, false, false) == ClaimCategory.OTHER, "expected OTHER for the party claim of another party");
+        helper.assertTrue(ClaimCategory.classify(false, false, true, false, true, false, false) == ClaimCategory.PARTY, "expected PARTY for a party claim of the local player");
+        helper.assertTrue(ClaimCategory.classify(false, false, false, true, true, false, false) == ClaimCategory.PARTY, "expected PARTY for a party claim of a party member");
         helper.succeed();
     }
 

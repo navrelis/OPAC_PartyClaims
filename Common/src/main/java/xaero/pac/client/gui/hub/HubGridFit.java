@@ -21,28 +21,29 @@ package xaero.pac.client.gui.hub;
 /**
  * Decides how many chunks the grid of the Claims tab shows and how big a chunk is drawn, so that the grid fits into the
  * space that the screen has left at the current GUI scale and window size. The grid is always a square of an odd number
- * of cells, so that the centre chunk is a cell of its own.
+ * of cells, so that the centre chunk is a cell of its own. A chunk is drawn in one of {@link #ZOOM_STEPS} sizes, from
+ * {@link #MIN_CELL} to four times that, and the grid shows as many chunks as fit at that size.
  * <p>
  * No client classes in here, so the rules can be tested on a server.
  */
 public final class HubGridFit {
 
 	/**
-	 * The number of chunks to each side of the centre that the grid shows as long as that is possible, 17 x 17 chunks.
+	 * The smallest size in pixels of one drawn chunk, the most zoomed out step.
 	 */
-	public static final int PREFERRED_MIN_RADIUS = 8;
+	public static final int MIN_CELL = 6;
+	/**
+	 * The number of zoom steps, the size of a chunk doubles with each step: 6, 12 and 24 pixels.
+	 */
+	public static final int ZOOM_STEPS = 3;
+	/**
+	 * The zoom step that the grid starts with.
+	 */
+	public static final int DEFAULT_ZOOM = 1;
 	/**
 	 * The most chunks to each side of the centre that the grid ever shows.
 	 */
-	public static final int MAX_RADIUS = 14;
-	/**
-	 * The biggest size in pixels of one drawn chunk.
-	 */
-	public static final int MAX_CELL = 14;
-	/**
-	 * The smallest size in pixels of one drawn chunk, before the grid shows fewer than {@link #PREFERRED_MIN_RADIUS} chunks.
-	 */
-	public static final int MIN_CELL = 6;
+	public static final int MAX_RADIUS = 24;
 	/**
 	 * The fewest chunks to each side of the centre that the grid shows, however little space there is.
 	 */
@@ -76,24 +77,37 @@ public final class HubGridFit {
 	}
 
 	/**
-	 * Gets the biggest grid that fits into a square. Chunks are drawn as big as possible, down to {@link #MIN_CELL}, as
-	 * long as the grid can still show {@link #PREFERRED_MIN_RADIUS} chunks to each side. If it cannot, the chunks stay at
-	 * the smallest size and the radius shrinks instead of the grid overflowing, down to {@link #MIN_RADIUS}.
+	 * Gets the zoom step that is in range.
+	 */
+	public static int clampZoom(int zoom) {
+		return Math.max(0, Math.min(ZOOM_STEPS - 1, zoom));
+	}
+
+	/**
+	 * Gets the size in pixels of one chunk at a zoom step.
+	 */
+	public static int cellForZoom(int zoom) {
+		return MIN_CELL << clampZoom(zoom);
+	}
+
+	/**
+	 * Gets the biggest grid that fits into a square at a zoom step. Chunks are drawn at the size of the step and the
+	 * radius is what fits, from {@link #MIN_RADIUS} to {@link #MAX_RADIUS}. If even the smallest grid does not fit, the
+	 * radius stays at {@link #MIN_RADIUS} and the chunks shrink instead of the grid overflowing.
 	 *
 	 * @param side  the size in pixels of the square that is available
+	 * @param zoom  the zoom step, 0 is the most zoomed out
 	 * @return the radius and the chunk size, the grid is not bigger than the square unless the square is too small for
 	 *         the smallest grid of 3 x 3 chunks of 1 pixel
 	 */
-	public static Fit fit(int side) {
+	public static Fit fit(int side, int zoom) {
 		int available = Math.max(0, side);
-		for(int cell = MAX_CELL; cell >= MIN_CELL; cell--) {
-			int radius = radiusFor(available, cell);
-			if(radius >= PREFERRED_MIN_RADIUS)
-				return new Fit(Math.min(radius, MAX_RADIUS), cell);
-		}
-		int radius = Math.max(MIN_RADIUS, radiusFor(available, MIN_CELL));
-		int cell = Math.max(1, available / (radius * 2 + 1));
-		return new Fit(radius, Math.min(cell, MAX_CELL));
+		int target = cellForZoom(zoom);
+		int radius = radiusFor(available, target);
+		if(radius >= MIN_RADIUS)
+			return new Fit(Math.min(radius, MAX_RADIUS), target);
+		int cell = Math.max(1, available / (MIN_RADIUS * 2 + 1));
+		return new Fit(MIN_RADIUS, Math.min(cell, target));
 	}
 
 	private static int radiusFor(int side, int cell) {
