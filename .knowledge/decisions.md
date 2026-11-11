@@ -57,3 +57,4 @@
 - 2026-11-11 v1.5: the detailed config screen is improved in place (`PlayerConfigScreen`, grouped/searchable) instead of a second copy, so World Map's "player config" path and the hub get the same screen; public signatures unchanged (linkcheck).
 - 2026-11-11 v1.5: new fork client toml `openpartiesandclaims-teamclaims-client.toml` for client options (upstream has no client config registered).
 - 2026-11-11 v1.5: workers run through start_session worktrees cut from the working branch (the 1.4 manual-worktree rule was for the Agent tool's isolation); lead checks each branch base on review.
+- 2026-11-11 v1.5: hub-frame (Opus) hit its context limit mid-T1; the rest (two pages copying MainMenu/ConfigMenu logic, wiring, tests) has a clear spec and goes to Sonnet on top of the WIP branch.
