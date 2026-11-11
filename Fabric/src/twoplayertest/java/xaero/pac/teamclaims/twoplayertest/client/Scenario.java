@@ -1584,6 +1584,11 @@ public final class Scenario implements Runnable {
 			Screen map = d.requireScreen();
 			if(!isMap(map))
 				throw new ClientDriver.DriverException("the World Map is not open but " + d.screenName());
+			// closing a menu clears the selection, so close the last one before selecting (handleRightClick would after)
+			if(Ui.get(map, "rightClickMenu") != null) {
+				Ui.invoke(map, "closeRightClick", new Class<?>[0]);
+				Ui.set(map, "rightClickMenu", null);
+			}
 			MapTileSelection selection = new MapTileSelection(x0, z0);
 			selection.setEnd(x1, z1);
 			Ui.set(map, "mapTileSelection", selection);
