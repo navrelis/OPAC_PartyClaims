@@ -19,6 +19,7 @@
 package xaero.pac.client.gui;
 
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.gui.components.Button;
@@ -66,11 +67,11 @@ public final class ConfigOptionRowListElement extends WidgetListElement<ConfigOp
 		AbstractWidget widget = valueElement.screenInit(x, y, screen, tickableBoxes);
 		Minecraft minecraft = Minecraft.getInstance();
 		//the button is always there, render() shows it only while resetVisible says so (the value can change without a relayout)
-		resetButton = screen.addRenderableWidget(Button.builder(Component.literal("↺"), b -> {
+		resetButton = screen.addRenderableWidget(new ResetButton(x + w - RESET_WIDTH, y, RESET_WIDTH, h, b -> {
 			resetAction.run();
 			screen.init(minecraft, screen.width, screen.height);
-		}).bounds(x + w - RESET_WIDTH, y, RESET_WIDTH, h)
-				.tooltip(Tooltip.create(Component.translatable("gui.xaero_pac_config_reset_tooltip"))).build());
+		}));
+		resetButton.setTooltip(Tooltip.create(Component.translatable("gui.xaero_pac_config_reset_tooltip")));
 		resetButton.visible = resetButton.active = resetVisible.getAsBoolean();
 		return widget;
 	}
@@ -90,6 +91,37 @@ public final class ConfigOptionRowListElement extends WidgetListElement<ConfigOp
 	@Override
 	public void renderRowBackground(GuiGraphics guiGraphics) {
 		guiGraphics.fill(x - 2, y - 2, x + w + 2, y + h + 2, odd ? BACKGROUND_ODD : BACKGROUND_EVEN);
+	}
+
+	/**
+	 * The reset button draws its arrow icon with filled pixels: the "↺" glyph is only in the fallback font, where it comes out tiny.
+	 */
+	private static final class ResetButton extends Button {
+
+		private static final String[] ICON = {
+				"..XXX..X.",
+				".X....XXX",
+				"X......X.",
+				"X......X.",
+				"X......X.",
+				".X....X..",
+				"..XXXX..."
+		};
+
+		private ResetButton(int x, int y, int width, int height, OnPress onPress) {
+			super(x, y, width, height, Component.translatable("gui.xaero_pac_config_reset_tooltip"), onPress, DEFAULT_NARRATION);
+		}
+
+		@Override
+		public void renderString(GuiGraphics guiGraphics, Font font, int color) {
+			int left = getX() + (getWidth() - ICON[0].length()) / 2;
+			int top = getY() + (getHeight() - ICON.length) / 2;
+			for(int row = 0; row < ICON.length; row++)
+				for(int column = 0; column < ICON[row].length(); column++)
+					if(ICON[row].charAt(column) == 'X')
+						guiGraphics.fill(left + column, top + row, left + column + 1, top + row + 1, color);
+		}
+
 	}
 
 }
