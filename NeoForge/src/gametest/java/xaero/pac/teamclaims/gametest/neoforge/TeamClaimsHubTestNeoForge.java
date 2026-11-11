@@ -81,4 +81,24 @@ public final class TeamClaimsHubTestNeoForge {
     public static void requestThrottleLetsOneRequestPerInterval(GameTestHelper helper) {
         TeamClaimsHubTestCases.requestThrottleLetsOneRequestPerInterval(helper);
     }
+
+    @GameTest(template = TeamClaimsGameTestMod.EMPTY_STRUCTURE)
+    public static void hubPagesAreListedInTheOrderOfTheSidebarWithTheirVisibility(GameTestHelper helper) {
+        TeamClaimsHubTestCases.hubPagesAreListedInTheOrderOfTheSidebarWithTheirVisibility(helper);
+    }
+
+    @GameTest(template = TeamClaimsGameTestMod.EMPTY_STRUCTURE)
+    public static void hubOpensOnTheOverviewFirstAndWhenTheLastPageIsHidden(GameTestHelper helper) {
+        TeamClaimsHubTestCases.hubOpensOnTheOverviewFirstAndWhenTheLastPageIsHidden(helper);
+    }
+
+    @GameTest(template = TeamClaimsGameTestMod.EMPTY_STRUCTURE)
+    public static void sidebarCollapsesToIconsWhenTheContentWouldGetTooNarrow(GameTestHelper helper) {
+        TeamClaimsHubTestCases.sidebarCollapsesToIconsWhenTheContentWouldGetTooNarrow(helper);
+    }
+
+    @GameTest(template = TeamClaimsGameTestMod.EMPTY_STRUCTURE)
+    public static void claimingModeChoiceIsShownOnlyWithMoreThanOneMode(GameTestHelper helper) {
+        TeamClaimsHubTestCases.claimingModeChoiceIsShownOnlyWithMoreThanOneMode(helper);
+    }
 }

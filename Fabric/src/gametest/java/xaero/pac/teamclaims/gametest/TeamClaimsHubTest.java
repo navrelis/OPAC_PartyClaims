@@ -75,4 +75,24 @@ public class TeamClaimsHubTest implements FabricGameTest {
     public void requestThrottleLetsOneRequestPerInterval(GameTestHelper helper) {
         TeamClaimsHubTestCases.requestThrottleLetsOneRequestPerInterval(helper);
     }
+
+    @GameTest(template = FabricGameTest.EMPTY_STRUCTURE)
+    public void hubPagesAreListedInTheOrderOfTheSidebarWithTheirVisibility(GameTestHelper helper) {
+        TeamClaimsHubTestCases.hubPagesAreListedInTheOrderOfTheSidebarWithTheirVisibility(helper);
+    }
+
+    @GameTest(template = FabricGameTest.EMPTY_STRUCTURE)
+    public void hubOpensOnTheOverviewFirstAndWhenTheLastPageIsHidden(GameTestHelper helper) {
+        TeamClaimsHubTestCases.hubOpensOnTheOverviewFirstAndWhenTheLastPageIsHidden(helper);
+    }
+
+    @GameTest(template = FabricGameTest.EMPTY_STRUCTURE)
+    public void sidebarCollapsesToIconsWhenTheContentWouldGetTooNarrow(GameTestHelper helper) {
+        TeamClaimsHubTestCases.sidebarCollapsesToIconsWhenTheContentWouldGetTooNarrow(helper);
+    }
+
+    @GameTest(template = FabricGameTest.EMPTY_STRUCTURE)
+    public void claimingModeChoiceIsShownOnlyWithMoreThanOneMode(GameTestHelper helper) {
+        TeamClaimsHubTestCases.claimingModeChoiceIsShownOnlyWithMoreThanOneMode(helper);
+    }
 }

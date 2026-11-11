@@ -343,5 +343,12 @@
 	"gui.xaero_pac_hub_admin_team_bonus_forceloads" : "Bonus-Forceloads",
 	"gui.xaero_pac_hub_admin_team_bonus_tooltip" : "Zusätzliche Team-Claims oder -Forceloads über das normale Limit hinaus. Eine ganze Zahl von 0 bis %1$s.",
 	"gui.xaero_pac_hub_admin_team_id" : "Party-ID: %1$s",
-	"gui.xaero_pac_hub_admin_too_small" : "Das Fenster ist für diese Liste zu klein. Mache es größer oder verringere die GUI-Skalierung."
+	"gui.xaero_pac_hub_admin_too_small" : "Das Fenster ist für diese Liste zu klein. Mache es größer oder verringere die GUI-Skalierung.",
+	"gui.xaero_pac_hub_tab_overview" : "Übersicht",
+	"gui.xaero_pac_hub_tab_settings" : "Einstellungen",
+	"gui.xaero_pac_hub_overview_no_party" : "In keiner Party",
+	"gui.xaero_pac_hub_overview_open_party" : "Party-Seite öffnen",
+	"gui.xaero_pac_hub_overview_chunk" : "Dieser Chunk",
+	"gui.xaero_pac_hub_settings_my" : "Meine Einstellungen",
+	"gui.xaero_pac_hub_settings_server" : "Server"
 }

@@ -5,6 +5,8 @@ import xaero.pac.client.gui.hub.ChunkSelection;
 import xaero.pac.client.gui.hub.ClaimCategory;
 import xaero.pac.client.gui.hub.ClaimsHubLogic;
 import xaero.pac.client.gui.hub.HubGridFit;
+import xaero.pac.client.gui.hub.HubNavigation;
+import xaero.pac.client.gui.hub.HubTab;
 import xaero.pac.client.gui.hub.RefreshSchedule;
 import xaero.pac.client.gui.hub.RequestThrottle;
 import xaero.pac.client.gui.hub.TeamHubLogic;
@@ -382,6 +384,70 @@ public final class TeamClaimsHubTestCases {
         helper.assertTrue(throttle.tryAcquire(0), "expected a request to go through when the clock went back");
         throttle.reset();
         helper.assertTrue(throttle.tryAcquire(1), "expected a request to go through after a reset");
+        helper.succeed();
+    }
+
+    /**
+     * The sidebar lists the pages in a fixed order: Overview, Party, Claims, Team, Settings, Admin. Overview, Party, Claims
+     * and Settings are always there, Team only with a team, Admin only when the server allows the admin menu.
+     */
+    public static void hubPagesAreListedInTheOrderOfTheSidebarWithTheirVisibility(GameTestHelper helper) {
+        helper.assertTrue(HubNavigation.getVisibleTabs(false, false).equals(List.of(HubTab.OVERVIEW, HubTab.PARTY, HubTab.CLAIMS, HubTab.SETTINGS)),
+                "expected the four always-visible pages without team and admin, got " + HubNavigation.getVisibleTabs(false, false));
+        helper.assertTrue(HubNavigation.getVisibleTabs(true, false).equals(List.of(HubTab.OVERVIEW, HubTab.PARTY, HubTab.CLAIMS, HubTab.TEAM, HubTab.SETTINGS)),
+                "expected Team between Claims and Settings with a team, got " + HubNavigation.getVisibleTabs(true, false));
+        helper.assertTrue(HubNavigation.getVisibleTabs(false, true).equals(List.of(HubTab.OVERVIEW, HubTab.PARTY, HubTab.CLAIMS, HubTab.SETTINGS, HubTab.ADMIN)),
+                "expected Admin after Settings with the admin menu, got " + HubNavigation.getVisibleTabs(false, true));
+        helper.assertTrue(HubNavigation.getVisibleTabs(true, true).equals(List.of(HubTab.values())),
+                "expected every page with a team and the admin menu, got " + HubNavigation.getVisibleTabs(true, true));
+        helper.assertTrue(HubTab.values()[0] == HubTab.OVERVIEW && HubTab.values()[4] == HubTab.SETTINGS, "expected Overview first and Settings fifth in the page order");
+        for (HubTab tab : List.of(HubTab.OVERVIEW, HubTab.PARTY, HubTab.CLAIMS, HubTab.SETTINGS))
+            helper.assertTrue(HubNavigation.isVisible(tab, false, false), "expected " + tab + " to always be visible");
+        helper.assertTrue(!HubNavigation.isVisible(HubTab.TEAM, false, true) && HubNavigation.isVisible(HubTab.TEAM, true, false), "expected Team to follow only the team flag");
+        helper.assertTrue(!HubNavigation.isVisible(HubTab.ADMIN, true, false) && HubNavigation.isVisible(HubTab.ADMIN, false, true), "expected Admin to follow only the admin flag");
+        helper.succeed();
+    }
+
+    /**
+     * The hub opens on the Overview the first time in a session, on the page that was open last afterwards, and on the
+     * Overview again when that page is hidden now.
+     */
+    public static void hubOpensOnTheOverviewFirstAndWhenTheLastPageIsHidden(GameTestHelper helper) {
+        helper.assertTrue(HubNavigation.getOpeningTab(null, true, true) == HubTab.OVERVIEW, "expected the first opening to be the Overview");
+        helper.assertTrue(HubNavigation.getOpeningTab(HubTab.CLAIMS, false, false) == HubTab.CLAIMS, "expected the last page to open again");
+        helper.assertTrue(HubNavigation.getOpeningTab(HubTab.SETTINGS, false, false) == HubTab.SETTINGS, "expected Settings to open again");
+        helper.assertTrue(HubNavigation.getOpeningTab(HubTab.TEAM, true, false) == HubTab.TEAM, "expected a visible Team page to open again");
+        helper.assertTrue(HubNavigation.getOpeningTab(HubTab.TEAM, false, false) == HubTab.OVERVIEW, "expected a hidden Team page to open the Overview");
+        helper.assertTrue(HubNavigation.getOpeningTab(HubTab.ADMIN, true, false) == HubTab.OVERVIEW, "expected a hidden Admin page to open the Overview");
+        helper.assertTrue(HubNavigation.getOpeningTab(HubTab.ADMIN, false, true) == HubTab.ADMIN, "expected a visible Admin page to open again");
+        helper.succeed();
+    }
+
+    /**
+     * The sidebar shows only the icons (30 wide) when the labels would leave the page less than 360: with the widest label
+     * 60 wide the labels take 97, so 426 (GUI scale 3 at 1280 x 720) collapses, 480 and 960 (scale 2 at 1080p) do not, and
+     * the limit is 457. The labels never take more than 120.
+     */
+    public static void sidebarCollapsesToIconsWhenTheContentWouldGetTooNarrow(GameTestHelper helper) {
+        helper.assertTrue(HubNavigation.getExpandedWidth(60) == 97, "expected 97 for a 60 wide label, got " + HubNavigation.getExpandedWidth(60));
+        helper.assertTrue(HubNavigation.getExpandedWidth(200) == 120, "expected the labels to be cut at 120, got " + HubNavigation.getExpandedWidth(200));
+        helper.assertTrue(HubNavigation.COLLAPSED_WIDTH == 30, "expected 30 for the icons, got " + HubNavigation.COLLAPSED_WIDTH);
+        helper.assertTrue(HubNavigation.isSidebarCollapsed(426, 60) && HubNavigation.getSidebarWidth(426, 60) == 30, "expected icons only at 426");
+        helper.assertTrue(!HubNavigation.isSidebarCollapsed(480, 60) && HubNavigation.getSidebarWidth(480, 60) == 97, "expected labels at 480");
+        helper.assertTrue(!HubNavigation.isSidebarCollapsed(960, 60) && HubNavigation.getSidebarWidth(960, 60) == 97, "expected labels at 960");
+        helper.assertTrue(HubNavigation.isSidebarCollapsed(456, 60) && !HubNavigation.isSidebarCollapsed(457, 60), "expected the limit between 456 and 457");
+        helper.assertTrue(HubNavigation.getSidebarWidth(960, 200) == 120, "expected the capped width with a long label at 960");
+        helper.succeed();
+    }
+
+    /**
+     * The claiming mode dropdown is only worth showing when the player can pick between at least two modes.
+     */
+    public static void claimingModeChoiceIsShownOnlyWithMoreThanOneMode(GameTestHelper helper) {
+        helper.assertTrue(!ClaimsHubLogic.isClaimingModeChoiceShown(0), "expected no choice without a mode");
+        helper.assertTrue(!ClaimsHubLogic.isClaimingModeChoiceShown(1), "expected no choice with a single mode");
+        helper.assertTrue(ClaimsHubLogic.isClaimingModeChoiceShown(2), "expected a choice with two modes");
+        helper.assertTrue(ClaimsHubLogic.isClaimingModeChoiceShown(5), "expected a choice with five modes");
         helper.succeed();
     }
 

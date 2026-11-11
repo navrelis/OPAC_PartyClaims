@@ -58,3 +58,4 @@
 - 2026-11-11 v1.5: new fork client toml `openpartiesandclaims-teamclaims-client.toml` for client options (upstream has no client config registered).
 - 2026-11-11 v1.5: workers run through start_session worktrees cut from the working branch (the 1.4 manual-worktree rule was for the Agent tool's isolation); lead checks each branch base on review.
 - 2026-11-11 v1.5: hub-frame (Opus) hit its context limit mid-T1; the rest (two pages copying MainMenu/ConfigMenu logic, wiring, tests) has a clear spec and goes to Sonnet on top of the WIP branch.
+- 2026-11-11 v1.5: defaults review: Team Claims server defaults (500 base + 25/extra member, 10 + 2 forceloads, 7-day over-limit grace, convert radius 4, min 2 members) stay — sane for SMP and existing tomls keep their values anyway; new client options default to on/TOP_CENTER/medium zoom. T5 also lets the Team tab's convert radius go up to the server's convertMaxRadius (1.4 capped it at 4 on the client).
