@@ -81,7 +81,6 @@ public class AdminTabScreen extends HubTabScreen {
 	private static final Tooltip TOGGLE_TOOLTIP = Tooltip.create(Component.translatable("gui.xaero_pac_hub_admin_toggle_tooltip"));
 	private static final Tooltip SAVE_TOOLTIP = Tooltip.create(Component.translatable("gui.xaero_pac_hub_admin_save_tooltip"));
 
-	private static final int MARGIN = 8;
 	private static final int MAX_LIST_WIDTH = 440;
 	private static final int SCROLLBAR_WIDTH = 5;
 	private static final int ROW_HEIGHT = 22;
@@ -283,17 +282,17 @@ public class AdminTabScreen extends HubTabScreen {
 		lookUpButton = null;
 		draggingScrollbar = false;
 		buttonHeight = height >= TALL_SCREEN_HEIGHT ? 20 : 16;
-		listWidth = Math.min(MAX_LIST_WIDTH, width - 2 * MARGIN - SCROLLBAR_WIDTH - 3);
-		listLeft = (width - listWidth - SCROLLBAR_WIDTH - 3) / 2;
+		listWidth = Math.min(MAX_LIST_WIDTH, contentWidth() - SCROLLBAR_WIDTH - 3);
+		listLeft = contentLeft() + (contentWidth() - listWidth - SCROLLBAR_WIDTH - 3) / 2;
 		scrollbarLeft = listLeft + listWidth + 3;
 
-		int y = HubTabBar.CONTENT_TOP;
+		int y = contentTop();
 		initSectionButtons(y);
 		y += buttonHeight + 5;
-		int backTop = height - 6 - buttonHeight;
+		int backTop = contentBottom() - buttonHeight;
 		resultTop = backTop - 2 - RESULT_HEIGHT;
-		int backWidth = Math.min(200, width - 2 * MARGIN);
-		addRenderableWidget(Button.builder(BACK, b -> goBack()).bounds((width - backWidth) / 2, backTop, backWidth, buttonHeight).build());
+		int backWidth = Math.min(200, contentWidth());
+		addRenderableWidget(Button.builder(BACK, b -> goBack()).bounds(contentCenterX() - backWidth / 2, backTop, backWidth, buttonHeight).build());
 
 		if(section == Section.PLAYERS) {
 			initPlayerHeader(y);
@@ -314,9 +313,9 @@ public class AdminTabScreen extends HubTabScreen {
 
 	private void initSectionButtons(int y) {
 		Section[] sections = Section.values();
-		int total = Math.min(width - 2 * MARGIN, sections.length * 110 + (sections.length - 1) * BUTTON_GAP);
+		int total = Math.min(contentWidth(), sections.length * 110 + (sections.length - 1) * BUTTON_GAP);
 		int each = (total - (sections.length - 1) * BUTTON_GAP) / sections.length;
-		int x = (width - total) / 2;
+		int x = contentLeft() + (contentWidth() - total) / 2;
 		for(Section other : sections) {
 			Button button = Button.builder(other.label, b -> setSection(other)).bounds(x, y, each, buttonHeight).build();
 			button.active = other != section;
@@ -1043,7 +1042,7 @@ public class AdminTabScreen extends HubTabScreen {
 			Component message = rows.isEmpty() || getRowsHeight() == 0 ? emptyMessage : visibleCount == 0 ? TOO_SMALL : null;
 			if(message != null)
 				for(FormattedCharSequence line : font.split(message, listWidth - 16)) {
-					guiGraphics.drawCenteredString(font, line, width / 2, listTop + Math.min(8, listHeight - font.lineHeight - 1), VALUE_COLOR);
+					guiGraphics.drawCenteredString(font, line, listLeft + listWidth / 2, listTop + Math.min(8, listHeight - font.lineHeight - 1), VALUE_COLOR);
 					break;
 				}
 		}
@@ -1069,10 +1068,10 @@ public class AdminTabScreen extends HubTabScreen {
 		int color = shownResult.success() ? SUCCESS_COLOR : WARNING_COLOR;
 		int y = resultTop;
 		int lines = 0;
-		for(FormattedCharSequence line : font.split(shownResult.message(), width - 2 * MARGIN)) {
+		for(FormattedCharSequence line : font.split(shownResult.message(), contentWidth())) {
 			if(++lines > 2)
 				break;
-			guiGraphics.drawString(font, line, MARGIN, y, color);
+			guiGraphics.drawString(font, line, contentLeft(), y, color);
 			y += font.lineHeight + 1;
 		}
 	}

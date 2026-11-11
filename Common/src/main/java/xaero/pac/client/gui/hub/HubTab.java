@@ -19,25 +19,39 @@
 package xaero.pac.client.gui.hub;
 
 import net.minecraft.network.chat.Component;
+import net.minecraft.world.item.Item;
+import net.minecraft.world.item.Items;
 
 /**
- * The tabs of the hub screen, in the order of the tab bar. A tab is only shown while {@link HubTabs#isVisible} says so.
+ * The pages of the hub screen, in the order of the sidebar. A page is only shown while {@link HubTabs#isVisible} says so
+ * (the rule itself is {@link HubNavigation#isVisible}).
  */
 public enum HubTab {
 
-	PARTY("gui.xaero_pac_hub_tab_party"),
-	CLAIMS("gui.xaero_pac_hub_tab_claims"),
-	TEAM("gui.xaero_pac_hub_tab_team"),
-	ADMIN("gui.xaero_pac_hub_tab_admin");
+	OVERVIEW("gui.xaero_pac_hub_tab_overview", Items.COMPASS),
+	PARTY("gui.xaero_pac_hub_tab_party", Items.WHITE_BANNER),
+	CLAIMS("gui.xaero_pac_hub_tab_claims", Items.MAP),
+	TEAM("gui.xaero_pac_hub_tab_team", Items.SHIELD),
+	SETTINGS("gui.xaero_pac_hub_tab_settings", Items.COMPARATOR),
+	ADMIN("gui.xaero_pac_hub_tab_admin", Items.COMMAND_BLOCK);
 
 	private final Component label;
+	private final Item icon;
 
-	HubTab(String labelKey) {
+	HubTab(String labelKey, Item icon) {
 		this.label = Component.translatable(labelKey);
+		this.icon = icon;
 	}
 
 	public Component getLabel() {
 		return label;
+	}
+
+	/**
+	 * Gets the item that the sidebar shows as the icon of the page.
+	 */
+	public Item getIcon() {
+		return icon;
 	}
 
 }

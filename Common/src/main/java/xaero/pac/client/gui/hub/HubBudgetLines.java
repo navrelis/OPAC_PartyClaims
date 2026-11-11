@@ -19,7 +19,12 @@
 package xaero.pac.client.gui.hub;
 
 import net.minecraft.network.chat.Component;
+import xaero.pac.OpenPartiesAndClaims;
+import xaero.pac.client.claims.api.IClientClaimsManagerAPI;
 import xaero.pac.client.gui.party.PartyScreen;
+import xaero.pac.client.parties.party.IClientPartyStorage;
+import xaero.pac.client.teamclaims.TeamClaimsClientData;
+import xaero.pac.common.claims.player.mode.api.IClaimingModeAPI;
 import xaero.pac.common.packet.parties.PartyBudgetData;
 import xaero.pac.common.packet.teamclaims.TeamInfoData;
 
@@ -28,7 +33,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * The text lines about the team budget that the Claims tab and the Team tab show, from what the server reported: the
+ * The text lines about the budgets that the Overview, the Claims tab and the Team tab show, from what the server reported: the
  * team claims and forceloads against their limits (which include the bonus an admin granted), the bonus itself, and the
  * warnings about a running over-limit deadline. The texts are those of the party screen.
  */
@@ -45,6 +50,32 @@ public final class HubBudgetLines {
 	 * One line of text and its colour.
 	 */
 	public record Line(Component text, int color) {
+	}
+
+	/**
+	 * Gets the lines about the claim and forceload budgets from what the server reported to the client, with the
+	 * running over-limit deadlines counted down locally, as in the party screen: the private budget, then the lines of
+	 * {@link #teamLines}. If the server reports no budgets, the counts of the claiming mode are shown.
+	 */
+	public static List<Line> allLines() {
+		List<Line> lines = new ArrayList<>();
+		IClientPartyStorage<?, ?, ?> partyStorage = OpenPartiesAndClaims.INSTANCE.getClientDataInternal().getClientPartyStorage();
+		PartyBudgetData budget = partyStorage.getBudget();
+		if(budget != null && budget.available()) {
+			long elapsed = Math.max(0, System.currentTimeMillis() - partyStorage.getBudgetReceivedTime());
+			lines.add(new Line(Component.translatable("gui.xaero_pac_party_screen_budget_private",
+					PartyScreen.formatBudget(budget.privateClaims(), budget.privateClaimLimit()),
+					PartyScreen.formatBudget(budget.privateForceloads(), budget.privateForceloadLimit())), TEXT_COLOR));
+			lines.addAll(teamLines(budget, elapsed, TeamClaimsClientData.INSTANCE.getTeamInfo()));
+			return lines;
+		}
+		IClientClaimsManagerAPI claimsManager = OpenPartiesAndClaims.INSTANCE.getClientDataInternal().getClaimsManager();
+		IClaimingModeAPI mode = claimsManager.getClaimingMode();
+		lines.add(new Line(Component.translatable("gui.xaero_pac_ui_claim_count",
+				PartyScreen.formatBudget(claimsManager.getClaimCount(mode), claimsManager.getClaimLimit(mode))), TEXT_COLOR));
+		lines.add(new Line(Component.translatable("gui.xaero_pac_ui_forceload_count",
+				PartyScreen.formatBudget(claimsManager.getForceloadCount(mode), claimsManager.getForceloadLimit(mode))), TEXT_COLOR));
+		return lines;
 	}
 
 	/**

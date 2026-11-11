@@ -131,4 +131,15 @@ public final class ClaimsHubLogic {
 		return !hasOtherSubConfigs;
 	}
 
+	/**
+	 * Checks whether the Claims tab offers the choice of the claiming mode (player, party, server), which it only does when
+	 * the player may use more than one of them: claiming as the party needs party-owned claims on the server, claiming as
+	 * the server needs the permission of an op.
+	 *
+	 * @param usableModes  the number of claiming modes the player may use
+	 */
+	public static boolean isClaimingModeChoiceShown(int usableModes) {
+		return usableModes > 1;
+	}
+
 }

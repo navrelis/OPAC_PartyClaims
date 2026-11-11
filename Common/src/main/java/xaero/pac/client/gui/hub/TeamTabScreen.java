@@ -87,8 +87,6 @@ public class TeamTabScreen extends HubTabScreen {
 		}
 	}
 
-	private static final int MARGIN = 8;
-	private static final int BOTTOM_MARGIN = 6;
 	private static final int MAX_CONTENT_WIDTH = 400;
 	private static final int MIN_COLUMN_WIDTH = 140;
 	private static final int COLUMN_GAP = 8;
@@ -126,7 +124,7 @@ public class TeamTabScreen extends HubTabScreen {
 	private int seenRevision = -1;
 
 	private int buttonHeight;
-	private int contentLeft;
+	private int blockLeft;
 	private int leftColumnLeft;
 	private int rightColumnLeft;
 	private int columnWidth;
@@ -223,7 +221,8 @@ public class TeamTabScreen extends HubTabScreen {
 		TeamInfoData info = getInfo();
 		if(state == State.READY && info != null)
 			initReady(info);
-		addRenderableWidget(Button.builder(BACK, b -> goBack()).bounds(width / 2 - 100, height - BOTTOM_MARGIN - buttonHeight, 200, buttonHeight).build());
+		int backWidth = Math.min(200, contentWidth());
+		addRenderableWidget(Button.builder(BACK, b -> goBack()).bounds(contentCenterX() - backWidth / 2, contentBottom() - buttonHeight, backWidth, buttonHeight).build());
 		if(!requested) {
 			requested = true;
 			requestTeamInfo();
@@ -232,20 +231,20 @@ public class TeamTabScreen extends HubTabScreen {
 	}
 
 	private int getContentWidth() {
-		return Math.min(width - 2 * MARGIN, MAX_CONTENT_WIDTH);
+		return Math.min(contentWidth(), MAX_CONTENT_WIDTH);
 	}
 
 	private void initReady(TeamInfoData info) {
 		int contentWidth = getContentWidth();
-		contentLeft = (width - contentWidth) / 2;
-		headerTop = HubTabBar.CONTENT_TOP;
+		blockLeft = contentLeft() + (contentWidth() - contentWidth) / 2;
+		headerTop = contentTop();
 		headerLines = computeHeaderLines(info, contentWidth);
 		int top = headerTop + headerLines.size() * LINE_STEP + SECTION_GAP;
 		int step = buttonHeight + BUTTON_GAP;
 		boolean twoColumns = contentWidth >= 2 * MIN_COLUMN_WIDTH + COLUMN_GAP;
 		columnWidth = twoColumns ? (contentWidth - COLUMN_GAP) / 2 : contentWidth;
-		leftColumnLeft = contentLeft;
-		rightColumnLeft = twoColumns ? contentLeft + columnWidth + COLUMN_GAP : contentLeft;
+		leftColumnLeft = blockLeft;
+		rightColumnLeft = twoColumns ? blockLeft + columnWidth + COLUMN_GAP : blockLeft;
 
 		// left column: the ranks, the territory messages and the appearance of the team
 		int y = top;
@@ -458,9 +457,9 @@ public class TeamTabScreen extends HubTabScreen {
 	}
 
 	private void renderMessage(GuiGraphics guiGraphics, Component message, int color) {
-		int y = HubTabBar.CONTENT_TOP + 20;
-		for(FormattedCharSequence line : font.split(message, Math.min(width - 2 * MARGIN, MAX_TEXT_WIDTH))) {
-			guiGraphics.drawCenteredString(font, line, width / 2, y, color);
+		int y = contentTop() + 20;
+		for(FormattedCharSequence line : font.split(message, Math.min(contentWidth(), MAX_TEXT_WIDTH))) {
+			guiGraphics.drawCenteredString(font, line, contentCenterX(), y, color);
 			y += LINE_STEP;
 		}
 	}
@@ -468,17 +467,17 @@ public class TeamTabScreen extends HubTabScreen {
 	private void renderReady(GuiGraphics guiGraphics, TeamInfoData info) {
 		int y = headerTop;
 		for(HeaderLine line : headerLines) {
-			guiGraphics.drawString(font, line.text(), contentLeft, y, line.color());
+			guiGraphics.drawString(font, line.text(), blockLeft, y, line.color());
 			y += LINE_STEP;
 		}
-		guiGraphics.drawString(font, font.plainSubstrByWidth(ROLES_HEADING.getString(), columnWidth), leftColumnLeft, rolesHeadingTop, VALUE_COLOR);
+		HubSidebar.renderHeader(guiGraphics, font, ROLES_HEADING, leftColumnLeft, rolesHeadingTop, leftColumnLeft + columnWidth, VALUE_COLOR);
 		for(TeamAction action : TeamAction.values()) {
 			Integer rowTop = roleRowTops.get(action);
 			if(rowTop != null)
 				guiGraphics.drawString(font, getActionLabel(action), leftColumnLeft, rowTop + (buttonHeight - font.lineHeight) / 2, TEXT_COLOR);
 		}
 		renderAppearance(guiGraphics, info);
-		guiGraphics.drawString(font, font.plainSubstrByWidth(CONVERT_HEADING.getString(), columnWidth), rightColumnLeft, convertHeadingTop, VALUE_COLOR);
+		HubSidebar.renderHeader(guiGraphics, font, CONVERT_HEADING, rightColumnLeft, convertHeadingTop, rightColumnLeft + columnWidth, VALUE_COLOR);
 	}
 
 	/**
